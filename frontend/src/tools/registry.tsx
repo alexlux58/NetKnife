@@ -3,113 +3,360 @@
  * NETKNIFE - TOOL REGISTRY
  * ==============================================================================
  * 
- * This file defines all available tools in the application.
- * Each tool is registered with:
- * - Unique ID
- * - Display name
- * - Tool kind (offline or remote)
- * - Group for navigation
- * - Route path
- * - Lazy-loaded component
- * - Description
+ * Central registry for all NetKnife tools, organized by functional category.
+ * 
+ * CATEGORIES:
+ * - Network Calculators: IP/subnet math and conversions
+ * - DNS & Domain: DNS resolution and domain info
+ * - Certificates & TLS: SSL/TLS inspection and certificate parsing
+ * - Network Intelligence: BGP, ASN, peering information
+ * - Threat Intelligence: IP reputation, malware, breach checks
+ * - Email Security: SPF, DKIM, DMARC validation
+ * - Encoding & Crypto: Encoding, hashing, tokens
+ * - Reference & Templates: Command libraries, port lookups
+ * - Time & Scheduling: Timestamps, cron expressions
+ * - Data & Text: Format conversion, diffing, regex
+ * - Generators: Password, QR code, UUID generation
  * 
  * TOOL KINDS:
- * - offline: Runs entirely in the browser (no backend calls)
- * - remote: Calls AWS Lambda backend (data leaves browser)
+ * - offline: Runs entirely in browser (no data leaves)
+ * - remote: Calls AWS Lambda (data sent to backend)
  * 
- * LAZY LOADING:
- * All tool components are lazy-loaded using React.lazy().
- * This reduces initial bundle size and improves load time.
  * ==============================================================================
  */
 
 import React from 'react'
 
-/**
- * Tool kind determines where the tool runs
- * - offline: Browser only, no data sent to server
- * - remote: Calls backend API (data sent to AWS)
- */
 export type ToolKind = 'offline' | 'remote'
 
 /**
- * Tool definition interface
+ * Tool categories for organized navigation
  */
+export type ToolCategory = 
+  | 'Network Calculators'
+  | 'DNS & Domain'
+  | 'Certificates & TLS'
+  | 'Network Intelligence'
+  | 'Threat Intelligence'
+  | 'Email Security'
+  | 'Encoding & Crypto'
+  | 'Reference & Templates'
+  | 'Time & Scheduling'
+  | 'Data & Text'
+  | 'Generators'
+
 export interface Tool {
-  /** Unique identifier */
   id: string
-  /** Display name */
   name: string
-  /** Where the tool runs */
   kind: ToolKind
-  /** Navigation group */
-  group: string
-  /** Route path */
+  category: ToolCategory
   path: string
-  /** Lazy-loaded component */
   component: React.LazyExoticComponent<() => JSX.Element>
-  /** Short description */
   description?: string
+  /** Icon name from @radix-ui/react-icons (optional) */
+  icon?: string
+  /** If true, requires API key to be configured */
+  requiresApiKey?: boolean
 }
 
 /**
- * All registered tools
- * Order determines display order in sidebar
+ * Category metadata for display
+ */
+export const categoryInfo: Record<ToolCategory, { icon: string; description: string }> = {
+  'Network Calculators': { 
+    icon: 'Calculator', 
+    description: 'IP addressing, subnets, and network math' 
+  },
+  'DNS & Domain': { 
+    icon: 'Globe', 
+    description: 'DNS resolution and domain information' 
+  },
+  'Certificates & TLS': { 
+    icon: 'Lock', 
+    description: 'SSL/TLS certificates and encryption' 
+  },
+  'Network Intelligence': { 
+    icon: 'Network', 
+    description: 'BGP, ASN, peering, and routing' 
+  },
+  'Threat Intelligence': { 
+    icon: 'Shield', 
+    description: 'IP reputation, malware, and security' 
+  },
+  'Email Security': { 
+    icon: 'Mail', 
+    description: 'Email authentication and security' 
+  },
+  'Encoding & Crypto': { 
+    icon: 'Code', 
+    description: 'Encoding, hashing, and tokens' 
+  },
+  'Reference & Templates': { 
+    icon: 'Book', 
+    description: 'Command libraries and references' 
+  },
+  'Time & Scheduling': { 
+    icon: 'Clock', 
+    description: 'Time conversion and scheduling' 
+  },
+  'Data & Text': { 
+    icon: 'FileText', 
+    description: 'Format conversion and text tools' 
+  },
+  'Generators': { 
+    icon: 'Wand', 
+    description: 'Generate passwords, codes, and IDs' 
+  },
+}
+
+/**
+ * All registered tools organized by category
  */
 export const tools: Tool[] = [
   // ============================================================================
-  // OFFLINE TOOLS (Browser-only, no data sent to server)
+  // NETWORK CALCULATORS (Offline)
   // ============================================================================
   {
     id: 'subnet',
     name: 'Subnet / CIDR',
     kind: 'offline',
-    group: 'Offline',
+    category: 'Network Calculators',
     path: '/tools/subnet',
     component: React.lazy(() => import('./offline/SubnetTool')),
-    description: 'IPv4/IPv6 subnet calculator - sipcalc style',
+    description: 'IPv4/IPv6 subnet calculator with AWS info',
   },
   {
-    id: 'regex',
-    name: 'Regex Helper',
+    id: 'cidr-range',
+    name: 'CIDR Range Checker',
     kind: 'offline',
-    group: 'Offline',
-    path: '/tools/regex',
-    component: React.lazy(() => import('./offline/RegexTool')),
-    description: 'Build and test grep/egrep patterns',
+    category: 'Network Calculators',
+    path: '/tools/cidr-range',
+    component: React.lazy(() => import('./offline/CidrRangeTool')),
+    description: 'Check if IP falls within a CIDR range',
   },
   {
-    id: 'cmdlib',
-    name: 'Command Templates',
+    id: 'ip-converter',
+    name: 'IP Converter',
     kind: 'offline',
-    group: 'Offline',
-    path: '/tools/cmdlib',
-    component: React.lazy(() => import('./offline/CommandTemplatesTool')),
-    description: 'Multi-vendor CLI command library',
+    category: 'Network Calculators',
+    path: '/tools/ip-converter',
+    component: React.lazy(() => import('./offline/IpConverterTool')),
+    description: 'Convert between decimal, binary, hex, IPv4',
+  },
+
+  // ============================================================================
+  // DNS & DOMAIN (Remote)
+  // ============================================================================
+  {
+    id: 'dns',
+    name: 'DNS Lookup',
+    kind: 'remote',
+    category: 'DNS & Domain',
+    path: '/tools/dns',
+    component: React.lazy(() => import('./remote/DnsTool')),
+    description: 'DNS-over-HTTPS via Cloudflare',
   },
   {
-    id: 'password',
-    name: 'Password Generator',
-    kind: 'offline',
-    group: 'Offline',
-    path: '/tools/password',
-    component: React.lazy(() => import('./offline/PasswordTool')),
-    description: 'Cryptographically secure password generator',
+    id: 'reverse-dns',
+    name: 'Reverse DNS (PTR)',
+    kind: 'remote',
+    category: 'DNS & Domain',
+    path: '/tools/reverse-dns',
+    component: React.lazy(() => import('./remote/ReverseDnsTool')),
+    description: 'PTR record lookup for IPs',
   },
   {
-    id: 'jwt',
-    name: 'JWT Decoder',
-    kind: 'offline',
-    group: 'Offline',
-    path: '/tools/jwt',
-    component: React.lazy(() => import('./offline/JwtDecoderTool')),
-    description: 'Decode and inspect JSON Web Tokens',
+    id: 'rdap',
+    name: 'RDAP / WHOIS',
+    kind: 'remote',
+    category: 'DNS & Domain',
+    path: '/tools/rdap',
+    component: React.lazy(() => import('./remote/RdapTool')),
+    description: 'Domain and IP registration data',
   },
+  {
+    id: 'dns-propagation',
+    name: 'DNS Propagation',
+    kind: 'remote',
+    category: 'DNS & Domain',
+    path: '/tools/dns-propagation',
+    component: React.lazy(() => import('./remote/DnsPropagationTool')),
+    description: 'Check DNS across global resolvers',
+  },
+
+  // ============================================================================
+  // CERTIFICATES & TLS (Mixed)
+  // ============================================================================
+  {
+    id: 'tls',
+    name: 'TLS Inspector',
+    kind: 'remote',
+    category: 'Certificates & TLS',
+    path: '/tools/tls',
+    component: React.lazy(() => import('./remote/TlsTool')),
+    description: 'Certificate chain and expiry checker',
+  },
+  {
+    id: 'pem-decoder',
+    name: 'PEM Decoder',
+    kind: 'offline',
+    category: 'Certificates & TLS',
+    path: '/tools/pem-decoder',
+    component: React.lazy(() => import('./offline/PemDecoderTool')),
+    description: 'Parse X.509 certificates locally',
+  },
+  {
+    id: 'ssl-labs',
+    name: 'SSL Labs',
+    kind: 'remote',
+    category: 'Certificates & TLS',
+    path: '/tools/ssl-labs',
+    component: React.lazy(() => import('./remote/SslLabsTool')),
+    description: 'Qualys SSL Labs grade checker',
+  },
+
+  // ============================================================================
+  // NETWORK INTELLIGENCE (Remote)
+  // ============================================================================
+  {
+    id: 'peeringdb',
+    name: 'PeeringDB',
+    kind: 'remote',
+    category: 'Network Intelligence',
+    path: '/tools/peeringdb',
+    component: React.lazy(() => import('./remote/PeeringDbTool')),
+    description: 'Network and IX information',
+  },
+  {
+    id: 'bgp-looking-glass',
+    name: 'BGP Looking Glass',
+    kind: 'remote',
+    category: 'Network Intelligence',
+    path: '/tools/bgp-looking-glass',
+    component: React.lazy(() => import('./remote/BgpLookingGlassTool')),
+    description: 'Query BGP route servers',
+  },
+  {
+    id: 'asn-details',
+    name: 'ASN Details',
+    kind: 'remote',
+    category: 'Network Intelligence',
+    path: '/tools/asn-details',
+    component: React.lazy(() => import('./remote/AsnDetailsTool')),
+    description: 'Autonomous System information',
+  },
+  {
+    id: 'traceroute',
+    name: 'Traceroute',
+    kind: 'remote',
+    category: 'Network Intelligence',
+    path: '/tools/traceroute',
+    component: React.lazy(() => import('./remote/TracerouteTool')),
+    description: 'Trace route from AWS vantage point',
+  },
+
+  // ============================================================================
+  // THREAT INTELLIGENCE (Remote)
+  // ============================================================================
+  {
+    id: 'abuseipdb',
+    name: 'AbuseIPDB',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/abuseipdb',
+    component: React.lazy(() => import('./remote/AbuseIpDbTool')),
+    description: 'IP reputation and threat score',
+  },
+  {
+    id: 'hibp',
+    name: 'Password Breach (HIBP)',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/hibp',
+    component: React.lazy(() => import('./remote/HibpTool')),
+    description: 'Check passwords against breach database',
+  },
+  {
+    id: 'virustotal',
+    name: 'VirusTotal',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/virustotal',
+    component: React.lazy(() => import('./remote/VirusTotalTool')),
+    description: 'File/URL/IP malware analysis',
+    requiresApiKey: true,
+  },
+  {
+    id: 'shodan',
+    name: 'Shodan',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/shodan',
+    component: React.lazy(() => import('./remote/ShodanTool')),
+    description: 'Internet-connected device search',
+    requiresApiKey: true,
+  },
+  {
+    id: 'greynoise',
+    name: 'GreyNoise',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/greynoise',
+    component: React.lazy(() => import('./remote/GreyNoiseTool')),
+    description: 'Internet scanner and noise detection',
+    requiresApiKey: true,
+  },
+  {
+    id: 'censys',
+    name: 'Censys',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/censys',
+    component: React.lazy(() => import('./remote/CensysTool')),
+    description: 'Internet asset discovery',
+    requiresApiKey: true,
+  },
+
+  // ============================================================================
+  // EMAIL SECURITY (Remote)
+  // ============================================================================
+  {
+    id: 'email-auth',
+    name: 'Email Auth Check',
+    kind: 'remote',
+    category: 'Email Security',
+    path: '/tools/email-auth',
+    component: React.lazy(() => import('./remote/EmailAuthTool')),
+    description: 'SPF, DKIM, DMARC validation',
+  },
+  {
+    id: 'security-trails',
+    name: 'SecurityTrails',
+    kind: 'remote',
+    category: 'Email Security',
+    path: '/tools/security-trails',
+    component: React.lazy(() => import('./remote/SecurityTrailsTool')),
+    description: 'Domain and DNS history',
+    requiresApiKey: true,
+  },
+  {
+    id: 'headers',
+    name: 'HTTP Headers',
+    kind: 'remote',
+    category: 'Email Security',
+    path: '/tools/headers',
+    component: React.lazy(() => import('./remote/HeadersTool')),
+    description: 'Security headers scanner',
+  },
+
+  // ============================================================================
+  // ENCODING & CRYPTO (Offline)
+  // ============================================================================
   {
     id: 'encoder',
     name: 'Encoder/Decoder',
     kind: 'offline',
-    group: 'Offline',
+    category: 'Encoding & Crypto',
     path: '/tools/encoder',
     component: React.lazy(() => import('./offline/EncoderTool')),
     description: 'Base64, Hex, URL, HTML encoding',
@@ -118,104 +365,167 @@ export const tools: Tool[] = [
     id: 'hash',
     name: 'Hash Generator',
     kind: 'offline',
-    group: 'Offline',
+    category: 'Encoding & Crypto',
     path: '/tools/hash',
     component: React.lazy(() => import('./offline/HashTool')),
-    description: 'MD5, SHA-1, SHA-256, SHA-512 hashes',
+    description: 'MD5, SHA-1, SHA-256, SHA-512',
   },
+  {
+    id: 'jwt',
+    name: 'JWT Decoder',
+    kind: 'offline',
+    category: 'Encoding & Crypto',
+    path: '/tools/jwt',
+    component: React.lazy(() => import('./offline/JwtDecoderTool')),
+    description: 'Decode JSON Web Tokens',
+  },
+  {
+    id: 'uuid',
+    name: 'UUID Generator',
+    kind: 'offline',
+    category: 'Encoding & Crypto',
+    path: '/tools/uuid',
+    component: React.lazy(() => import('./offline/UuidTool')),
+    description: 'Generate UUID v1, v4, v5',
+  },
+
+  // ============================================================================
+  // REFERENCE & TEMPLATES (Offline)
+  // ============================================================================
+  {
+    id: 'cmdlib',
+    name: 'Command Templates',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/cmdlib',
+    component: React.lazy(() => import('./offline/CommandTemplatesTool')),
+    description: 'Multi-vendor CLI command library',
+  },
+  {
+    id: 'port-reference',
+    name: 'Port Reference',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/port-reference',
+    component: React.lazy(() => import('./offline/PortReferenceTool')),
+    description: 'Common ports and services database',
+  },
+  {
+    id: 'mac-vendor',
+    name: 'MAC Vendor Lookup',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/mac-vendor',
+    component: React.lazy(() => import('./offline/MacVendorTool')),
+    description: 'Identify manufacturer from MAC OUI',
+  },
+
+  // ============================================================================
+  // TIME & SCHEDULING (Offline)
+  // ============================================================================
   {
     id: 'timestamp',
     name: 'Timestamp Converter',
     kind: 'offline',
-    group: 'Offline',
+    category: 'Time & Scheduling',
     path: '/tools/timestamp',
     component: React.lazy(() => import('./offline/TimestampTool')),
-    description: 'Unix timestamp ↔ human-readable dates',
+    description: 'Unix ↔ human-readable dates',
+  },
+  {
+    id: 'cron-builder',
+    name: 'Cron Builder',
+    kind: 'offline',
+    category: 'Time & Scheduling',
+    path: '/tools/cron-builder',
+    component: React.lazy(() => import('./offline/CronBuilderTool')),
+    description: 'Visual cron expression builder',
   },
 
   // ============================================================================
-  // REMOTE TOOLS (AWS-backed, data sent to Lambda)
+  // DATA & TEXT (Offline)
   // ============================================================================
   {
-    id: 'dns',
-    name: 'DNS Lookup',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/dns',
-    component: React.lazy(() => import('./remote/DnsTool')),
-    description: 'DNS-over-HTTPS resolver via Cloudflare',
+    id: 'yaml-json',
+    name: 'YAML ↔ JSON',
+    kind: 'offline',
+    category: 'Data & Text',
+    path: '/tools/yaml-json',
+    component: React.lazy(() => import('./offline/YamlJsonTool')),
+    description: 'Convert between YAML and JSON',
   },
   {
-    id: 'rdap',
-    name: 'RDAP Lookup',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/rdap',
-    component: React.lazy(() => import('./remote/RdapTool')),
-    description: 'IP and domain registration data (WHOIS replacement)',
+    id: 'diff',
+    name: 'Diff Tool',
+    kind: 'offline',
+    category: 'Data & Text',
+    path: '/tools/diff',
+    component: React.lazy(() => import('./offline/DiffTool')),
+    description: 'Compare two text blocks',
   },
   {
-    id: 'tls',
-    name: 'TLS Inspector',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/tls',
-    component: React.lazy(() => import('./remote/TlsTool')),
-    description: 'Certificate chain and expiry checker',
+    id: 'regex',
+    name: 'Regex Helper',
+    kind: 'offline',
+    category: 'Data & Text',
+    path: '/tools/regex',
+    component: React.lazy(() => import('./offline/RegexTool')),
+    description: 'Build and test regex patterns',
+  },
+
+  // ============================================================================
+  // GENERATORS (Offline)
+  // ============================================================================
+  {
+    id: 'password',
+    name: 'Password Generator',
+    kind: 'offline',
+    category: 'Generators',
+    path: '/tools/password',
+    component: React.lazy(() => import('./offline/PasswordTool')),
+    description: 'Cryptographically secure passwords',
   },
   {
-    id: 'headers',
-    name: 'HTTP Headers',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/headers',
-    component: React.lazy(() => import('./remote/HeadersTool')),
-    description: 'Security headers scanner',
-  },
-  {
-    id: 'peeringdb',
-    name: 'PeeringDB',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/peeringdb',
-    component: React.lazy(() => import('./remote/PeeringDbTool')),
-    description: 'Network and IX information lookup',
-  },
-  {
-    id: 'reverse-dns',
-    name: 'Reverse DNS (PTR)',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/reverse-dns',
-    component: React.lazy(() => import('./remote/ReverseDnsTool')),
-    description: 'PTR record lookup for IP addresses',
-  },
-  {
-    id: 'email-auth',
-    name: 'Email Auth Check',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/email-auth',
-    component: React.lazy(() => import('./remote/EmailAuthTool')),
-    description: 'SPF, DKIM, DMARC validation',
-  },
-  {
-    id: 'hibp',
-    name: 'Password Breach',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/hibp',
-    component: React.lazy(() => import('./remote/HibpTool')),
-    description: 'Check passwords against HIBP database',
-  },
-  {
-    id: 'abuseipdb',
-    name: 'IP Reputation',
-    kind: 'remote',
-    group: 'Remote (AWS)',
-    path: '/tools/abuseipdb',
-    component: React.lazy(() => import('./remote/AbuseIpDbTool')),
-    description: 'AbuseIPDB IP reputation and threat score',
+    id: 'qr-code',
+    name: 'QR Code Generator',
+    kind: 'offline',
+    category: 'Generators',
+    path: '/tools/qr-code',
+    component: React.lazy(() => import('./offline/QrCodeTool')),
+    description: 'Generate QR codes for WiFi, URLs',
   },
 ]
 
+/**
+ * Get tools grouped by category
+ */
+export function getToolsByCategory(): Map<ToolCategory, Tool[]> {
+  const grouped = new Map<ToolCategory, Tool[]>()
+  
+  for (const tool of tools) {
+    const existing = grouped.get(tool.category) || []
+    existing.push(tool)
+    grouped.set(tool.category, existing)
+  }
+  
+  return grouped
+}
+
+/**
+ * Get all categories in display order
+ */
+export function getCategories(): ToolCategory[] {
+  return [
+    'Network Calculators',
+    'DNS & Domain',
+    'Certificates & TLS',
+    'Network Intelligence',
+    'Threat Intelligence',
+    'Email Security',
+    'Encoding & Crypto',
+    'Reference & Templates',
+    'Time & Scheduling',
+    'Data & Text',
+    'Generators',
+  ]
+}

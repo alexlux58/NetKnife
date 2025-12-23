@@ -71,6 +71,41 @@ variable "abuseipdb_api_key" {
   default     = ""
 }
 
+variable "shodan_api_key" {
+  type        = string
+  description = "API key for Shodan"
+  sensitive   = true
+  default     = ""
+}
+
+variable "virustotal_api_key" {
+  type        = string
+  description = "API key for VirusTotal"
+  sensitive   = true
+  default     = ""
+}
+
+variable "securitytrails_api_key" {
+  type        = string
+  description = "API key for SecurityTrails"
+  sensitive   = true
+  default     = ""
+}
+
+variable "censys_api_key" {
+  type        = string
+  description = "API key for Censys (format: id:secret)"
+  sensitive   = true
+  default     = ""
+}
+
+variable "greynoise_api_key" {
+  type        = string
+  description = "API key for GreyNoise"
+  sensitive   = true
+  default     = ""
+}
+
 # Local variables for consistent naming
 locals {
   name = "${var.project}-${var.env}"
@@ -771,6 +806,651 @@ resource "aws_lambda_permission" "abuseipdb" {
 }
 
 # ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: DNS Propagation
+# ------------------------------------------------------------------------------
+
+data "archive_file" "dns_propagation_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/dns-propagation"
+  output_path = "${path.module}/dns-propagation.zip"
+}
+
+resource "aws_lambda_function" "dns_propagation" {
+  function_name = "${local.name}-dns-propagation"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "DNS propagation checker across global resolvers"
+
+  filename         = data.archive_file.dns_propagation_zip.output_path
+  source_code_hash = data.archive_file.dns_propagation_zip.output_base64sha256
+
+  timeout     = 20
+  memory_size = 256
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "300"
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "dns_propagation" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.dns_propagation.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "dns_propagation" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /dns-propagation"
+  target    = "integrations/${aws_apigatewayv2_integration.dns_propagation.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "dns_propagation" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.dns_propagation.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: ASN Details
+# ------------------------------------------------------------------------------
+
+data "archive_file" "asn_details_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/asn-details"
+  output_path = "${path.module}/asn-details.zip"
+}
+
+resource "aws_lambda_function" "asn_details" {
+  function_name = "${local.name}-asn-details"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "ASN details lookup via RIPEstat"
+
+  filename         = data.archive_file.asn_details_zip.output_path
+  source_code_hash = data.archive_file.asn_details_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "asn_details" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.asn_details.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "asn_details" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /asn-details"
+  target    = "integrations/${aws_apigatewayv2_integration.asn_details.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "asn_details" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.asn_details.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: BGP Looking Glass
+# ------------------------------------------------------------------------------
+
+data "archive_file" "bgp_looking_glass_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/bgp-looking-glass"
+  output_path = "${path.module}/bgp-looking-glass.zip"
+}
+
+resource "aws_lambda_function" "bgp_looking_glass" {
+  function_name = "${local.name}-bgp-looking-glass"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "BGP looking glass query via public route servers"
+
+  filename         = data.archive_file.bgp_looking_glass_zip.output_path
+  source_code_hash = data.archive_file.bgp_looking_glass_zip.output_base64sha256
+
+  timeout     = 20
+  memory_size = 256
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "300"
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "bgp_looking_glass" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.bgp_looking_glass.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "bgp_looking_glass" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /bgp-looking-glass"
+  target    = "integrations/${aws_apigatewayv2_integration.bgp_looking_glass.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "bgp_looking_glass" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.bgp_looking_glass.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: SSL Labs
+# ------------------------------------------------------------------------------
+
+data "archive_file" "ssl_labs_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/ssl-labs"
+  output_path = "${path.module}/ssl-labs.zip"
+}
+
+resource "aws_lambda_function" "ssl_labs" {
+  function_name = "${local.name}-ssl-labs"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "SSL/TLS configuration analysis"
+
+  filename         = data.archive_file.ssl_labs_zip.output_path
+  source_code_hash = data.archive_file.ssl_labs_zip.output_base64sha256
+
+  timeout     = 30
+  memory_size = 256
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "ssl_labs" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.ssl_labs.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "ssl_labs" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /ssl-labs"
+  target    = "integrations/${aws_apigatewayv2_integration.ssl_labs.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "ssl_labs" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ssl_labs.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Traceroute
+# ------------------------------------------------------------------------------
+
+data "archive_file" "traceroute_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/traceroute"
+  output_path = "${path.module}/traceroute.zip"
+}
+
+resource "aws_lambda_function" "traceroute" {
+  function_name = "${local.name}-traceroute"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Network path tracing from AWS"
+
+  filename         = data.archive_file.traceroute_zip.output_path
+  source_code_hash = data.archive_file.traceroute_zip.output_base64sha256
+
+  timeout     = 30
+  memory_size = 256
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "300"
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "traceroute" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.traceroute.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "traceroute" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /traceroute"
+  target    = "integrations/${aws_apigatewayv2_integration.traceroute.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "traceroute" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.traceroute.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Shodan (requires API key)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "shodan_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/shodan"
+  output_path = "${path.module}/shodan.zip"
+}
+
+resource "aws_lambda_function" "shodan" {
+  count = var.shodan_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-shodan"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Shodan internet device search"
+
+  filename         = data.archive_file.shodan_zip.output_path
+  source_code_hash = data.archive_file.shodan_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      SHODAN_API_KEY    = var.shodan_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "shodan" {
+  count = var.shodan_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.shodan[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "shodan" {
+  count = var.shodan_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /shodan"
+  target    = "integrations/${aws_apigatewayv2_integration.shodan[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "shodan" {
+  count = var.shodan_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.shodan[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: VirusTotal (requires API key)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "virustotal_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/virustotal"
+  output_path = "${path.module}/virustotal.zip"
+}
+
+resource "aws_lambda_function" "virustotal" {
+  count = var.virustotal_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-virustotal"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "VirusTotal file/URL/domain/IP analysis"
+
+  filename         = data.archive_file.virustotal_zip.output_path
+  source_code_hash = data.archive_file.virustotal_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE        = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS  = "3600"
+      VIRUSTOTAL_API_KEY = var.virustotal_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "virustotal" {
+  count = var.virustotal_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.virustotal[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "virustotal" {
+  count = var.virustotal_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /virustotal"
+  target    = "integrations/${aws_apigatewayv2_integration.virustotal[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "virustotal" {
+  count = var.virustotal_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.virustotal[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: SecurityTrails (requires API key)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "securitytrails_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/security-trails"
+  output_path = "${path.module}/security-trails.zip"
+}
+
+resource "aws_lambda_function" "securitytrails" {
+  count = var.securitytrails_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-securitytrails"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "SecurityTrails DNS/WHOIS historical data"
+
+  filename         = data.archive_file.securitytrails_zip.output_path
+  source_code_hash = data.archive_file.securitytrails_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE           = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS     = "3600"
+      SECURITYTRAILS_API_KEY = var.securitytrails_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "securitytrails" {
+  count = var.securitytrails_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.securitytrails[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "securitytrails" {
+  count = var.securitytrails_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /security-trails"
+  target    = "integrations/${aws_apigatewayv2_integration.securitytrails[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "securitytrails" {
+  count = var.securitytrails_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.securitytrails[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Censys (requires API key)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "censys_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/censys"
+  output_path = "${path.module}/censys.zip"
+}
+
+resource "aws_lambda_function" "censys" {
+  count = var.censys_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-censys"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Censys internet-wide scan data"
+
+  filename         = data.archive_file.censys_zip.output_path
+  source_code_hash = data.archive_file.censys_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      CENSYS_API_KEY    = var.censys_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "censys" {
+  count = var.censys_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.censys[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "censys" {
+  count = var.censys_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /censys"
+  target    = "integrations/${aws_apigatewayv2_integration.censys[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "censys" {
+  count = var.censys_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.censys[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: GreyNoise (requires API key)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "greynoise_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/greynoise"
+  output_path = "${path.module}/greynoise.zip"
+}
+
+resource "aws_lambda_function" "greynoise" {
+  count = var.greynoise_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-greynoise"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "GreyNoise IP threat intelligence"
+
+  filename         = data.archive_file.greynoise_zip.output_path
+  source_code_hash = data.archive_file.greynoise_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      GREYNOISE_API_KEY = var.greynoise_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "greynoise" {
+  count = var.greynoise_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.greynoise[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "greynoise" {
+  count = var.greynoise_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /greynoise"
+  target    = "integrations/${aws_apigatewayv2_integration.greynoise[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "greynoise" {
+  count = var.greynoise_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.greynoise[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
 # WAF WEB ACL (Rate Limiting)
 # ------------------------------------------------------------------------------
 # Protects the API from abuse with per-IP rate limiting.
@@ -892,12 +1572,62 @@ output "lambda_hibp_name" {
 }
 
 output "lambda_abuseipdb_name" {
-  value       = var.abuseipdb_api_key != "" ? aws_lambda_function.abuseipdb[0].function_name : null
+  value       = var.abuseipdb_api_key != "" ? nonsensitive(aws_lambda_function.abuseipdb[0].function_name) : null
   description = "AbuseIPDB Lambda function name (null if API key not configured)"
 }
 
 output "abuseipdb_enabled" {
-  value       = var.abuseipdb_api_key != ""
+  value       = nonsensitive(var.abuseipdb_api_key != "")
   description = "Whether AbuseIPDB integration is enabled"
+}
+
+output "lambda_dns_propagation_name" {
+  value       = aws_lambda_function.dns_propagation.function_name
+  description = "DNS Propagation Lambda function name"
+}
+
+output "lambda_asn_details_name" {
+  value       = aws_lambda_function.asn_details.function_name
+  description = "ASN Details Lambda function name"
+}
+
+output "lambda_bgp_looking_glass_name" {
+  value       = aws_lambda_function.bgp_looking_glass.function_name
+  description = "BGP Looking Glass Lambda function name"
+}
+
+output "lambda_ssl_labs_name" {
+  value       = aws_lambda_function.ssl_labs.function_name
+  description = "SSL Labs Lambda function name"
+}
+
+output "lambda_traceroute_name" {
+  value       = aws_lambda_function.traceroute.function_name
+  description = "Traceroute Lambda function name"
+}
+
+output "lambda_shodan_name" {
+  value       = var.shodan_api_key != "" ? nonsensitive(aws_lambda_function.shodan[0].function_name) : null
+  description = "Shodan Lambda function name (null if API key not configured)"
+}
+
+output "lambda_virustotal_name" {
+  value       = var.virustotal_api_key != "" ? nonsensitive(aws_lambda_function.virustotal[0].function_name) : null
+  description = "VirusTotal Lambda function name (null if API key not configured)"
+}
+
+output "lambda_securitytrails_name" {
+  value       = var.securitytrails_api_key != "" ? nonsensitive(aws_lambda_function.securitytrails[0].function_name) : null
+  description = "SecurityTrails Lambda function name (null if API key not configured)"
+}
+
+output "lambda_censys_name" {
+  value       = var.censys_api_key != "" ? nonsensitive(aws_lambda_function.censys[0].function_name) : null
+  description = "Censys Lambda function name (null if API key not configured)"
+}
+
+output "lambda_greynoise_name" {
+  value       = var.greynoise_api_key != "" ? nonsensitive(aws_lambda_function.greynoise[0].function_name) : null
+  description = "GreyNoise Lambda function name (null if API key not configured)"
 }
 

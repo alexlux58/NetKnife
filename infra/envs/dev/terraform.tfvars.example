@@ -54,9 +54,36 @@ monthly_budget_usd = 25
 # ============================================================================
 # THIRD-PARTY API KEYS (Optional)
 # ============================================================================
+# All API keys are optional. Leave empty to disable that integration.
+# Tools without valid API keys will show as disabled in the frontend.
 
 # AbuseIPDB API Key (for IP reputation checks)
 # Get a free API key at: https://www.abuseipdb.com/account/api
 # Free tier: 1,000 checks per day
-# Leave empty to disable AbuseIPDB integration
 abuseipdb_api_key = ""
+
+# Shodan API Key (for internet-connected device search)
+# Get at: https://account.shodan.io
+# Free tier: Limited searches, membership recommended for full access
+shodan_api_key = ""
+
+# VirusTotal API Key (for file/URL/domain/IP analysis)
+# Get a free API key at: https://www.virustotal.com/gui/my-apikey
+# Free tier: 500 requests/day, 4 requests/minute
+virustotal_api_key = ""
+
+# SecurityTrails API Key (for historical DNS/WHOIS data)
+# Get at: https://securitytrails.com/app/account/credentials
+# Free tier: 50 API calls/month
+securitytrails_api_key = ""
+
+# Censys API Key (for internet-wide scan data)
+# Get at: https://censys.io/account/api
+# Format: "id:secret" (both parts together)
+# Free tier: 250 queries/month
+censys_api_key = ""
+
+# GreyNoise API Key (for IP threat intelligence)
+# Get at: https://viz.greynoise.io/account/api-key
+# Free tier: Community API with basic data
+greynoise_api_key = ""

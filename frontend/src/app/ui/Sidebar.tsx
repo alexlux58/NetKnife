@@ -3,46 +3,91 @@
  * NETKNIFE - SIDEBAR NAVIGATION
  * ==============================================================================
  * 
- * The sidebar provides:
- * - NetKnife branding
- * - Search/filter for tools
- * - Grouped tool navigation
- * - Visual indication of current tool
- * - OFFLINE/REMOTE badges
+ * Category-based navigation for all NetKnife tools.
  * 
  * FEATURES:
+ * - Collapsible categories with smooth animation
  * - Search filters tools by name and description
- * - Tools are grouped by type (Offline, Remote)
- * - Active tool is highlighted
- * - Badges indicate if tool runs locally or on AWS
+ * - OFFLINE/REMOTE badges indicate where tool runs
+ * - Active tool highlighting
+ * - Category icons for visual distinction
  * ==============================================================================
  */
 
 import { useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { tools } from '../../tools/registry'
+import { tools, getCategories, type ToolCategory } from '../../tools/registry'
+import { 
+  ChevronDownIcon, 
+  ChevronRightIcon,
+  MagnifyingGlassIcon,
+  DesktopIcon,
+  GlobeIcon,
+  LockClosedIcon,
+  Share1Icon,
+  ExclamationTriangleIcon,
+  EnvelopeClosedIcon,
+  CodeIcon,
+  ReaderIcon,
+  ClockIcon,
+  FileTextIcon,
+  LightningBoltIcon,
+} from '@radix-ui/react-icons'
+
+/** Map category names to icons */
+const categoryIcons: Record<ToolCategory, React.ReactNode> = {
+  'Network Calculators': <DesktopIcon className="w-4 h-4" />,
+  'DNS & Domain': <GlobeIcon className="w-4 h-4" />,
+  'Certificates & TLS': <LockClosedIcon className="w-4 h-4" />,
+  'Network Intelligence': <Share1Icon className="w-4 h-4" />,
+  'Threat Intelligence': <ExclamationTriangleIcon className="w-4 h-4" />,
+  'Email Security': <EnvelopeClosedIcon className="w-4 h-4" />,
+  'Encoding & Crypto': <CodeIcon className="w-4 h-4" />,
+  'Reference & Templates': <ReaderIcon className="w-4 h-4" />,
+  'Time & Scheduling': <ClockIcon className="w-4 h-4" />,
+  'Data & Text': <FileTextIcon className="w-4 h-4" />,
+  'Generators': <LightningBoltIcon className="w-4 h-4" />,
+}
 
 export default function Sidebar() {
-  // Search query state
   const [searchQuery, setSearchQuery] = useState('')
+  const [expandedCategories, setExpandedCategories] = useState<Set<ToolCategory>>(
+    new Set(getCategories()) // All expanded by default
+  )
 
-  // Group and filter tools
-  const groupedTools = useMemo(() => {
-    // Filter by search query
+  // Group and filter tools by category
+  const categorizedTools = useMemo(() => {
     const filtered = tools.filter((tool) => {
       const searchText = `${tool.name} ${tool.description ?? ''}`.toLowerCase()
       return searchText.includes(searchQuery.toLowerCase())
     })
 
-    // Group by tool group
-    const groups = new Map<string, typeof filtered>()
+    const grouped = new Map<ToolCategory, typeof filtered>()
     for (const tool of filtered) {
-      const existing = groups.get(tool.group) || []
-      groups.set(tool.group, [...existing, tool])
+      const existing = grouped.get(tool.category) || []
+      grouped.set(tool.category, [...existing, tool])
     }
 
-    return Array.from(groups.entries())
+    // Return categories in order, only if they have matching tools
+    return getCategories()
+      .filter(cat => grouped.has(cat))
+      .map(cat => [cat, grouped.get(cat)!] as const)
   }, [searchQuery])
+
+  const toggleCategory = (category: ToolCategory) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(category)) {
+        next.delete(category)
+      } else {
+        next.add(category)
+      }
+      return next
+    })
+  }
+
+  // Expand all categories when searching
+  const isSearching = searchQuery.length > 0
 
   return (
     <aside className="fixed inset-y-0 left-0 w-72 bg-[#161b22] border-r border-[#30363d] hidden md:flex md:flex-col">
@@ -56,7 +101,7 @@ export default function Sidebar() {
           </div>
           <div>
             <h1 className="text-lg font-bold">NetKnife</h1>
-            <p className="text-xs text-gray-400">Network Tools</p>
+            <p className="text-xs text-gray-400">{tools.length} Tools</p>
           </div>
         </div>
       </div>
@@ -64,14 +109,7 @@ export default function Sidebar() {
       {/* Search */}
       <div className="p-4">
         <div className="relative">
-          <svg 
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
             placeholder="Search tools..."
@@ -82,41 +120,61 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Tool groups */}
-      <nav className="flex-1 overflow-y-auto px-4 pb-4 scrollbar-thin">
-        {groupedTools.map(([group, groupTools]) => (
-          <div key={group} className="mb-6">
-            {/* Group header */}
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
-              {group}
-            </h2>
+      {/* Categories */}
+      <nav className="flex-1 overflow-y-auto px-2 pb-4 scrollbar-thin">
+        {categorizedTools.map(([category, categoryTools]) => {
+          const isExpanded = isSearching || expandedCategories.has(category)
+          
+          return (
+            <div key={category} className="mb-1">
+              {/* Category header */}
+              <button
+                onClick={() => toggleCategory(category)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm font-medium text-gray-300 hover:text-white hover:bg-[#21262d]/50 rounded-md transition-colors"
+              >
+                <span className="text-gray-500">
+                  {isExpanded ? <ChevronDownIcon className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+                </span>
+                <span className="text-blue-400">{categoryIcons[category]}</span>
+                <span className="flex-1 truncate">{category}</span>
+                <span className="text-xs text-gray-500 bg-[#21262d] px-1.5 py-0.5 rounded">
+                  {categoryTools.length}
+                </span>
+              </button>
 
-            {/* Tools in group */}
-            <div className="space-y-1">
-              {groupTools.map((tool) => (
-                <NavLink
-                  key={tool.id}
-                  to={tool.path}
-                  className={({ isActive }) =>
-                    `flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      isActive
-                        ? 'bg-[#21262d] text-white'
-                        : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
-                    }`
-                  }
-                >
-                  <span className="truncate">{tool.name}</span>
-                  <span className={tool.kind === 'remote' ? 'badge-remote' : 'badge-offline'}>
-                    {tool.kind === 'remote' ? 'REMOTE' : 'OFFLINE'}
-                  </span>
-                </NavLink>
-              ))}
+              {/* Tools in category */}
+              {isExpanded && (
+                <div className="ml-4 mt-1 space-y-0.5 border-l border-[#30363d] pl-3">
+                  {categoryTools.map((tool) => (
+                    <NavLink
+                      key={tool.id}
+                      to={tool.path}
+                      className={({ isActive }) =>
+                        `flex items-center justify-between gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
+                          isActive
+                            ? 'bg-blue-500/20 text-blue-300 border-l-2 border-blue-400 -ml-[13px] pl-[11px]'
+                            : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
+                        }`
+                      }
+                    >
+                      <span className="truncate">{tool.name}</span>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                        tool.kind === 'remote' 
+                          ? 'bg-amber-500/20 text-amber-400' 
+                          : 'bg-emerald-500/20 text-emerald-400'
+                      }`}>
+                        {tool.kind === 'remote' ? 'AWS' : 'LOCAL'}
+                      </span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         {/* No results */}
-        {groupedTools.length === 0 && (
+        {categorizedTools.length === 0 && (
           <div className="text-center text-gray-500 py-8">
             <p>No tools found</p>
             <button
@@ -130,10 +188,17 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-[#30363d] text-xs text-gray-500">
-        <p>AWS Region: {import.meta.env.VITE_REGION || 'us-west-2'}</p>
+      <div className="p-4 border-t border-[#30363d] text-xs text-gray-500 space-y-1">
+        <p>Region: {import.meta.env.VITE_REGION || 'us-west-2'}</p>
+        <p className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+          LOCAL = Browser only
+        </p>
+        <p className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+          AWS = Data sent to backend
+        </p>
       </div>
     </aside>
   )
 }
-

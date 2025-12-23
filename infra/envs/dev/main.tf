@@ -157,6 +157,41 @@ variable "abuseipdb_api_key" {
   description = "API key for AbuseIPDB IP reputation checks. Get from https://www.abuseipdb.com/account/api"
 }
 
+variable "shodan_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for Shodan. Get from https://account.shodan.io"
+}
+
+variable "virustotal_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for VirusTotal. Get from https://www.virustotal.com/gui/my-apikey"
+}
+
+variable "securitytrails_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for SecurityTrails. Get from https://securitytrails.com/app/account/credentials"
+}
+
+variable "censys_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for Censys (format: id:secret). Get from https://censys.io/account/api"
+}
+
+variable "greynoise_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for GreyNoise. Get from https://viz.greynoise.io/account/api-key"
+}
+
 # ------------------------------------------------------------------------------
 # ACM CERTIFICATE MODULE (for custom domain)
 # ------------------------------------------------------------------------------
@@ -237,8 +272,13 @@ module "api" {
   # CORS: only allow requests from our site
   allowed_origins = [local.site_url]
 
-  # AbuseIPDB integration (optional - leave empty to disable)
-  abuseipdb_api_key = var.abuseipdb_api_key
+  # Optional API key integrations (leave empty to disable)
+  abuseipdb_api_key      = var.abuseipdb_api_key
+  shodan_api_key         = var.shodan_api_key
+  virustotal_api_key     = var.virustotal_api_key
+  securitytrails_api_key = var.securitytrails_api_key
+  censys_api_key         = var.censys_api_key
+  greynoise_api_key      = var.greynoise_api_key
 }
 
 # ------------------------------------------------------------------------------
@@ -256,7 +296,11 @@ module "ops" {
   api_stage = "$default"
 
   # Lambda functions to monitor
-  lambda_function_names = compact([
+  # Use nonsensitive() because function names are not secrets, even though
+  # some are conditionally created based on sensitive API keys
+  # compact() removes nulls (for disabled integrations)
+  lambda_function_names = nonsensitive(compact([
+    # Core functions (always enabled)
     module.api.lambda_dns_name,
     module.api.lambda_rdap_name,
     module.api.lambda_tls_name,
@@ -265,8 +309,19 @@ module "ops" {
     module.api.lambda_reverse_dns_name,
     module.api.lambda_email_auth_name,
     module.api.lambda_hibp_name,
-    module.api.lambda_abuseipdb_name,  # null if not configured (compact removes nulls)
-  ])
+    module.api.lambda_dns_propagation_name,
+    module.api.lambda_asn_details_name,
+    module.api.lambda_bgp_looking_glass_name,
+    module.api.lambda_ssl_labs_name,
+    module.api.lambda_traceroute_name,
+    # Optional functions (null if API key not configured)
+    module.api.lambda_abuseipdb_name,
+    module.api.lambda_shodan_name,
+    module.api.lambda_virustotal_name,
+    module.api.lambda_securitytrails_name,
+    module.api.lambda_censys_name,
+    module.api.lambda_greynoise_name,
+  ]))
 
   # WAF logging
   enable_waf_logging = true

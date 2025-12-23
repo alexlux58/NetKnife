@@ -20,10 +20,20 @@ import { CheckIcon, ClipboardIcon, ChevronDownIcon, ChevronRightIcon } from '@ra
 // ------------------------------------------------------------------------------
 
 interface JsonViewerProps {
-  data: unknown
+  /** Data to display (can be any JSON-serializable value) */
+  data?: unknown
+  /** Alias for data prop */
+  json?: unknown
+  /** Card title */
   title?: string
+  /** Default view mode */
   defaultView?: 'formatted' | 'raw'
+  /** Max depth for nested object expansion */
   maxDepth?: number
+  /** Error message to display instead of data */
+  error?: string
+  /** Additional content to render below the JSON */
+  children?: React.ReactNode
 }
 
 // ------------------------------------------------------------------------------
@@ -183,21 +193,27 @@ function CollapsibleValue({ label, value, depth, maxDepth }: CollapsibleValuePro
 // ------------------------------------------------------------------------------
 
 export default function JsonViewer({ 
-  data, 
+  data,
+  json,
   title = 'Response',
   defaultView = 'formatted',
-  maxDepth = 5 
+  maxDepth = 5,
+  error,
+  children,
 }: JsonViewerProps) {
   const [view, setView] = useState<'formatted' | 'raw'>(defaultView)
   const [copied, setCopied] = useState(false)
   
+  // Support both data and json props
+  const displayData = data ?? json
+  
   const jsonString = useMemo(() => {
     try {
-      return JSON.stringify(data, null, 2)
+      return JSON.stringify(displayData, null, 2)
     } catch {
-      return String(data)
+      return String(displayData)
     }
-  }, [data])
+  }, [displayData])
   
   const highlightedJson = useMemo(() => syntaxHighlight(jsonString), [jsonString])
   
@@ -211,7 +227,17 @@ export default function JsonViewer({
     }
   }
   
-  if (!data) return null
+  // Show error if present
+  if (error) {
+    return (
+      <div className="card p-4 border-red-500/50 bg-red-500/10">
+        <h3 className="font-medium text-red-400 mb-2">{title}</h3>
+        <pre className="text-sm text-red-300 whitespace-pre-wrap">{error}</pre>
+      </div>
+    )
+  }
+  
+  if (!displayData) return null
   
   return (
     <div className="card overflow-hidden">
@@ -268,8 +294,8 @@ export default function JsonViewer({
           />
         ) : (
           <div className="text-sm">
-            {typeof data === 'object' && data !== null ? (
-              Object.entries(data).map(([key, value]) => (
+            {typeof displayData === 'object' && displayData !== null ? (
+              Object.entries(displayData).map(([key, value]) => (
                 <CollapsibleValue
                   key={key}
                   label={key}
@@ -279,10 +305,11 @@ export default function JsonViewer({
                 />
               ))
             ) : (
-              <span>{String(data)}</span>
+              <span>{String(displayData)}</span>
             )}
           </div>
         )}
+        {children}
       </div>
     </div>
   )

@@ -9,25 +9,63 @@
 ## Features
 
 ### Offline Tools (Browser-only, no data leaves your machine)
-- **Subnet Calculator** - IPv4/IPv6 CIDR calculations with AWS subnet info
-- **Regex Helper** - Build and test grep/egrep patterns with live preview
+
+**Network Calculators**
+- **Subnet / CIDR Calculator** - IPv4/IPv6 subnet calculations with AWS-specific info
+- **CIDR Range Checker** - Check if an IP falls within a CIDR range
+- **IP Address Converter** - Convert between Decimal, Binary, Hex, and IPv4 formats
+
+**Security Tools**
 - **Password Generator** - Cryptographically secure password generation
-- **Command Templates** - Multi-vendor CLI command library (Cisco, Arista, Juniper, FortiOS, Linux)
+- **Hash Generator** - MD5, SHA-1, SHA-256, SHA-384, SHA-512 hashes
+- **PEM Decoder** - Parse X.509 certificates locally
+
+**Development Helpers**
+- **Regex Helper** - Build and test grep/egrep patterns with live preview
 - **JWT Decoder** - Decode and inspect JSON Web Tokens
-- **Encoder/Decoder** - Base64, Hex, URL, HTML encoding/decoding
-- **Hash Generator** - MD5, SHA-1, SHA-256, SHA-512 hashes
+- **Encoder/Decoder** - Base64, Base64URL, Hex, URL, HTML, Unicode encoding
 - **Timestamp Converter** - Unix timestamp ↔ human-readable dates
+- **Cron Builder** - Visual cron expression builder with next execution preview
+- **UUID Generator** - Generate UUID v1/v4/v5 locally
+- **YAML ↔ JSON** - Convert between YAML and JSON formats
+- **Diff Tool** - Compare two text blocks with unified/split view
+- **QR Code Generator** - Generate QR codes for WiFi, URLs, vCard, etc.
+
+**System Information**
+- **MAC Vendor Lookup** - Identify device manufacturer from MAC OUI
+- **Port Reference** - Searchable database of 150+ common ports/services
+
+**Command Library**
+- **Command Templates** - Multi-vendor CLI command library (Cisco, Arista, Juniper, FortiOS, Linux, Brocade, UniFi)
 
 ### Remote Tools (AWS-backed)
+
+**Network Diagnostics**
 - **DNS Lookup** - DNS-over-HTTPS resolver via Cloudflare (1.1.1.1)
-- **RDAP Lookup** - Modern WHOIS replacement for IPs and domains
-- **TLS Inspector** - Certificate chain analysis with expiry tracking
-- **HTTP Headers Scanner** - Security headers analysis (HSTS, CSP, X-Frame-Options)
-- **PeeringDB Query** - Network and Internet Exchange information
+- **DNS Propagation** - Check DNS records across 8 global resolvers
 - **Reverse DNS (PTR)** - IP to hostname lookups
+- **Traceroute** - Network path tracing from AWS vantage point
+- **BGP Looking Glass** - Query public BGP route servers
+- **PeeringDB Query** - Network and Internet Exchange information
+- **ASN Details** - Lookup Autonomous System Number information
+
+**Security Scanners**
+- **TLS Inspector** - Certificate chain analysis with expiry tracking
+- **SSL Labs** - SSL/TLS configuration analysis
+- **HTTP Headers Scanner** - Security headers analysis (HSTS, CSP, X-Frame-Options)
 - **Email Auth Check** - SPF, DKIM, DMARC validation
 - **Password Breach** - Check passwords against HIBP database (k-anonymity)
-- **IP Reputation** - AbuseIPDB threat scores and abuse reports (requires API key)
+
+**Threat Intelligence**
+- **IP Reputation (AbuseIPDB)** - Abuse confidence scores and report data
+- **Shodan** - Internet-connected device search (requires API key)
+- **VirusTotal** - File/URL/domain/IP analysis (requires API key)
+- **SecurityTrails** - Historical DNS and WHOIS data (requires API key)
+- **Censys** - Internet-wide scan data (requires API key)
+- **GreyNoise** - IP threat intelligence (requires API key)
+
+**System Information**
+- **RDAP Lookup** - Modern WHOIS replacement for IPs and domains
 
 ## Architecture
 
@@ -293,14 +331,24 @@ netknife/
 ├── backend/
 │   └── functions/           # Lambda functions
 │       ├── dns/             # DNS-over-HTTPS
+│       ├── dns-propagation/ # Global DNS propagation check
 │       ├── rdap/            # RDAP lookup
 │       ├── tls/             # TLS inspector
+│       ├── ssl-labs/        # SSL Labs-style analysis
 │       ├── headers/         # HTTP headers scanner
 │       ├── peeringdb/       # PeeringDB query
+│       ├── asn-details/     # ASN information
+│       ├── bgp-looking-glass/ # BGP route queries
+│       ├── traceroute/      # Network path tracing
 │       ├── reverse-dns/     # PTR lookups
 │       ├── email-auth/      # SPF/DKIM/DMARC
 │       ├── hibp/            # Password breach check
-│       └── abuseipdb/       # IP reputation (optional)
+│       ├── abuseipdb/       # IP reputation
+│       ├── shodan/          # Shodan integration
+│       ├── virustotal/      # VirusTotal integration
+│       ├── security-trails/ # SecurityTrails integration
+│       ├── censys/          # Censys integration
+│       └── greynoise/       # GreyNoise integration
 │
 ├── infra/                   # Terraform IaC
 │   ├── modules/

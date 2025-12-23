@@ -65,21 +65,24 @@ export default function ShodanTool() {
       </div>
 
       <RemoteDisclosure 
-        sends={['IP address']} 
-        notes="Requires Shodan API key. Shows exposed ports, services, and known vulnerabilities."
+        sends={['IP address or hostname']} 
+        notes="Requires Shodan API key. Shows exposed ports, services, and known vulnerabilities. Hostnames are automatically resolved to IP addresses."
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="card p-6 space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-2">IP Address</label>
+            <label className="block text-sm text-gray-400 mb-2">IP Address or Hostname</label>
             <input
               type="text"
               value={ip}
               onChange={(e) => setIp(e.target.value)}
-              placeholder="8.8.8.8"
+              placeholder="8.8.8.8 or example.com"
               className="input font-mono"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Enter an IP address or hostname (will be resolved automatically)
+            </p>
           </div>
           <button onClick={handleLookup} disabled={loading || !ip} className="btn btn-primary w-full">
             {loading ? 'Searching...' : 'Search Shodan'}

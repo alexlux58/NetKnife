@@ -89,11 +89,46 @@ async function cachePut(key, data, ttlSeconds) {
 }
 
 /**
- * Validate IP address
+ * Validate IP address or hostname
  */
 function isValidIP(ip) {
   return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip) ||
          ip.includes(':'); // IPv6
+}
+
+/**
+ * Validate hostname
+ */
+function isValidHostname(hostname) {
+  // Basic hostname validation (allows domain names)
+  return /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/.test(hostname);
+}
+
+/**
+ * Fetch with timeout
+ */
+async function fetchWithTimeout(url, timeout = 10000, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, { 
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "NetKnife/1.0",
+        ...(options.headers || {}),
+      }
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
+    throw e;
+  }
 }
 
 /**
@@ -126,25 +161,71 @@ exports.handler = async (event) => {
     return json(400, { error: "Invalid JSON body" });
   }
 
-  const { ip } = body;
+  const { ip: input } = body;
 
-  if (!ip || !isValidIP(ip)) {
-    return json(400, { error: "Invalid IP address" });
+  if (!input || (typeof input !== 'string')) {
+    return json(400, { error: "Invalid input. Must be an IP address or hostname." });
   }
 
-  if (isPrivateIP(ip)) {
+  const cleanInput = input.trim();
+
+  // Resolve hostname to IP if needed
+  let targetIP = cleanInput;
+  let originalInput = cleanInput;
+  
+  if (!isValidIP(cleanInput)) {
+    // It's not an IP, try to resolve as hostname
+    if (!isValidHostname(cleanInput)) {
+      return json(400, { error: "Invalid IP address or hostname" });
+    }
+    
+    try {
+      // Use DNS-over-HTTPS to resolve hostname
+      const dnsResponse = await fetchWithTimeout(
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(cleanInput)}&type=A`,
+        10000,
+        { headers: { "Accept": "application/dns-json" } }
+      );
+      
+      if (!dnsResponse.ok) {
+        return json(502, { error: "DNS resolution failed", details: `HTTP ${dnsResponse.status}` });
+      }
+      
+      const dnsData = await dnsResponse.json();
+      if (dnsData.Answer && dnsData.Answer.length > 0) {
+        targetIP = dnsData.Answer[0].data;
+      } else {
+        return json(400, { error: "Could not resolve hostname to IP address" });
+      }
+    } catch (e) {
+      return json(500, { 
+        error: "DNS resolution failed", 
+        details: e.message || "Unknown error" 
+      });
+    }
+  }
+
+  // Validate resolved IP
+  if (!isValidIP(targetIP)) {
+    return json(400, { error: "Resolved address is not a valid IP" });
+  }
+
+  if (isPrivateIP(targetIP)) {
     return json(400, { error: "Cannot query private IP addresses" });
   }
 
-  // Check cache
-  const cacheKey = `shodan-${ip}`;
+  // Check cache (use resolved IP for cache key)
+  const cacheKey = `shodan-${targetIP}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
-    return json(200, { ...cached, cached: true });
+    return json(200, { ...cached, cached: true, originalInput });
   }
 
   try {
-    const response = await fetch(`${SHODAN_API_BASE}/shodan/host/${ip}?key=${SHODAN_API_KEY}`);
+    const response = await fetchWithTimeout(
+      `${SHODAN_API_BASE}/shodan/host/${targetIP}?key=${SHODAN_API_KEY}`,
+      15000
+    );
     
     if (!response.ok) {
       if (response.status === 404) {
@@ -160,6 +241,7 @@ exports.handler = async (event) => {
 
     const result = {
       ip: data.ip_str,
+      originalInput: originalInput !== targetIP ? originalInput : undefined,
       hostnames: data.hostnames || [],
       city: data.city,
       region: data.region_code,
@@ -208,7 +290,20 @@ exports.handler = async (event) => {
     return json(200, { ...result, cached: false });
   } catch (e) {
     console.error("Shodan error:", e);
-    return json(500, { error: "Shodan lookup failed", details: e.message });
+    
+    // Provide more helpful error messages
+    let errorMessage = e.message || "Unknown error";
+    if (errorMessage.includes("timeout") || errorMessage.includes("abort")) {
+      errorMessage = "Request timed out. The Shodan API may be slow or unavailable.";
+    } else if (errorMessage.includes("fetch")) {
+      errorMessage = "Network error connecting to Shodan API.";
+    }
+    
+    return json(500, { 
+      error: "Shodan lookup failed", 
+      details: errorMessage,
+      hint: "This tool uses the Shodan API. If the error persists, the API may be temporarily unavailable or rate-limited."
+    });
   }
 };
 

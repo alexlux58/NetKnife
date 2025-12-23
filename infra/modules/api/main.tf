@@ -1392,8 +1392,6 @@ data "archive_file" "greynoise_zip" {
 }
 
 resource "aws_lambda_function" "greynoise" {
-  count = var.greynoise_api_key != "" ? 1 : 0
-
   function_name = "${local.name}-greynoise"
   role          = aws_iam_role.lambda_role.arn
   runtime       = "nodejs20.x"
@@ -1421,31 +1419,25 @@ resource "aws_lambda_function" "greynoise" {
 }
 
 resource "aws_apigatewayv2_integration" "greynoise" {
-  count = var.greynoise_api_key != "" ? 1 : 0
-
   api_id             = aws_apigatewayv2_api.http.id
   integration_type   = "AWS_PROXY"
-  integration_uri    = aws_lambda_function.greynoise[0].arn
+  integration_uri    = aws_lambda_function.greynoise.arn
   integration_method = "POST"
 }
 
 resource "aws_apigatewayv2_route" "greynoise" {
-  count = var.greynoise_api_key != "" ? 1 : 0
-
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "POST /greynoise"
-  target    = "integrations/${aws_apigatewayv2_integration.greynoise[0].id}"
+  target    = "integrations/${aws_apigatewayv2_integration.greynoise.id}"
 
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
 }
 
 resource "aws_lambda_permission" "greynoise" {
-  count = var.greynoise_api_key != "" ? 1 : 0
-
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.greynoise[0].function_name
+  function_name = aws_lambda_function.greynoise.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
@@ -1627,7 +1619,7 @@ output "lambda_censys_name" {
 }
 
 output "lambda_greynoise_name" {
-  value       = var.greynoise_api_key != "" ? nonsensitive(aws_lambda_function.greynoise[0].function_name) : null
-  description = "GreyNoise Lambda function name (null if API key not configured)"
+  value       = aws_lambda_function.greynoise.function_name
+  description = "GreyNoise Lambda function name"
 }
 

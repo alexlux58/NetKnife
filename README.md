@@ -9,10 +9,14 @@
 ## Features
 
 ### Offline Tools (Browser-only, no data leaves your machine)
-- **Subnet Calculator** - IPv4 CIDR calculations (sipcalc-style)
+- **Subnet Calculator** - IPv4/IPv6 CIDR calculations with AWS subnet info
 - **Regex Helper** - Build and test grep/egrep patterns with live preview
 - **Password Generator** - Cryptographically secure password generation
 - **Command Templates** - Multi-vendor CLI command library (Cisco, Arista, Juniper, FortiOS, Linux)
+- **JWT Decoder** - Decode and inspect JSON Web Tokens
+- **Encoder/Decoder** - Base64, Hex, URL, HTML encoding/decoding
+- **Hash Generator** - MD5, SHA-1, SHA-256, SHA-512 hashes
+- **Timestamp Converter** - Unix timestamp ↔ human-readable dates
 
 ### Remote Tools (AWS-backed)
 - **DNS Lookup** - DNS-over-HTTPS resolver via Cloudflare (1.1.1.1)
@@ -20,6 +24,10 @@
 - **TLS Inspector** - Certificate chain analysis with expiry tracking
 - **HTTP Headers Scanner** - Security headers analysis (HSTS, CSP, X-Frame-Options)
 - **PeeringDB Query** - Network and Internet Exchange information
+- **Reverse DNS (PTR)** - IP to hostname lookups
+- **Email Auth Check** - SPF, DKIM, DMARC validation
+- **Password Breach** - Check passwords against HIBP database (k-anonymity)
+- **IP Reputation** - AbuseIPDB threat scores and abuse reports (requires API key)
 
 ## Architecture
 
@@ -288,7 +296,11 @@ netknife/
 │       ├── rdap/            # RDAP lookup
 │       ├── tls/             # TLS inspector
 │       ├── headers/         # HTTP headers scanner
-│       └── peeringdb/       # PeeringDB query
+│       ├── peeringdb/       # PeeringDB query
+│       ├── reverse-dns/     # PTR lookups
+│       ├── email-auth/      # SPF/DKIM/DMARC
+│       ├── hibp/            # Password breach check
+│       └── abuseipdb/       # IP reputation (optional)
 │
 ├── infra/                   # Terraform IaC
 │   ├── modules/
@@ -318,6 +330,229 @@ netknife/
 3. Create frontend in `frontend/src/tools/remote/YourTool.tsx`
 4. Register in `frontend/src/tools/registry.tsx`
 5. Deploy infrastructure and frontend
+
+## Troubleshooting
+
+### Common Issues
+
+#### Lambda 500 Errors
+
+Check CloudWatch logs for the specific Lambda:
+
+```bash
+# Tail logs for a Lambda function (last 5 minutes)
+aws logs tail /aws/lambda/netknife-dev-dns --since 5m --region us-west-2
+
+# Filter logs for errors
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/netknife-dev-rdap \
+  --filter-pattern "ERROR" \
+  --region us-west-2
+```
+
+#### Test Lambda Functions Directly
+
+Invoke Lambda functions directly to bypass API Gateway:
+
+```bash
+# Test DNS Lambda
+aws lambda invoke \
+  --function-name netknife-dev-dns \
+  --payload '{"body": "{\"name\": \"google.com\", \"type\": \"A\"}"}' \
+  --cli-binary-format raw-in-base64-out \
+  --region us-west-2 \
+  /tmp/dns-response.json && cat /tmp/dns-response.json
+
+# Test RDAP Lambda
+aws lambda invoke \
+  --function-name netknife-dev-rdap \
+  --payload '{"body": "{\"query\": \"8.8.8.8\"}"}' \
+  --cli-binary-format raw-in-base64-out \
+  --region us-west-2 \
+  /tmp/rdap-response.json && cat /tmp/rdap-response.json
+
+# Test TLS Lambda
+aws lambda invoke \
+  --function-name netknife-dev-tls \
+  --payload '{"body": "{\"host\": \"github.com\", \"port\": 443}"}' \
+  --cli-binary-format raw-in-base64-out \
+  --region us-west-2 \
+  /tmp/tls-response.json && cat /tmp/tls-response.json
+```
+
+#### Redeploy Lambda Functions
+
+If Lambda code is outdated, force redeploy:
+
+```bash
+# Redeploy all Lambda functions via Terraform
+cd infra/envs/dev
+terraform apply -target=module.api -auto-approve
+
+# Or manually update a single Lambda
+cd backend/functions/dns
+zip -r /tmp/dns.zip index.js
+aws lambda update-function-code \
+  --function-name netknife-dev-dns \
+  --zip-file fileb:///tmp/dns.zip \
+  --region us-west-2
+```
+
+#### Authentication Issues
+
+```bash
+# Check Cognito user status
+aws cognito-idp admin-get-user \
+  --user-pool-id us-west-2_XXXXXXXX \
+  --username alex.lux \
+  --region us-west-2
+
+# Reset user password
+aws cognito-idp admin-set-user-password \
+  --user-pool-id us-west-2_XXXXXXXX \
+  --username alex.lux \
+  --password "NewPassword123!" \
+  --permanent \
+  --region us-west-2
+
+# Force user to re-verify
+aws cognito-idp admin-disable-user \
+  --user-pool-id us-west-2_XXXXXXXX \
+  --username alex.lux
+aws cognito-idp admin-enable-user \
+  --user-pool-id us-west-2_XXXXXXXX \
+  --username alex.lux
+```
+
+#### Frontend Deployment
+
+```bash
+# Build frontend
+cd frontend
+npm run build
+
+# Deploy to S3
+aws s3 sync dist/ s3://netknife-site-ACCOUNT_ID --delete --region us-west-2
+
+# Invalidate CloudFront cache
+aws cloudfront create-invalidation \
+  --distribution-id EXXXXXXXXXX \
+  --paths "/*" \
+  --region us-west-2
+
+# Check CloudFront distribution status
+aws cloudfront get-distribution \
+  --id EXXXXXXXXXX \
+  --query 'Distribution.Status'
+```
+
+#### DynamoDB Cache Issues
+
+```bash
+# List items in cache table
+aws dynamodb scan \
+  --table-name netknife-dev-cache \
+  --region us-west-2 \
+  --max-items 10
+
+# Delete specific cache entry
+aws dynamodb delete-item \
+  --table-name netknife-dev-cache \
+  --key '{"cache_key": {"S": "dns:google.com:A"}}' \
+  --region us-west-2
+
+# Clear all cache (be careful!)
+# Items with TTL will auto-expire, but for immediate clearing:
+aws dynamodb scan --table-name netknife-dev-cache --region us-west-2 \
+  --projection-expression "cache_key" \
+  --query "Items[*].cache_key.S" --output text | \
+  xargs -I {} aws dynamodb delete-item \
+    --table-name netknife-dev-cache \
+    --key '{"cache_key": {"S": "{}"}}' \
+    --region us-west-2
+```
+
+#### Terraform State Issues
+
+```bash
+# Refresh state without applying changes
+cd infra/envs/dev
+terraform refresh
+
+# Import existing resource into state
+terraform import module.api.aws_lambda_function.dns netknife-dev-dns
+
+# Remove resource from state (doesn't delete actual resource)
+terraform state rm module.api.aws_lambda_function.dns
+
+# Show current state
+terraform state list
+terraform state show module.api.aws_lambda_function.dns
+```
+
+#### DNS / Custom Domain Issues
+
+```bash
+# Check Cloudflare DNS records
+curl -X GET "https://api.cloudflare.com/client/v4/zones/ZONE_ID/dns_records" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq '.result[] | {name, type, content}'
+
+# Check ACM certificate status
+aws acm describe-certificate \
+  --certificate-arn arn:aws:acm:us-east-1:ACCOUNT:certificate/CERT-ID \
+  --region us-east-1
+
+# Flush local DNS cache (macOS)
+sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder
+
+# Test DNS resolution
+dig tools.alexflux.com
+nslookup tools.alexflux.com 8.8.8.8
+```
+
+#### Check API Gateway
+
+```bash
+# List API Gateway routes
+aws apigatewayv2 get-routes \
+  --api-id XXXXXXXXXX \
+  --region us-west-2
+
+# Get API Gateway logs (if enabled)
+aws logs tail /aws/apigateway/netknife-dev --since 5m --region us-west-2
+```
+
+### Quick Health Check
+
+Run this to verify all components are working:
+
+```bash
+#!/bin/bash
+# health-check.sh
+
+API_URL="https://XXXXXXXXXX.execute-api.us-west-2.amazonaws.com"
+SITE_URL="https://tools.alexflux.com"
+
+echo "=== NetKnife Health Check ==="
+
+# Check frontend
+echo -n "Frontend: "
+curl -s -o /dev/null -w "%{http_code}" "$SITE_URL" && echo " ✓" || echo " ✗"
+
+# Check API (will return 401 without auth, that's OK)
+echo -n "API Gateway: "
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/dns")
+[[ "$STATUS" == "401" || "$STATUS" == "200" ]] && echo "$STATUS ✓" || echo "$STATUS ✗"
+
+# Check Lambda (via AWS CLI)
+echo -n "DNS Lambda: "
+aws lambda invoke --function-name netknife-dev-dns \
+  --payload '{"body": "{\"name\": \"example.com\", \"type\": \"A\"}"}' \
+  --cli-binary-format raw-in-base64-out \
+  --region us-west-2 /tmp/health.json 2>/dev/null && echo "✓" || echo "✗"
+
+echo "=== Done ==="
+```
 
 ## License
 

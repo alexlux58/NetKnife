@@ -191,7 +191,7 @@ export default function JwtDecoderTool() {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+            placeholder="Paste your JWT token here (e.g., eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.Rq8IjqbeYa...)"
             className="input font-mono text-sm min-h-[100px]"
           />
         </div>

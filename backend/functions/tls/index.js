@@ -242,6 +242,11 @@ exports.handler = async (event) => {
     // Get peer certificate with full chain
     const peerCert = socket.getPeerCertificate(true);
 
+    // Extract protocol and cipher information
+    const protocol = socket.getProtocol() || null;
+    const cipher = socket.getCipher();
+    const cipherString = cipher ? `${cipher.name} (${cipher.version})` : null;
+
     // Clean up connection
     socket.end();
     socket.destroy();
@@ -267,6 +272,8 @@ exports.handler = async (event) => {
       host,
       port,
       sni: sni || host,
+      protocol: protocol || undefined,
+      cipher: cipherString || undefined,
       days_remaining: daysRemaining,
       chain,
     });

@@ -141,7 +141,16 @@ export const tools: Tool[] = [
     category: 'Network Calculators',
     path: '/tools/ip-converter',
     component: React.lazy(() => import('./offline/IpConverterTool')),
-    description: 'Convert between decimal, binary, hex, IPv4',
+    description: 'Convert between decimal, binary, hex, IPv4/IPv6',
+  },
+  {
+    id: 'ipv6-analyzer',
+    name: 'IPv6 Analyzer',
+    kind: 'offline',
+    category: 'Network Calculators',
+    path: '/tools/ipv6-analyzer',
+    component: React.lazy(() => import('./offline/Ipv6AnalyzerTool')),
+    description: 'Analyze IPv6 address type, scope, and format',
   },
 
   // ============================================================================

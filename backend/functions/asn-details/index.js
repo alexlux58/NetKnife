@@ -97,19 +97,26 @@ function parseAsn(input) {
 /**
  * Fetch data with timeout
  */
-async function fetchWithTimeout(url, timeout = 10000) {
+async function fetchWithTimeout(url, timeout = 10000, options = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
   
   try {
     const response = await fetch(url, { 
+      ...options,
       signal: controller.signal,
-      headers: { "User-Agent": "NetKnife/1.0" }
+      headers: {
+        "User-Agent": "NetKnife/1.0",
+        ...(options.headers || {}),
+      }
     });
     clearTimeout(timeoutId);
     return response;
   } catch (e) {
     clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
     throw e;
   }
 }
@@ -141,10 +148,25 @@ exports.handler = async (event) => {
 
   try {
     // Fetch data from BGPView API (more comprehensive than RIPEstat for basic info)
+    const [asnResponseHttp, prefixesResponseHttp, peersResponseHttp] = await Promise.all([
+      fetchWithTimeout(`https://api.bgpview.io/asn/${asn}`, 15000),
+      fetchWithTimeout(`https://api.bgpview.io/asn/${asn}/prefixes`, 15000),
+      fetchWithTimeout(`https://api.bgpview.io/asn/${asn}/peers`, 15000),
+    ]);
+
+    // Check HTTP response status
+    if (!asnResponseHttp.ok) {
+      return json(502, { 
+        error: "BGPView API error", 
+        details: `ASN endpoint returned ${asnResponseHttp.status}` 
+      });
+    }
+
+    // Parse JSON responses
     const [asnResponse, prefixesResponse, peersResponse] = await Promise.all([
-      fetchWithTimeout(`https://api.bgpview.io/asn/${asn}`).then(r => r.json()),
-      fetchWithTimeout(`https://api.bgpview.io/asn/${asn}/prefixes`).then(r => r.json()),
-      fetchWithTimeout(`https://api.bgpview.io/asn/${asn}/peers`).then(r => r.json()),
+      asnResponseHttp.json(),
+      prefixesResponseHttp.ok ? prefixesResponseHttp.json() : { data: {} },
+      peersResponseHttp.ok ? peersResponseHttp.json() : { data: {} },
     ]);
 
     if (asnResponse.status !== "ok" || !asnResponse.data) {
@@ -212,7 +234,20 @@ exports.handler = async (event) => {
     return json(200, { ...result, cached: false });
   } catch (e) {
     console.error("ASN lookup error:", e);
-    return json(500, { error: "ASN lookup failed", details: e.message });
+    
+    // Provide more helpful error messages
+    let errorMessage = e.message || "Unknown error";
+    if (errorMessage.includes("timeout") || errorMessage.includes("abort")) {
+      errorMessage = "Request timed out. The BGPView API may be slow or unavailable.";
+    } else if (errorMessage.includes("fetch")) {
+      errorMessage = "Network error connecting to BGPView API.";
+    }
+    
+    return json(500, { 
+      error: "ASN lookup failed", 
+      details: errorMessage,
+      hint: "This tool uses the BGPView API. If the error persists, the API may be temporarily unavailable."
+    });
   }
 };
 

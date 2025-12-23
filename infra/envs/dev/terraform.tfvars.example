@@ -85,5 +85,6 @@ censys_api_key = ""
 
 # GreyNoise API Key (for IP threat intelligence)
 # Get at: https://viz.greynoise.io/account/api-key
-# Free tier: Community API with basic data
+# Note: GreyNoise may require a paid plan - check current pricing
+# Leave empty to disable GreyNoise integration
 greynoise_api_key = ""

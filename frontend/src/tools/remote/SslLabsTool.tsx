@@ -113,15 +113,46 @@ export default function SslLabsTool() {
           )}
 
           {result && result.status === 'pending' && (
-            <div className="card p-6 text-center">
+            <div className="card p-6 text-center space-y-3">
               <div className="text-yellow-400">⏳ {result.message}</div>
+              <button 
+                onClick={handleCheck} 
+                disabled={loading}
+                className="btn btn-secondary mt-4"
+              >
+                {loading ? 'Checking...' : 'Check Again'}
+              </button>
             </div>
           )}
 
           {result && result.status === 'in_progress' && (
-            <div className="card p-6 text-center">
+            <div className="card p-6 text-center space-y-3">
               <div className="text-blue-400">🔄 {result.message}</div>
-              {result.progress && <div className="text-sm text-gray-500 mt-2">Progress: {result.progress}%</div>}
+              {result.progress !== undefined && (
+                <div className="space-y-2">
+                  <div className="text-sm text-gray-500">Progress: {result.progress}%</div>
+                  {result.progress >= 100 && (
+                    <div className="text-xs text-yellow-400 mt-2">
+                      Scan appears complete. Click "Check SSL Grade" again to fetch results.
+                    </div>
+                  )}
+                  {result.progress < 100 && result.progress > 0 && (
+                    <div className="w-full bg-gray-800 rounded-full h-2">
+                      <div 
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${result.progress}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              <button 
+                onClick={handleCheck} 
+                disabled={loading}
+                className="btn btn-secondary mt-4"
+              >
+                {loading ? 'Checking...' : 'Check Again'}
+              </button>
             </div>
           )}
 

@@ -229,15 +229,23 @@ exports.handler = async (event) => {
       data,
     };
 
-    // Only cache successful responses
+    // Always return HTTP 200, even if PeeringDB returned 404
+    // The PeeringDB status is in the response body
+    // This allows the frontend to display "not found" results gracefully
     if (response.ok) {
       await cachePut(cacheKey, output, TTL_SECONDS);
+      return json(200, {
+        ...output,
+        cached: false,
+      });
+    } else {
+      // For non-OK responses (like 404), still return HTTP 200
+      // but include the PeeringDB status in the body
+      return json(200, {
+        ...output,
+        cached: false,
+      });
     }
-
-    return json(response.ok ? 200 : response.status, {
-      ...output,
-      cached: false,
-    });
   } catch (err) {
     console.error("Handler error:", err);
     

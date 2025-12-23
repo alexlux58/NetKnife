@@ -39,14 +39,34 @@ export default function PeeringDbTool() {
   async function handleQuery() {
     setLoading(true)
     setError('')
+    setOutput('')
     
     try {
       const body: Record<string, string> = { resource }
       if (asn) body.asn = asn
       if (name) body.name = name
       
-      const result = await apiPost('/peeringdb', body)
-      setOutput(formatJson(result))
+      const result = await apiPost('/peeringdb', body) as any
+      
+      // Check if PeeringDB returned a non-OK status (like 404)
+      if (result.status && result.status !== 200) {
+        // This is a "not found" result from PeeringDB, not an error
+        // Display it as output with a helpful message
+        const message = result.data?.meta?.error || `Status ${result.status} from PeeringDB`
+        setOutput(formatJson({
+          ...result,
+          message: `PeeringDB returned: ${message}`,
+        }))
+      } else if (result.data?.data && Array.isArray(result.data.data) && result.data.data.length === 0) {
+        // Empty result set
+        setOutput(formatJson({
+          ...result,
+          message: 'No results found in PeeringDB',
+        }))
+      } else {
+        // Success - show the data
+        setOutput(formatJson(result))
+      }
     } catch (e) {
       if (e instanceof ApiError) {
         setError(`Error ${e.status}: ${formatJson(e.body)}`)

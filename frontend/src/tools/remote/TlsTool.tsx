@@ -31,7 +31,7 @@ interface Certificate {
   serialNumber: string
   signatureAlgorithm: string
   keyType: string
-  keySize: number
+  keySize: number | string
   fingerprint: string
   sans: string[]
 }
@@ -39,8 +39,9 @@ interface Certificate {
 interface TlsResult {
   host: string
   port: number
-  protocol: string
-  cipher: string
+  protocol?: string
+  cipher?: string
+  days_remaining?: number
   chain: Certificate[]
 }
 
@@ -62,8 +63,50 @@ export default function TlsTool() {
         host,
         port: Number(port),
         sni: sni || host,
-      }) as TlsResult
-      setResult(res)
+      }) as any
+      
+      // Transform backend response (snake_case) to frontend format (camelCase)
+      const transformed: TlsResult = {
+        host: res.host,
+        port: res.port,
+        protocol: res.protocol || '',
+        cipher: res.cipher || '',
+        days_remaining: res.days_remaining,
+        chain: (res.chain || []).map((cert: any) => {
+          // Calculate days remaining for each certificate
+          const validTo = new Date(cert.valid_to).getTime()
+          const now = Date.now()
+          const daysRemaining = Math.floor((validTo - now) / (1000 * 60 * 60 * 24))
+          
+          // Handle key size - can be number or string (for EC curves)
+          let keySize: number | string = cert.public_key_size
+          if (typeof keySize === 'string' && keySize.includes('prime')) {
+            // EC curve name like "prime256v1" - extract bit size if possible
+            if (keySize.includes('256')) keySize = 256
+            else if (keySize.includes('384')) keySize = 384
+            else if (keySize.includes('521')) keySize = 521
+          }
+          
+          return {
+            subject: cert.subject || '',
+            issuer: cert.issuer || '',
+            validFrom: cert.valid_from || '',
+            validTo: cert.valid_to || '',
+            daysRemaining,
+            serialNumber: cert.serial_number || '',
+            signatureAlgorithm: cert.signature_algorithm || '',
+            keyType: cert.public_key_type || '',
+            keySize,
+            fingerprint: cert.fingerprint_sha256 || '',
+            sans: (cert.san || []).map((san: string) => {
+              // Remove "DNS:" prefix if present
+              return san.replace(/^DNS:/i, '').trim()
+            }),
+          }
+        }),
+      }
+      
+      setResult(transformed)
     } catch (e) {
       if (e instanceof ApiError) {
         setError(`Error ${e.status}: ${JSON.stringify(e.body, null, 2)}`)
@@ -190,14 +233,18 @@ export default function TlsTool() {
                     <span className="text-gray-500">Host:</span>
                     <span className="ml-2 font-mono">{result.host}:{result.port}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-500">Protocol:</span>
-                    <span className="ml-2 text-green-400">{result.protocol}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-gray-500">Cipher:</span>
-                    <span className="ml-2 font-mono text-xs">{result.cipher}</span>
-                  </div>
+                  {result.protocol && (
+                    <div>
+                      <span className="text-gray-500">Protocol:</span>
+                      <span className="ml-2 text-green-400">{result.protocol}</span>
+                    </div>
+                  )}
+                  {result.cipher && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500">Cipher:</span>
+                      <span className="ml-2 font-mono text-xs">{result.cipher}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -235,12 +282,30 @@ export default function TlsTool() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-gray-500 block text-xs uppercase mb-1">Valid From</span>
-                        <span>{new Date(cert.validFrom).toLocaleDateString()}</span>
+                        <span>
+                          {cert.validFrom 
+                            ? (() => {
+                                try {
+                                  return new Date(cert.validFrom).toLocaleDateString()
+                                } catch {
+                                  return cert.validFrom
+                                }
+                              })()
+                            : 'Invalid Date'}
+                        </span>
                       </div>
                       <div>
                         <span className="text-gray-500 block text-xs uppercase mb-1">Valid To</span>
                         <span className={cert.daysRemaining < 30 ? 'text-orange-400' : ''}>
-                          {new Date(cert.validTo).toLocaleDateString()}
+                          {cert.validTo
+                            ? (() => {
+                                try {
+                                  return new Date(cert.validTo).toLocaleDateString()
+                                } catch {
+                                  return cert.validTo
+                                }
+                              })()
+                            : 'Invalid Date'}
                         </span>
                       </div>
                     </div>
@@ -249,11 +314,15 @@ export default function TlsTool() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-gray-500 block text-xs uppercase mb-1">Key</span>
-                        <span>{cert.keyType} {cert.keySize}-bit</span>
+                        <span>
+                          {cert.keyType || 'Unknown'} {cert.keySize 
+                            ? (typeof cert.keySize === 'number' ? `${cert.keySize}-bit` : cert.keySize)
+                            : ''}
+                        </span>
                       </div>
                       <div>
                         <span className="text-gray-500 block text-xs uppercase mb-1">Signature</span>
-                        <span className="text-xs">{cert.signatureAlgorithm}</span>
+                        <span className="text-xs">{cert.signatureAlgorithm || 'Unknown'}</span>
                       </div>
                     </div>
 

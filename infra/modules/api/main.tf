@@ -885,7 +885,7 @@ resource "aws_lambda_function" "asn_details" {
   filename         = data.archive_file.asn_details_zip.output_path
   source_code_hash = data.archive_file.asn_details_zip.output_base64sha256
 
-  timeout     = 15
+  timeout     = 30  # Increased for multiple API calls to BGPView
   memory_size = 128
 
   environment {
@@ -1065,7 +1065,7 @@ resource "aws_lambda_function" "traceroute" {
   filename         = data.archive_file.traceroute_zip.output_path
   source_code_hash = data.archive_file.traceroute_zip.output_base64sha256
 
-  timeout     = 30
+  timeout     = 60  # Increased for multiple API calls (DNS + RIPEstat + BGPView)
   memory_size = 256
 
   environment {

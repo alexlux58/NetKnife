@@ -125,19 +125,26 @@ function isPrivateIP(ip) {
 /**
  * Fetch with timeout
  */
-async function fetchWithTimeout(url, timeout = 15000) {
+async function fetchWithTimeout(url, timeout = 15000, options = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
   
   try {
     const response = await fetch(url, { 
+      ...options,
       signal: controller.signal,
-      headers: { "User-Agent": "NetKnife/1.0" }
+      headers: {
+        "User-Agent": "NetKnife/1.0",
+        ...(options.headers || {}),
+      }
     });
     clearTimeout(timeoutId);
     return response;
   } catch (e) {
     clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
     throw e;
   }
 }
@@ -180,8 +187,14 @@ exports.handler = async (event) => {
       // Use DNS lookup
       const dnsResponse = await fetchWithTimeout(
         `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(cleanTarget)}&type=A`,
+        10000, // 10 second timeout
         { headers: { "Accept": "application/dns-json" } }
       );
+      
+      if (!dnsResponse.ok) {
+        return json(502, { error: "DNS resolution failed", details: `HTTP ${dnsResponse.status}` });
+      }
+      
       const dnsData = await dnsResponse.json();
       if (dnsData.Answer && dnsData.Answer.length > 0) {
         targetIP = dnsData.Answer[0].data;
@@ -191,12 +204,20 @@ exports.handler = async (event) => {
     }
 
     // Use RIPEstat's looking glass for AS path
-    const [lookingGlass, geoData] = await Promise.all([
-      fetchWithTimeout(`https://stat.ripe.net/data/looking-glass/data.json?resource=${encodeURIComponent(targetIP)}`)
-        .then(r => r.json()),
-      fetchWithTimeout(`https://stat.ripe.net/data/geoloc/data.json?resource=${encodeURIComponent(targetIP)}`)
-        .then(r => r.json()),
+    const [lookingGlassResponse, geoDataResponse] = await Promise.all([
+      fetchWithTimeout(`https://stat.ripe.net/data/looking-glass/data.json?resource=${encodeURIComponent(targetIP)}`, 15000),
+      fetchWithTimeout(`https://stat.ripe.net/data/geoloc/data.json?resource=${encodeURIComponent(targetIP)}`, 15000),
     ]);
+    
+    if (!lookingGlassResponse.ok) {
+      return json(502, { 
+        error: "RIPEstat API error", 
+        details: `Looking glass API returned ${lookingGlassResponse.status}` 
+      });
+    }
+    
+    const lookingGlass = await lookingGlassResponse.json();
+    const geoData = await geoDataResponse.json();
 
     // Extract AS path from first available RRC
     let asPath = [];
@@ -211,10 +232,14 @@ exports.handler = async (event) => {
       }
     }
 
-    // Get details for each AS in the path
-    const hops = await Promise.all(asPath.map(async (asn, index) => {
+    // Get details for each AS in the path (limit to first 20 to avoid timeout)
+    const asPathLimited = asPath.slice(0, 20);
+    const hops = await Promise.all(asPathLimited.map(async (asn, index) => {
       try {
-        const asnResponse = await fetchWithTimeout(`https://api.bgpview.io/asn/${asn}`);
+        const asnResponse = await fetchWithTimeout(`https://api.bgpview.io/asn/${asn}`, 8000);
+        if (!asnResponse.ok) {
+          throw new Error(`HTTP ${asnResponse.status}`);
+        }
         const asnData = await asnResponse.json();
         
         return {
@@ -224,7 +249,8 @@ exports.handler = async (event) => {
           description: asnData.data?.description_short,
           countryCode: asnData.data?.country_code,
         };
-      } catch {
+      } catch (e) {
+        console.warn(`Failed to fetch ASN ${asn} details:`, e.message);
         return {
           hop: index + 1,
           asn,
@@ -262,7 +288,20 @@ exports.handler = async (event) => {
     return json(200, { ...result, cached: false });
   } catch (e) {
     console.error("Traceroute error:", e);
-    return json(500, { error: "Traceroute failed", details: e.message });
+    
+    // Provide more helpful error messages
+    let errorMessage = e.message || "Unknown error";
+    if (errorMessage.includes("timeout") || errorMessage.includes("abort")) {
+      errorMessage = "Request timed out. The target may be unreachable or the API may be slow.";
+    } else if (errorMessage.includes("fetch")) {
+      errorMessage = "Network error connecting to external APIs.";
+    }
+    
+    return json(500, { 
+      error: "Traceroute failed", 
+      details: errorMessage,
+      hint: "This tool uses external APIs (RIPEstat, BGPView). If the error persists, the APIs may be temporarily unavailable."
+    });
   }
 };
 

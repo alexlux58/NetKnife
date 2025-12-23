@@ -1,0 +1,205 @@
+/**
+ * ==============================================================================
+ * NETKNIFE - GLOBAL STYLES
+ * ==============================================================================
+ * 
+ * This file contains:
+ * - Tailwind CSS base, components, and utilities
+ * - Custom CSS variables for theming
+ * - Custom component styles
+ * - Scrollbar styling
+ * 
+ * The design follows a dark "terminal" aesthetic suitable for network engineers.
+ * ==============================================================================
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   CSS VARIABLES - Theme colors and values
+   ============================================================================ */
+:root {
+  /* Background colors */
+  --color-bg-primary: #0d1117;
+  --color-bg-secondary: #161b22;
+  --color-bg-tertiary: #21262d;
+  
+  /* Text colors */
+  --color-text-primary: #c9d1d9;
+  --color-text-secondary: #8b949e;
+  --color-text-muted: #6e7681;
+  
+  /* Border colors */
+  --color-border: #30363d;
+  --color-border-muted: #21262d;
+  
+  /* Accent colors */
+  --color-accent-blue: #58a6ff;
+  --color-accent-green: #3fb950;
+  --color-accent-red: #f85149;
+  --color-accent-yellow: #d29922;
+  --color-accent-purple: #a371f7;
+  
+  /* Status colors */
+  --color-success: #238636;
+  --color-warning: #9e6a03;
+  --color-error: #da3633;
+  
+  /* Font settings */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Monaco, Consolas, monospace;
+}
+
+/* ============================================================================
+   BASE STYLES
+   ============================================================================ */
+@layer base {
+  /* Dark theme by default */
+  html {
+    color-scheme: dark;
+  }
+  
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    line-height: 1.5;
+  }
+  
+  /* Monospace for code/terminal elements */
+  code, pre, kbd, samp, .font-mono {
+    font-family: var(--font-mono);
+  }
+  
+  /* Focus styles for accessibility */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-blue);
+    outline-offset: 2px;
+  }
+  
+  /* Selection color */
+  ::selection {
+    background-color: var(--color-accent-blue);
+    color: var(--color-bg-primary);
+  }
+}
+
+/* ============================================================================
+   CUSTOM SCROLLBAR (WebKit browsers)
+   ============================================================================ */
+@layer components {
+  /* Thin scrollbar */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: var(--color-bg-secondary);
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+  }
+  
+  /* Firefox scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) var(--color-bg-secondary);
+  }
+}
+
+/* ============================================================================
+   CUSTOM COMPONENT STYLES
+   ============================================================================ */
+@layer components {
+  /* Card component */
+  .card {
+    @apply bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg;
+  }
+  
+  /* Input fields */
+  .input {
+    @apply w-full px-3 py-2 bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-md text-[var(--color-text-primary)];
+    @apply focus:outline-none focus:border-[var(--color-accent-blue)] focus:ring-1 focus:ring-[var(--color-accent-blue)];
+    @apply placeholder:text-[var(--color-text-muted)];
+  }
+  
+  /* Textarea */
+  .textarea {
+    @apply input resize-y min-h-[100px];
+  }
+  
+  /* Button base */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--color-bg-primary)];
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  /* Primary button */
+  .btn-primary {
+    @apply btn bg-[var(--color-accent-blue)] text-white hover:bg-blue-600 focus:ring-[var(--color-accent-blue)];
+  }
+  
+  /* Secondary button */
+  .btn-secondary {
+    @apply btn bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border border-[var(--color-border)];
+    @apply hover:bg-[var(--color-border)] focus:ring-[var(--color-border)];
+  }
+  
+  /* Danger button */
+  .btn-danger {
+    @apply btn bg-[var(--color-error)] text-white hover:bg-red-700 focus:ring-[var(--color-error)];
+  }
+  
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
+  }
+  
+  .badge-remote {
+    @apply badge bg-amber-900/50 text-amber-400 border border-amber-700/50;
+  }
+  
+  .badge-offline {
+    @apply badge bg-green-900/50 text-green-400 border border-green-700/50;
+  }
+  
+  /* Code block */
+  .code-block {
+    @apply bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-lg p-4 font-mono text-sm;
+    @apply overflow-auto scrollbar-thin;
+  }
+}
+
+/* ============================================================================
+   UTILITY CLASSES
+   ============================================================================ */
+@layer utilities {
+  /* Text truncation */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400;
+  }
+  
+  /* Glow effect */
+  .glow {
+    box-shadow: 0 0 20px rgba(88, 166, 255, 0.3);
+  }
+}
+

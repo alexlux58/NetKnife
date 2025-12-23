@@ -1,0 +1,62 @@
+# ==============================================================================
+# NETKNIFE - TERRAFORM VARIABLES (DEVELOPMENT)
+# ==============================================================================
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored and should NEVER be committed.
+#
+# Before running terraform:
+#   export CLOUDFLARE_API_TOKEN="your-cloudflare-api-token"
+# ==============================================================================
+
+# ============================================================================
+# REQUIRED VARIABLES
+# ============================================================================
+
+# S3 bucket name for static site hosting (must be globally unique)
+# Tip: Include your AWS account ID to ensure uniqueness
+# Get account ID: aws sts get-caller-identity --query Account --output text
+site_bucket_name = "netknife-site-YOUR_ACCOUNT_ID"
+
+# Email for monitoring alerts (budget warnings, Lambda errors, etc.)
+# YOU MUST CONFIRM SNS SUBSCRIPTION after deployment!
+alert_email = "your-email@example.com"
+
+# ============================================================================
+# AWS CONFIGURATION
+# ============================================================================
+
+aws_region = "us-west-2"
+
+# ============================================================================
+# CUSTOM DOMAIN CONFIGURATION (Optional)
+# ============================================================================
+# Skip this section to use the CloudFront domain (*.cloudfront.net)
+#
+# To use a custom domain like tools.alexflux.com:
+# 1. Set custom_domain to your full domain
+# 2. Set cloudflare_zone_id to your Cloudflare zone ID
+# 3. Export CLOUDFLARE_API_TOKEN before running terraform
+
+# Custom domain for the site (leave empty to use CloudFront domain)
+custom_domain = "tools.alexflux.com"
+
+# Cloudflare Zone ID (required if using custom_domain)
+# Find at: https://dash.cloudflare.com → Domain → API section → Zone ID
+cloudflare_zone_id = "YOUR_CLOUDFLARE_ZONE_ID"
+
+# ============================================================================
+# COST CONFIGURATION
+# ============================================================================
+
+# Monthly budget limit in USD (alerts at 50%, 80%, 100%)
+monthly_budget_usd = 25
+
+# ============================================================================
+# THIRD-PARTY API KEYS (Optional)
+# ============================================================================
+
+# AbuseIPDB API Key (for IP reputation checks)
+# Get a free API key at: https://www.abuseipdb.com/account/api
+# Free tier: 1,000 checks per day
+# Leave empty to disable AbuseIPDB integration
+abuseipdb_api_key = ""

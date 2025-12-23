@@ -1,0 +1,6933 @@
+I want to build a serverless application in AWS to have useful tools available one thing I thought would be good to have is sipcalc but in the browser. I thought this application can be used like a swiss army knife for network and security engineers. Obviously it wouldn't be helpful with pinging since the pings would come from the server not the machine havaing issues. But downloading sipcalc on a machine takes time and maybe you can't install software but can access a browser. 
+Thought for 10s
+Goal
+
+Build a “network/security swiss-army knife” that runs in a browser, so engineers can use it even when they can’t install tools locally. Your sipcalc idea is perfect because it’s deterministic and can be done client-side (no AWS compute required for correctness).
+
+Key constraint you already identified: anything like ping, traceroute, tcping from AWS won’t reflect the user’s local path. So treat “remote probes” as a separate category and label them clearly.
+
+Recommended architecture (secure, cheap, fast)
+MVP (best first step)
+
+Static web app only (sipcalc + other offline tools):
+
+S3 (private) for hosting build artifacts
+
+CloudFront in front (TLS, caching, WAF-ready)
+
+Optional: Route53 + ACM for tools.yourdomain.com
+
+This gives you a globally fast web app with essentially zero ops.
+
+Add serverless APIs only when needed
+
+For tools that require:
+
+DNS resolution from a consistent resolver
+
+ASN / WHOIS lookups
+
+TLS certificate fetch/parse from a URL
+
+Password breach checks (careful), header checks, etc.
+
+Use:
+
+API Gateway HTTP API → Lambda (small, cheap, fast)
+
+CloudWatch Logs + optional X-Ray
+
+WAF (especially if you add unauthenticated endpoints)
+
+Tool set that makes sense in-browser (no backend)
+
+These are ideal because they’re fast, safe, and don’t depend on AWS vantage point:
+
+Network engineering
+
+Subnet/CIDR calculator (sipcalc-like)
+
+Supernetting / route summarization
+
+IP range expansion (10.0.0.0/28 → list / first-last)
+
+Wildcard mask ↔ netmask ↔ CIDR (useful for ACLs)
+
+IPv4/IPv6 normalization + compression/expansion
+
+“Is this IP in this CIDR?” checker
+
+Binary/hex representation helpers (for masks and debugging)
+
+Security/ops helpers
+
+Base64/URL encode/decode
+
+JWT decode (no verification, or optional JWK verification offline if you load key)
+
+Hash generator (SHA256, SHA1, MD5) for file snippets/text
+
+Regex tester + common log parsing patterns
+
+Time conversions (epoch ↔ ISO8601, timezones)
+
+HTTP header builder + curl generator
+
+Recommendation: implement sipcalc functionality directly in JS/TS instead of invoking the sipcalc binary. It avoids Lambda exec/shell risk and avoids licensing/distribution headaches if you were thinking of bundling the original tool.
+
+Tools that can be “server-side” (label as remote vantage)
+
+These are useful, but must be clearly marked “runs from AWS”:
+
+DNS lookup (A/AAAA/CNAME/MX/TXT) from AWS
+
+TLS certificate fetch + parse (subject/SAN/issuer/expiry)
+
+HTTP response inspector (status, redirects, headers, HSTS, CSP presence)
+
+“What is my egress IP?” (AWS’s egress)
+
+WHOIS/ASN lookup (often rate-limited; cache results)
+
+Avoid or be cautious with:
+
+Port scanning features (can become an abuse magnet)
+
+Anything that looks like exploitation or credential testing
+
+Unrestricted arbitrary network requests without auth/rate-limits
+
+Terraform-first project layout
+
+A clean layout that scales:
+
+net-tools/
+  frontend/
+    (React/Vite or Next.js static export)
+  backend/
+    functions/
+      dns_lookup/
+      tls_inspect/
+  infra/
+    envs/
+      dev/
+      prod/
+    modules/
+      static_site/
+      api/
+
+Terraform: Static site (S3 private + CloudFront OAC)
+
+Below is a minimal but solid baseline. This assumes:
+
+You build the frontend to frontend/dist
+
+You upload to S3 (CLI sync)
+
+CloudFront serves it
+
+infra/modules/static_site/main.tf
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
+variable "name" { type = string }
+
+resource "aws_s3_bucket" "site" {
+  bucket = var.name
+}
+
+resource "aws_s3_bucket_public_access_block" "site" {
+  bucket                  = aws_s3_bucket.site.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = "${var.name}-oac"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_distribution" "cdn" {
+  enabled             = true
+  default_root_object = "index.html"
+
+  origin {
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "s3-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "s3-origin"
+    viewer_protocol_policy = "redirect-to-https"
+
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD", "OPTIONS"]
+    compress         = true
+
+    forwarded_values {
+      query_string = true
+      cookies { forward = "none" }
+    }
+  }
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+
+data "aws_iam_policy_document" "bucket_policy" {
+  statement {
+    sid     = "AllowCloudFrontRead"
+    actions = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.site.arn}/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.cdn.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "site" {
+  bucket = aws_s3_bucket.site.id
+  policy = data.aws_iam_policy_document.bucket_policy.json
+}
+
+output "cloudfront_domain" {
+  value = aws_cloudfront_distribution.cdn.domain_name
+}
+
+infra/envs/dev/main.tf
+provider "aws" {
+  region = "us-west-2"
+}
+
+module "static_site" {
+  source = "../../modules/static_site"
+  name   = "alex-net-tools-dev-site-12345"
+}
+
+output "site_url" {
+  value = "https://${module.static_site.cloudfront_domain}"
+}
+
+Deploy commands
+cd infra/envs/dev
+terraform init
+terraform apply
+
+
+Build + upload frontend:
+
+cd ../../..
+cd frontend
+npm ci
+npm run build
+
+# upload artifacts
+aws s3 sync dist/ s3://alex-net-tools-dev-site-12345/ --delete
+
+
+Validate:
+
+cd infra/envs/dev
+terraform output -raw site_url
+# open the URL in browser
+
+Adding an API (when you’re ready)
+
+When you add server-side tools, keep it constrained:
+
+Explicit allow-list of operations
+
+No arbitrary shell execution
+
+Tight timeouts, small memory
+
+API Gateway throttling + WAF (recommended)
+
+Structured logs
+
+Suggested API shape:
+
+POST /api/dns { "name": "example.com", "type": "A" }
+
+POST /api/tls { "host": "example.com", "port": 443 }
+
+If you want, I can drop a Terraform modules/api (HTTP API + Lambda + IAM + CORS + throttling) and a minimal Lambda handler in Python or Node with safe validation.
+
+Security defaults checklist
+
+Static site:
+
+CloudFront HTTPS redirect (done)
+
+Add security headers (CSP, HSTS, X-Content-Type-Options)
+
+Best implemented via CloudFront Response Headers Policy
+
+APIs:
+
+Rate-limit (API Gateway + WAF)
+
+Input validation (strict schemas)
+
+No SSRF primitives (don’t allow arbitrary URLs without controls)
+
+Log sensitive fields carefully (avoid dumping full payloads)
+
+Practical product decision: frontend-only first
+
+For your sipcalc-in-browser idea, the best first release is:
+
+React UI
+
+Pure TypeScript subnet engine
+
+Hosted on CloudFront
+
+You get 80% of the value with 20% of the risk/complexity, and it works even if the user is offline (if you add a service worker later).
+
+If you tell me whether you prefer React/Vite or Next.js static export, I’ll provide:
+
+A minimal UI layout (tools sidebar + tool panels)
+
+A TypeScript subnet engine with unit tests
+
+Copy/paste deploy scripts (build → aws s3 sync → cache invalidation)
+
+this sounds interesting
+
+DNS resolution from a consistent resolver
+
+ASN / WHOIS lookups
+
+TLS certificate fetch/parse from a URL
+
+Password breach checks (careful), header checks, etc.
+
+I would like a tool to check for certificates and generates them. Maybe also a PGP encryption tool and decryption? a password generator, anything else you could think of? dns resolution and whois / ARN info for IP and domains would be helpful. maybe a regex generator to help with grep and egrep searches with examples. Also some helpful google dorks and helpful prompt templates for network/security engineer tasks. 
+Thought for 25s
+Split the app into two buckets
+1) “Local/offline” tools (run entirely in the browser)
+
+These are the safest and most useful because they don’t depend on AWS vantage point and don’t create abuse risk.
+
+Subnet/CIDR tools (sipcalc-like): IPv4/IPv6, range, first/last, wildcard masks, summarization
+
+Password generator (WebCrypto getRandomValues)
+
+PGP encrypt/decrypt (OpenPGP.js; keys never leave the browser)
+
+JWT decode/inspect (optionally verify with pasted JWK)
+
+Hashing (SHA-256/SHA-1/MD5) for pasted text/files (browser APIs)
+
+Regex helper for grep/egrep + examples + test strings
+
+Prompt templates (incident triage, firewall rule request, k8s debugging, etc.)
+
+“Google dorks” for self-audit (curated + scoped to your domains)
+
+2) “Remote” tools (run from AWS via API)
+
+These are useful, but should be clearly labeled “Runs from AWS” and must be locked down.
+
+DNS resolution from a consistent resolver (DoH upstream you choose)
+
+WHOIS/RDAP + ASN for IP/domain (prefer RDAP over raw whois/port-43)
+
+TLS certificate fetch/parse (connect, capture chain metadata, expiry, SAN, fingerprints)
+
+HTTP header checks (HSTS/CSP/XFO/etc.) + redirect tracing
+
+Password breach checks: only via k-anonymity (don’t send full password; hash client-side)
+
+Certificates: “check” vs “generate” (do both, but keep private keys client-side)
+A) Certificate checker (AWS-backed)
+
+Backend: Lambda connects to host:port, retrieves peer cert (and optionally chain), returns:
+
+Subject, issuer, SANs
+
+NotBefore/NotAfter + “days remaining”
+
+Signature algorithm, key type/size
+
+SHA-256 fingerprint
+
+(Optional) OCSP/CRL URLs if present
+
+Why backend: Browsers can’t reliably do raw TLS socket inspection to arbitrary hosts.
+
+B) Certificate generator (browser-first)
+
+You can support two modes:
+
+Self-signed cert generator (fully in-browser)
+
+Generate keypair in-browser
+
+Create X.509 self-signed cert (PEM output)
+
+Never send private key anywhere
+
+CSR generator (in-browser) + optional signing workflow
+
+Browser generates keypair + CSR (PEM)
+
+If user has an internal CA, they paste back signed cert
+
+Optional future: ACME/Let’s Encrypt issuance (advanced; requires domain control + auth)
+
+Secure default: do not implement “generate certs on the server” where private keys traverse Lambda.
+
+PGP tool (browser-only)
+
+Use OpenPGP.js to provide:
+
+Generate keypair (ed25519 recommended)
+
+Encrypt/decrypt message
+
+Sign/verify
+
+Import/export armored keys
+
+Security note: implement “clear all” and avoid storing keys in localStorage by default (use session memory unless user explicitly opts in).
+
+DNS + RDAP/ASN design (AWS-backed, consistent results)
+DNS resolution
+
+Lambda uses DNS-over-HTTPS to a fixed upstream (example: Cloudflare or Google) so results are consistent and auditable.
+
+Supports record types A/AAAA/CNAME/MX/TXT/NS/SRV, optional “trace” style output.
+
+WHOIS / ASN
+
+Prefer RDAP (HTTP JSON) for IP and domains (clean parsing, less rate-limit pain than port-43).
+
+ASN: derive from RDAP “origin” where available, or call a reputable IP→ASN source (cache heavily).
+
+Caching
+
+DynamoDB TTL cache keyed by query (e.g., dns:A:example.com) to reduce rate-limit issues and cost.
+
+HTTP header checker (AWS-backed) — SSRF-safe version
+
+This endpoint is the one that becomes an abuse magnet if not constrained.
+
+Hard rules:
+
+Only allow http/https
+
+Only ports 80/443 (or strict allowlist)
+
+Resolve DNS server-side; block private/loopback/link-local ranges
+
+Limit redirects (e.g., max 5)
+
+Small timeouts (e.g., 3–5s), max response bytes, strip bodies
+
+Output:
+
+Final URL + redirect chain
+
+Status codes
+
+Security headers present/missing (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+
+TLS summary reused from cert checker where relevant
+
+Password breach checks (safe approach)
+
+Implement the Have I Been Pwned model:
+
+Browser hashes password with SHA-1 (or SHA-256 if your source supports it)
+
+Send only the hash prefix to backend (k-anonymity)
+
+Backend queries breach API and returns suffix matches count
+
+Browser determines if full hash matches
+
+Never send raw passwords to AWS.
+
+Regex helper (grep/egrep) feature set
+
+A “regex builder” is good, but MVP can be:
+
+Input: sample log line(s)
+
+Choose: “extract IP”, “extract username”, “match non-zero drop counters”, etc.
+
+Output:
+
+grep -E pattern
+
+grep -P pattern (when needed)
+
+awk/sed alternative
+
+2–3 examples with expected matches
+
+Include a “mode” toggle:
+
+POSIX ERE (grep -E) (portable)
+
+PCRE (grep -P) (powerful; not always available)
+
+Curated “Google dorks” (self-audit oriented)
+
+Keep these explicitly scoped to your domain(s) to avoid encouraging misuse.
+
+Examples (user supplies example.com):
+
+Exposed env/config: site:example.com (ext:env OR ext:ini OR ext:yaml OR ext:yml OR ext:json) (password OR secret OR key)
+
+Keys/certs: site:example.com ("BEGIN RSA PRIVATE KEY" OR "BEGIN PRIVATE KEY" OR "BEGIN CERTIFICATE")
+
+Directory listings: site:example.com intitle:"index of" (backup OR private OR .git)
+
+Admin panels: site:example.com (inurl:admin OR inurl:login OR inurl:signin)
+
+Public logs: site:example.com (ext:log OR ext:txt) ("Exception" OR "Traceback" OR "stack trace")
+
+Add a “remediation tips” panel beside results (no backend needed).
+
+Prompt template pack (high-value, low-risk)
+
+Include copy/paste templates like:
+
+Incident triage (what happened, impact, timeline, IOCs, containment steps)
+
+Firewall rule request (src/dst, ports, justification, expiry, logging requirements)
+
+K8s outage debugging (symptoms → commands → hypotheses)
+
+BGP/OSPF troubleshooting (neighbor state, routes, policy, MTU, timers)
+
+TLS issue debugging (SNI, chain, ciphers, ALPN, expiry, OCSP)
+
+Minimal API surface (suggested)
+
+POST /dns { "name": "example.com", "type": "A" }
+
+POST /rdap { "query": "8.8.8.8" } or { "query": "example.com" }
+
+POST /tls { "host": "example.com", "port": 443, "sni": "example.com" }
+
+POST /headers { "url": "https://example.com" }
+
+POST /pwned { "hash_prefix": "5BAA6" } (k-anonymity flow)
+
+Security controls (do these from day 1)
+
+API Gateway throttling (per-IP)
+
+WAF (basic bot + rate rules)
+
+Strict input validation (JSON schema)
+
+SSRF protections on any URL fetcher
+
+CloudWatch structured logs; no sensitive payload logging
+
+Consider auth for “remote tools” (Cognito JWT authorizer) if you don’t want it public
+
+If you want the fastest next step: I can provide a concrete Terraform module set for:
+
+Static site (S3 + CloudFront OAC)
+
+HTTP API + one Lambda endpoint (TLS inspector) with SSRF-safe patterns
+
+A React tool panel list (PGP, password generator, regex helper) wired to those endpoints.
+
+I think adding snmp walk commands and helpful snmp things would be good also ldap search commands and maybe smtp commands if there are even any? 
+Add these as “command builders” (offline) + “remote validation” (optional)
+
+For SNMP/LDAP/SMTP, the most useful browser feature is a copy/paste command generator with:
+
+inputs (host, port, creds, filters)
+
+secure defaults
+
+multiple “recipes” (common tasks)
+
+output variants (Linux/macOS, Windows if needed)
+
+Do not run SNMP walks or LDAP queries from AWS by default; those are usually environment-specific and can create abuse risk. If you add any “remote execution,” gate it behind auth + strict allowlists.
+
+SNMP tool pack
+What to ship
+
+SNMP Walk/Query builder
+
+snmpget, snmpwalk, snmpbulkwalk
+
+v2c and v3 (default to v3 authPriv)
+
+common OIDs shortcuts:
+
+sysDescr, sysName, sysUpTime, ifTable, ifXTable
+
+LLDP/CDP equivalents where applicable (device-specific)
+
+output formats: -On numeric, -Oqv quiet value, -Ot etc.
+
+Interface index helper
+
+Parse ifName/ifDescr output (user pastes output) → map ifIndex to name
+
+Generate follow-up commands for specific ifIndex counters
+
+SNMP troubleshooting cheat sheet
+
+timeouts, retries, MTU, ACLs, UDP/161, views, engineID/time sync (v3)
+
+Copy/paste command templates
+SNMPv2c (basic)
+snmpwalk -v2c -c 'COMMUNITY' -t 2 -r 1 HOST_OR_IP 1.3.6.1.2.1.1
+# system group: sysDescr/sysName/sysUpTime...
+
+SNMPv3 authPriv (recommended)
+snmpwalk -v3 -l authPriv \
+  -u 'SNMPUSER' \
+  -a SHA -A 'AUTH_PASS' \
+  -x AES -X 'PRIV_PASS' \
+  -t 2 -r 1 HOST_OR_IP 1.3.6.1.2.1.1
+
+Bulk walk (faster on big tables)
+snmpbulkwalk -v2c -c 'COMMUNITY' -Cn0 -Cr50 -t 2 -r 1 HOST_OR_IP 1.3.6.1.2.1.2.2
+# ifTable
+
+Interface table (map ifIndex → port name)
+snmpwalk -v2c -c 'COMMUNITY' HOST_OR_IP 1.3.6.1.2.1.31.1.1.1.1   # ifName
+snmpwalk -v2c -c 'COMMUNITY' HOST_OR_IP 1.3.6.1.2.1.2.2.1.2       # ifDescr
+
+Get a single value (example: sysName)
+snmpget -v2c -c 'COMMUNITY' HOST_OR_IP 1.3.6.1.2.1.1.5.0
+
+
+UI idea: a dropdown of “recipes” (System info / Interfaces / CPU+Mem / LLDP / Vendor OIDs) that fills in OIDs and flags.
+
+Secure defaults:
+
+prefer SNMPv3 authPriv
+
+keep -t low and -r small by default
+
+warn if user selects 0.0.0.0/0 or broad targets (if you ever add “remote runs”)
+
+LDAP tool pack
+What to ship
+
+ldapsearch builder
+
+ldap:// vs ldaps://
+
+StartTLS mode (-ZZ)
+
+bind DN + password (never persist by default)
+
+base DN + scope + filter + attributes list
+
+common filters (user by uid/mail, group membership)
+
+AD-focused recipes
+
+Find user by sAMAccountName
+
+Find group + members
+
+Check nested groups (limitations noted)
+
+Copy/paste templates
+StartTLS on 389 (recommended if available)
+ldapsearch -H "ldap://LDAP_HOST:389" -ZZ \
+  -D "cn=binduser,dc=example,dc=com" -W \
+  -b "dc=example,dc=com" -s sub \
+  "(uid=jdoe)" cn mail memberOf
+
+LDAPS on 636
+ldapsearch -H "ldaps://LDAP_HOST:636" \
+  -D "cn=binduser,dc=example,dc=com" -W \
+  -b "dc=example,dc=com" -s sub \
+  "(mail=jdoe@example.com)" dn cn mail
+
+AD: find user by sAMAccountName
+ldapsearch -H "ldap://AD_HOST:389" -ZZ \
+  -D "EXAMPLE\\binduser" -W \
+  -b "DC=example,DC=com" \
+  "(&(objectClass=user)(sAMAccountName=jdoe))" dn cn mail memberOf
+
+AD: find group members
+ldapsearch -H "ldap://AD_HOST:389" -ZZ \
+  -D "EXAMPLE\\binduser" -W \
+  -b "DC=example,DC=com" \
+  "(&(objectClass=group)(cn=VPN-Users))" member
+
+
+Troubleshooting snippets
+
+# quick TCP check
+nc -vz LDAP_HOST 389
+nc -vz LDAP_HOST 636
+
+# validate TLS chain
+openssl s_client -connect LDAP_HOST:636 -servername LDAP_HOST -showcerts </dev/null
+
+SMTP tool pack (legit testing/diagnostics)
+
+Yes—there are useful “SMTP commands,” but the practical approach is connectivity + STARTTLS + auth testing for your mail server or a service you administer.
+
+What to ship
+
+SMTP connectivity tester commands
+
+STARTTLS handshake inspector
+
+Authenticated send test (via swaks) to validate credentials and delivery path
+
+Copy/paste templates
+Check port reachability
+nc -vz SMTP_HOST 25
+nc -vz SMTP_HOST 587
+nc -vz SMTP_HOST 465
+
+STARTTLS on 587
+openssl s_client -starttls smtp -connect SMTP_HOST:587 -servername SMTP_HOST -crlf -showcerts
+
+Basic protocol dialogue (manual)
+nc SMTP_HOST 25
+# then type:
+EHLO test.local
+STARTTLS
+# (if STARTTLS supported, switch to openssl approach instead)
+
+Best tool for real testing: swaks (send a test email)
+swaks --to you@yourdomain.com --from you@yourdomain.com \
+  --server SMTP_HOST --port 587 --tls \
+  --auth LOGIN --auth-user "SMTP_USER" --auth-password "SMTP_PASS" \
+  --header "Subject: SMTP test" --body "hello"
+
+
+Safety constraint: keep this positioned as diagnostics for systems you own/administer; avoid providing guidance aimed at sending unsolicited mail.
+
+How to integrate these into your app cleanly
+Frontend panels
+
+SNMP Panel: version selector (v2c/v3) → recipe dropdown → command output + “explain flags”
+
+LDAP Panel: connection mode (StartTLS/LDAPS) → bind/base/filter builder → output
+
+SMTP Panel: ports + TLS inspector + swaks generator
+
+“Paste output → helpers”
+
+Paste snmpwalk ifName output → generate snmpget for selected ifIndex counters
+
+Paste LDAP result → auto-suggest baseDN and attributes
+
+Paste openssl s_client output → parse cert expiry/fingerprint (client-side)
+
+Secure UX defaults
+
+Don’t persist secrets; add “Remember for session only” toggle
+
+Add “redact secrets” button before copying (mask passwords in commands)
+
+Clear clipboard warnings optional
+
+If you want, I can provide the exact React component structure for these panels plus a small TypeScript library to:
+
+render command templates from form inputs
+
+mask secrets safely
+
+parse common SNMP/LDAP/openssl outputs into structured tables.
+
+I also want some templates to add static route commands on linux,cisco,arista,juniper,brocade,unifi,fortinet as well as other commands for network engineers for BGP,OSPF,IS-IS,BFD,VLANS,MPLS,SNMP and anything else that would help with troubleshooting like vlan database, find mac address, find IP from arp and mac and other things like that. 
+Implement this as a “Command Template Library” (offline) with vendor + feature filters
+
+Structure it like:
+
+Vendor: Linux, Cisco IOS/IOS-XE, Arista EOS, Juniper Junos, Brocade ICX/MLX, UniFi (USG/UDM/EdgeOS if you add it), FortiOS
+
+Feature: Static Route, BGP, OSPF, IS-IS, BFD, VLANs, MPLS, L2 troubleshooting, SNMP
+
+Task: “Add route”, “Verify adjacency”, “Find MAC”, “Trace IP→MAC→Port”, etc.
+
+Inputs: prefix, next-hop, interface, VRF, ASN, neighbor IP, VLAN ID, MAC, IP, etc.
+
+Outputs: copy/paste commands + “verify” commands + “rollback” snippet
+
+Below is a starter pack you can ship immediately.
+
+Static route templates (add + verify + remove)
+Linux (iproute2)
+
+Add:
+
+sudo ip route add 203.0.113.0/24 via 192.168.1.1 dev eth0
+# or default route:
+sudo ip route replace default via 192.168.1.1 dev eth0
+
+
+VRF (example):
+
+sudo ip route add 203.0.113.0/24 via 192.168.1.1 dev eth0 vrf mgmt
+
+
+Verify:
+
+ip route show
+ip route get 203.0.113.10
+
+
+Remove:
+
+sudo ip route del 203.0.113.0/24 via 192.168.1.1 dev eth0
+
+Cisco IOS/IOS-XE
+
+Add:
+
+conf t
+ip route 203.0.113.0 255.255.255.0 192.0.2.1
+! or with exit interface:
+ip route 203.0.113.0 255.255.255.0 GigabitEthernet0/0 192.0.2.1
+end
+wr mem
+
+
+VRF:
+
+conf t
+ip route vrf MGMT 203.0.113.0 255.255.255.0 192.0.2.1
+end
+
+
+Verify:
+
+show ip route 203.0.113.0
+show ip cef 203.0.113.10
+
+
+Remove:
+
+conf t
+no ip route 203.0.113.0 255.255.255.0 192.0.2.1
+end
+
+Arista EOS
+
+Add:
+
+conf t
+ip route 203.0.113.0/24 192.0.2.1
+end
+write memory
+
+
+VRF:
+
+conf t
+ip route vrf MGMT 203.0.113.0/24 192.0.2.1
+end
+
+
+Verify:
+
+show ip route 203.0.113.0/24
+show ip route vrf MGMT 203.0.113.0/24
+
+
+Remove:
+
+conf t
+no ip route 203.0.113.0/24 192.0.2.1
+end
+
+Juniper Junos
+
+Add:
+
+configure
+set routing-options static route 203.0.113.0/24 next-hop 192.0.2.1
+commit
+
+
+Routing-instance:
+
+configure
+set routing-instances MGMT routing-options static route 203.0.113.0/24 next-hop 192.0.2.1
+commit
+
+
+Verify:
+
+show route 203.0.113.0/24
+show route table MGMT.inet.0 203.0.113.0/24
+
+
+Remove:
+
+configure
+delete routing-options static route 203.0.113.0/24
+commit
+
+Brocade ICX (FastIron)
+
+Add:
+
+conf t
+ip route 203.0.113.0/24 192.0.2.1
+write memory
+
+
+Verify:
+
+show ip route 203.0.113.0/24
+
+
+Remove:
+
+conf t
+no ip route 203.0.113.0/24 192.0.2.1
+write memory
+
+UniFi (practical note)
+
+On UniFi gateways, “static routes” are often configured in the UI; CLI depends on platform:
+
+EdgeRouter/EdgeOS supports set protocols static route ...
+
+UDM/USG CLI changes can be non-persistent across re-provision unless done via supported config mechanisms.
+If you want persistence templates, include platform selector: EdgeOS vs USG/UDM.
+
+EdgeOS example
+
+configure
+set protocols static route 203.0.113.0/24 next-hop 192.0.2.1
+commit; save
+exit
+
+Fortinet FortiOS
+
+Add:
+
+config router static
+    edit 0
+        set dst 203.0.113.0/24
+        set gateway 192.0.2.1
+        set device "port1"
+    next
+end
+
+
+VRF (if using VRF):
+
+config router static
+    edit 0
+        set vrf 10
+        set dst 203.0.113.0/24
+        set gateway 192.0.2.1
+        set device "port1"
+    next
+end
+
+
+Verify:
+
+get router info routing-table details 203.0.113.0/24
+diagnose ip route list
+
+
+Remove:
+
+config router static
+    delete <id>
+end
+
+L2 troubleshooting: find MAC → port, and IP ↔ ARP ↔ MAC
+Cisco
+show mac address-table | inc aabb.ccdd.eeff
+show mac address-table vlan 123
+show arp | inc 192.0.2.50
+show ip arp vlan 123 | inc aabb.ccdd.eeff
+show interfaces status | inc Gi1/0/10
+show interfaces Gi1/0/10 switchport
+
+Arista EOS
+show mac address-table address aabb.ccdd.eeff
+show mac address-table vlan 123
+show arp | include 192.0.2.50
+show ip arp vrf MGMT | include 192.0.2.50
+show interfaces status | include Et1
+show interfaces Et1 switchport
+
+Junos
+show ethernet-switching table | match aabb:ccdd:eeff
+show ethernet-switching table vlan 123
+show arp | match 192.0.2.50
+show arp no-resolve | match aabb:ccdd:eeff
+show interfaces terse | match ge-0/0/10
+show configuration interfaces ge-0/0/10 | display set
+
+Brocade ICX
+show mac-address | include aabb.ccdd.eeff
+show mac-address vlan 123
+show arp | include 192.0.2.50
+show interfaces brief
+show running-config interface ethernet 1/1/10
+
+Linux
+ip neigh show | grep -i 192.0.2.50
+ip neigh show | grep -i aa:bb:cc:dd:ee:ff
+bridge fdb show | grep -i aa:bb:cc:dd:ee:ff
+ip link show
+
+BGP “get me unblocked fast” templates (verify-first)
+Common checks (vendor-agnostic)
+
+Neighbor state (Idle/Active/Established)
+
+TCP/179 reachability (path + ACL)
+
+Source interface/TTL (eBGP multihop)
+
+ASN mismatch, MD5 auth mismatch
+
+Prefix-lists/route-maps/policies blocking
+
+Next-hop reachability / recursion
+
+VRF table selection
+
+Cisco
+show ip bgp summary
+show ip bgp neighbors <PEER_IP> | inc BGP state|Remote AS|Local host|Hold time|keepalive
+show ip route <PEER_IP>
+show tcp brief | inc :179
+
+Arista EOS
+show ip bgp summary
+show ip bgp neighbors <PEER_IP> | include BGP state|Remote AS|Local AS|Hold
+show ip route <PEER_IP>
+show tcp connections | include 179
+
+Junos
+show bgp summary
+show bgp neighbor <PEER_IP>
+show route <PEER_IP>
+show configuration protocols bgp | display set | match <PEER_IP>
+
+Brocade ICX (depends on routing image/features)
+show ip bgp summary
+show ip bgp neighbors <PEER_IP>
+show ip route <PEER_IP>
+
+OSPF “why isn’t it forming” templates
+Cisco
+show ip ospf neighbor
+show ip ospf interface brief
+show ip ospf interface <IFACE>
+show ip route ospf
+
+Arista
+show ip ospf neighbor
+show ip ospf interface
+show ip route ospf
+
+Junos
+show ospf neighbor
+show ospf interface
+show route protocol ospf
+
+
+Key mismatch checklist to include in UI:
+
+Area ID mismatch
+
+Network type mismatch (broadcast/p2p)
+
+MTU mismatch
+
+Hello/dead timers mismatch
+
+Authentication mismatch
+
+Interface in passive mode
+
+VLANs: create/assign/verify
+
+(Keep as “recipes” because syntax diverges heavily.)
+
+Cisco
+conf t
+vlan 123
+ name USERS
+interface Gi1/0/10
+ switchport mode access
+ switchport access vlan 123
+ spanning-tree portfast
+end
+show vlan brief
+show interfaces Gi1/0/10 switchport
+
+Arista
+conf t
+vlan 123
+ name USERS
+interface Ethernet1
+ switchport mode access
+ switchport access vlan 123
+end
+show vlan
+show interfaces Ethernet1 switchport
+
+Junos (EX/QFX switching)
+configure
+set vlans USERS vlan-id 123
+set interfaces ge-0/0/10 unit 0 family ethernet-switching port-mode access
+set interfaces ge-0/0/10 unit 0 family ethernet-switching vlan members USERS
+commit
+show vlans
+show ethernet-switching interface ge-0/0/10
+
+Brocade ICX
+conf t
+vlan 123 name USERS
+untagged ethernet 1/1/10
+write memory
+show vlan 123
+show interfaces ethernet 1/1/10
+
+SNMP verification recipes (device-side)
+
+Add “is SNMP even reachable” + “what’s configured” patterns.
+
+ACL/local-in permitting UDP/161
+
+correct source address/VRF
+
+SNMPv3 engine/time/authpriv
+
+Example generic “quick verify” commands to template:
+
+show snmp / show snmp community / show snmp user variants per vendor
+
+plus tcpdump/diag sniffer patterns (vendor-specific) as optional advanced snippets
+
+MPLS / IS-IS / BFD (ship as checklists + verify commands first)
+
+Because config is topology-dependent, make these panels primarily:
+
+“Show me state” commands (LSPs, adjacencies, sessions)
+
+“Common failure causes” checklist
+
+minimal config skeletons (optional toggle)
+
+Examples to include:
+
+Junos:
+
+show bfd session
+show isis adjacency
+show mpls lsp
+show route table inet.3
+
+
+Cisco/Arista equivalents if MPLS enabled.
+
+How to ship this in your app without it becoming a wall of text
+UI model
+
+Left sidebar: Feature
+
+Top filters: Vendor, OS/Platform, VRF?, IPv4/IPv6
+
+Main: Task cards (Add / Verify / Remove / Troubleshoot)
+
+Each card: “Inputs” form → “Commands” output → “Copy” → “Copy (redacted)”
+
+Data format (easy to maintain)
+
+Store templates as JSON/YAML:
+
+id, vendor, feature, task
+
+inputs (fields)
+
+commands (string templates)
+
+verify_commands, rollback_commands
+
+notes + pitfalls
+
+If you want the next concrete deliverable: I can generate the initial templates/ YAML set for:
+
+Static routes (all vendors you listed)
+
+L2 MAC/IP/ARP workflows
+
+BGP/OSPF verification workflows
+
+VLAN create/assign/verify workflows
+…and a TypeScript renderer that takes inputs and outputs the final command blocks with secret redaction.
+
+Help me come up with an easy to use and secure network/security engineer website swiss army knife tool I can use instead of having to download software locally.
+
+I'm open to other ideas than serverless but thought I would do it this way to learn and deploy something new
+
+Goal
+
+Build a “network/security swiss-army knife” that runs in a browser, so engineers can use it even when they can’t install tools locally. Your sipcalc idea is perfect because it’s deterministic and can be done client-side (no AWS compute required for correctness).
+
+Key constraint you already identified: anything like ping, traceroute, tcping from AWS won’t reflect the user’s local path. So treat “remote probes” as a separate category and label them clearly.
+
+Recommended architecture (secure, cheap, fast)
+MVP (best first step)
+
+Static web app only (sipcalc + other offline tools):
+
+S3 (private) for hosting build artifacts
+
+CloudFront in front (TLS, caching, WAF-ready)
+
+Optional: Route53 + ACM for tools.yourdomain.com
+
+This gives you a globally fast web app with essentially zero ops.
+
+Add serverless APIs only when needed
+
+For tools that require:
+
+DNS resolution from a consistent resolver
+
+ASN / WHOIS lookups
+
+TLS certificate fetch/parse from a URL
+
+Password breach checks (careful), header checks, etc.
+
+Use:
+
+API Gateway HTTP API → Lambda (small, cheap, fast)
+
+CloudWatch Logs + optional X-Ray
+
+WAF (especially if you add unauthenticated endpoints)
+
+Tool set that makes sense in-browser (no backend)
+
+These are ideal because they’re fast, safe, and don’t depend on AWS vantage point:
+
+Network engineering
+
+Subnet/CIDR calculator (sipcalc-like)
+
+Supernetting / route summarization
+
+IP range expansion (10.0.0.0/28 → list / first-last)
+
+Wildcard mask ↔ netmask ↔ CIDR (useful for ACLs)
+
+IPv4/IPv6 normalization + compression/expansion
+
+“Is this IP in this CIDR?” checker
+
+Binary/hex representation helpers (for masks and debugging)
+
+Security/ops helpers
+
+Base64/URL encode/decode
+
+JWT decode (no verification, or optional JWK verification offline if you load key)
+
+Hash generator (SHA256, SHA1, MD5) for file snippets/text
+
+Regex tester + common log parsing patterns
+
+Time conversions (epoch ↔ ISO8601, timezones)
+
+HTTP header builder + curl generator
+
+Recommendation: implement sipcalc functionality directly in JS/TS instead of invoking the sipcalc binary. It avoids Lambda exec/shell risk and avoids licensing/distribution headaches if you were thinking of bundling the original tool.
+
+Tools that can be “server-side” (label as remote vantage)
+
+These are useful, but must be clearly marked “runs from AWS”:
+
+DNS lookup (A/AAAA/CNAME/MX/TXT) from AWS
+
+TLS certificate fetch + parse (subject/SAN/issuer/expiry)
+
+HTTP response inspector (status, redirects, headers, HSTS, CSP presence)
+
+“What is my egress IP?” (AWS’s egress)
+
+WHOIS/ASN lookup (often rate-limited; cache results)
+
+Avoid or be cautious with:
+
+Port scanning features (can become an abuse magnet)
+
+Anything that looks like exploitation or credential testing
+
+Unrestricted arbitrary network requests without auth/rate-limits
+
+Terraform-first project layout
+
+A clean layout that scales:
+
+net-tools/
+  frontend/
+    (React/Vite or Next.js static export)
+  backend/
+    functions/
+      dns_lookup/
+      tls_inspect/
+  infra/
+    envs/
+      dev/
+      prod/
+    modules/
+      static_site/
+      api/
+
+Terraform: Static site (S3 private + CloudFront OAC)
+
+Below is a minimal but solid baseline. This assumes:
+
+You build the frontend to frontend/dist
+
+You upload to S3 (CLI sync)
+
+CloudFront serves it
+
+infra/modules/static_site/main.tf
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
+variable "name" { type = string }
+
+resource "aws_s3_bucket" "site" {
+  bucket = var.name
+}
+
+resource "aws_s3_bucket_public_access_block" "site" {
+  bucket                  = aws_s3_bucket.site.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = "${var.name}-oac"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_distribution" "cdn" {
+  enabled             = true
+  default_root_object = "index.html"
+
+  origin {
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "s3-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "s3-origin"
+    viewer_protocol_policy = "redirect-to-https"
+
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD", "OPTIONS"]
+    compress         = true
+
+    forwarded_values {
+      query_string = true
+      cookies { forward = "none" }
+    }
+  }
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+
+data "aws_iam_policy_document" "bucket_policy" {
+  statement {
+    sid     = "AllowCloudFrontRead"
+    actions = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.site.arn}/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.cdn.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "site" {
+  bucket = aws_s3_bucket.site.id
+  policy = data.aws_iam_policy_document.bucket_policy.json
+}
+
+output "cloudfront_domain" {
+  value = aws_cloudfront_distribution.cdn.domain_name
+}
+
+infra/envs/dev/main.tf
+provider "aws" {
+  region = "us-west-2"
+}
+
+module "static_site" {
+  source = "../../modules/static_site"
+  name   = "alex-net-tools-dev-site-12345"
+}
+
+output "site_url" {
+  value = "https://${module.static_site.cloudfront_domain}"
+}
+
+Deploy commands
+cd infra/envs/dev
+terraform init
+terraform apply
+
+
+Build + upload frontend:
+
+cd ../../..
+cd frontend
+npm ci
+npm run build
+
+# upload artifacts
+aws s3 sync dist/ s3://alex-net-tools-dev-site-12345/ --delete
+
+
+Validate:
+
+cd infra/envs/dev
+terraform output -raw site_url
+# open the URL in browser
+
+Adding an API (when you’re ready)
+
+When you add server-side tools, keep it constrained:
+
+Explicit allow-list of operations
+
+No arbitrary shell execution
+
+Tight timeouts, small memory
+
+API Gateway throttling + WAF (recommended)
+
+Structured logs
+
+Suggested API shape:
+
+POST /api/dns { "name": "example.com", "type": "A" }
+
+POST /api/tls { "host": "example.com", "port": 443 }
+
+If you want, I can drop a Terraform modules/api (HTTP API + Lambda + IAM + CORS + throttling) and a minimal Lambda handler in Python or Node with safe validation.
+
+Security defaults checklist
+
+Static site:
+
+CloudFront HTTPS redirect (done)
+
+Add security headers (CSP, HSTS, X-Content-Type-Options)
+
+Best implemented via CloudFront Response Headers Policy
+
+APIs:
+
+Rate-limit (API Gateway + WAF)
+
+Input validation (strict schemas)
+
+No SSRF primitives (don’t allow arbitrary URLs without controls)
+
+Log sensitive fields carefully (avoid dumping full payloads)
+
+Practical product decision: frontend-only first
+
+For your sipcalc-in-browser idea, the best first release is:
+
+React UI
+
+Pure TypeScript subnet engine
+
+Hosted on CloudFront
+
+You get 80% of the value with 20% of the risk/complexity, and it works even if the user is offline (if you add a service worker later).
+
+If you tell me whether you prefer React/Vite or Next.js static export, I’ll provide:
+
+A minimal UI layout (tools sidebar + tool panels)
+
+A TypeScript subnet engine with unit tests
+
+Copy/paste deploy scripts (build → aws s3 sync → cache invalidation)
+
+this sounds interesting
+
+DNS resolution from a consistent resolver
+
+ASN / WHOIS lookups
+
+TLS certificate fetch/parse from a URL
+
+Password breach checks (careful), header checks, etc.
+
+I would like a tool to check for certificates and generates them. Maybe also a PGP encryption tool and decryption? a password generator, anything else you could think of? dns resolution and whois / ARN info for IP and domains would be helpful. maybe a regex generator to help with grep and egrep searches with examples. Also some helpful google dorks and helpful prompt templates for network/security engineer tasks. 
+Thought for 25s
+Split the app into two buckets
+1) “Local/offline” tools (run entirely in the browser)
+
+These are the safest and most useful because they don’t depend on AWS vantage point and don’t create abuse risk.
+
+Subnet/CIDR tools (sipcalc-like): IPv4/IPv6, range, first/last, wildcard masks, summarization
+
+Password generator (WebCrypto getRandomValues)
+
+PGP encrypt/decrypt (OpenPGP.js; keys never leave the browser)
+
+JWT decode/inspect (optionally verify with pasted JWK)
+
+Hashing (SHA-256/SHA-1/MD5) for pasted text/files (browser APIs)
+
+Regex helper for grep/egrep + examples + test strings
+
+Prompt templates (incident triage, firewall rule request, k8s debugging, etc.)
+
+“Google dorks” for self-audit (curated + scoped to your domains)
+
+2) “Remote” tools (run from AWS via API)
+
+These are useful, but should be clearly labeled “Runs from AWS” and must be locked down.
+
+DNS resolution from a consistent resolver (DoH upstream you choose)
+
+WHOIS/RDAP + ASN for IP/domain (prefer RDAP over raw whois/port-43)
+
+TLS certificate fetch/parse (connect, capture chain metadata, expiry, SAN, fingerprints)
+
+HTTP header checks (HSTS/CSP/XFO/etc.) + redirect tracing
+
+Password breach checks: only via k-anonymity (don’t send full password; hash client-side)
+
+Certificates: “check” vs “generate” (do both, but keep private keys client-side)
+A) Certificate checker (AWS-backed)
+
+Backend: Lambda connects to host:port, retrieves peer cert (and optionally chain), returns:
+
+Subject, issuer, SANs
+
+NotBefore/NotAfter + “days remaining”
+
+Signature algorithm, key type/size
+
+SHA-256 fingerprint
+
+(Optional) OCSP/CRL URLs if present
+
+Why backend: Browsers can’t reliably do raw TLS socket inspection to arbitrary hosts.
+
+B) Certificate generator (browser-first)
+
+You can support two modes:
+
+Self-signed cert generator (fully in-browser)
+
+Generate keypair in-browser
+
+Create X.509 self-signed cert (PEM output)
+
+Never send private key anywhere
+
+CSR generator (in-browser) + optional signing workflow
+
+Browser generates keypair + CSR (PEM)
+
+If user has an internal CA, they paste back signed cert
+
+Optional future: ACME/Let’s Encrypt issuance (advanced; requires domain control + auth)
+
+Secure default: do not implement “generate certs on the server” where private keys traverse Lambda.
+
+PGP tool (browser-only)
+
+Use OpenPGP.js to provide:
+
+Generate keypair (ed25519 recommended)
+
+Encrypt/decrypt message
+
+Sign/verify
+
+Import/export armored keys
+
+Security note: implement “clear all” and avoid storing keys in localStorage by default (use session memory unless user explicitly opts in).
+
+DNS + RDAP/ASN design (AWS-backed, consistent results)
+DNS resolution
+
+Lambda uses DNS-over-HTTPS to a fixed upstream (example: Cloudflare or Google) so results are consistent and auditable.
+
+Supports record types A/AAAA/CNAME/MX/TXT/NS/SRV, optional “trace” style output.
+
+WHOIS / ASN
+
+Prefer RDAP (HTTP JSON) for IP and domains (clean parsing, less rate-limit pain than port-43).
+
+ASN: derive from RDAP “origin” where available, or call a reputable IP→ASN source (cache heavily).
+
+Caching
+
+DynamoDB TTL cache keyed by query (e.g., dns:A:example.com) to reduce rate-limit issues and cost.
+
+HTTP header checker (AWS-backed) — SSRF-safe version
+
+This endpoint is the one that becomes an abuse magnet if not constrained.
+
+Hard rules:
+
+Only allow http/https
+
+Only ports 80/443 (or strict allowlist)
+
+Resolve DNS server-side; block private/loopback/link-local ranges
+
+Limit redirects (e.g., max 5)
+
+Small timeouts (e.g., 3–5s), max response bytes, strip bodies
+
+Output:
+
+Final URL + redirect chain
+
+Status codes
+
+Security headers present/missing (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+
+TLS summary reused from cert checker where relevant
+
+Password breach checks (safe approach)
+
+Implement the Have I Been Pwned model:
+
+Browser hashes password with SHA-1 (or SHA-256 if your source supports it)
+
+Send only the hash prefix to backend (k-anonymity)
+
+Backend queries breach API and returns suffix matches count
+
+Browser determines if full hash matches
+
+Never send raw passwords to AWS.
+
+Regex helper (grep/egrep) feature set
+
+A “regex builder” is good, but MVP can be:
+
+Input: sample log line(s)
+
+Choose: “extract IP”, “extract username”, “match non-zero drop counters”, etc.
+
+Output:
+
+grep -E pattern
+
+grep -P pattern (when needed)
+
+awk/sed alternative
+
+2–3 examples with expected matches
+
+Include a “mode” toggle:
+
+POSIX ERE (grep -E) (portable)
+
+PCRE (grep -P) (powerful; not always available)
+
+Curated “Google dorks” (self-audit oriented)
+
+Keep these explicitly scoped to your domain(s) to avoid encouraging misuse.
+
+Examples (user supplies example.com):
+
+Exposed env/config: site:example.com (ext:env OR ext:ini OR ext:yaml OR ext:yml OR ext:json) (password OR secret OR key)
+
+Keys/certs: site:example.com ("BEGIN RSA PRIVATE KEY" OR "BEGIN PRIVATE KEY" OR "BEGIN CERTIFICATE")
+
+Directory listings: site:example.com intitle:"index of" (backup OR private OR .git)
+
+Admin panels: site:example.com (inurl:admin OR inurl:login OR inurl:signin)
+
+Public logs: site:example.com (ext:log OR ext:txt) ("Exception" OR "Traceback" OR "stack trace")
+
+Add a “remediation tips” panel beside results (no backend needed).
+
+Prompt template pack (high-value, low-risk)
+
+Include copy/paste templates like:
+
+Incident triage (what happened, impact, timeline, IOCs, containment steps)
+
+Firewall rule request (src/dst, ports, justification, expiry, logging requirements)
+
+K8s outage debugging (symptoms → commands → hypotheses)
+
+BGP/OSPF troubleshooting (neighbor state, routes, policy, MTU, timers)
+
+TLS issue debugging (SNI, chain, ciphers, ALPN, expiry, OCSP)
+
+Minimal API surface (suggested)
+
+POST /dns { "name": "example.com", "type": "A" }
+
+POST /rdap { "query": "8.8.8.8" } or { "query": "example.com" }
+
+POST /tls { "host": "example.com", "port": 443, "sni": "example.com" }
+
+POST /headers { "url": "https://example.com" }
+
+POST /pwned { "hash_prefix": "5BAA6" } (k-anonymity flow)
+
+Security controls (do these from day 1)
+
+API Gateway throttling (per-IP)
+
+WAF (basic bot + rate rules)
+
+Strict input validation (JSON schema)
+
+SSRF protections on any URL fetcher
+
+CloudWatch structured logs; no sensitive payload logging
+
+Consider auth for “remote tools” (Cognito JWT authorizer) if you don’t want it public
+
+If you want the fastest next step: I can provide a concrete Terraform module set for:
+
+Static site (S3 + CloudFront OAC)
+
+HTTP API + one Lambda endpoint (TLS inspector) with SSRF-safe patterns
+
+A React tool panel list (PGP, password generator, regex helper) wired to those endpoints.
+
+I think adding snmp walk commands and helpful snmp things would be good also ldap search commands and maybe smtp commands if there are even any? 
+Add these as “command builders” (offline) + “remote validation” (optional)
+
+For SNMP/LDAP/SMTP, the most useful browser feature is a copy/paste command generator with:
+
+inputs (host, port, creds, filters)
+
+secure defaults
+
+multiple “recipes” (common tasks)
+
+output variants (Linux/macOS, Windows if needed)
+
+Do not run SNMP walks or LDAP queries from AWS by default; those are usually environment-specific and can create abuse risk. If you add any “remote execution,” gate it behind auth + strict allowlists.
+
+SNMP tool pack
+What to ship
+
+SNMP Walk/Query builder
+
+snmpget, snmpwalk, snmpbulkwalk
+
+v2c and v3 (default to v3 authPriv)
+
+common OIDs shortcuts:
+
+sysDescr, sysName, sysUpTime, ifTable, ifXTable
+
+LLDP/CDP equivalents where applicable (device-specific)
+
+output formats: -On numeric, -Oqv quiet value, -Ot etc.
+
+Interface index helper
+
+Parse ifName/ifDescr output (user pastes output) → map ifIndex to name
+
+Generate follow-up commands for specific ifIndex counters
+
+SNMP troubleshooting cheat sheet
+
+timeouts, retries, MTU, ACLs, UDP/161, views, engineID/time sync (v3)
+
+Copy/paste command templates
+SNMPv2c (basic)
+snmpwalk -v2c -c 'COMMUNITY' -t 2 -r 1 HOST_OR_IP 1.3.6.1.2.1.1
+# system group: sysDescr/sysName/sysUpTime...
+
+SNMPv3 authPriv (recommended)
+snmpwalk -v3 -l authPriv \
+  -u 'SNMPUSER' \
+  -a SHA -A 'AUTH_PASS' \
+  -x AES -X 'PRIV_PASS' \
+  -t 2 -r 1 HOST_OR_IP 1.3.6.1.2.1.1
+
+Bulk walk (faster on big tables)
+snmpbulkwalk -v2c -c 'COMMUNITY' -Cn0 -Cr50 -t 2 -r 1 HOST_OR_IP 1.3.6.1.2.1.2.2
+# ifTable
+
+Interface table (map ifIndex → port name)
+snmpwalk -v2c -c 'COMMUNITY' HOST_OR_IP 1.3.6.1.2.1.31.1.1.1.1   # ifName
+snmpwalk -v2c -c 'COMMUNITY' HOST_OR_IP 1.3.6.1.2.1.2.2.1.2       # ifDescr
+
+Get a single value (example: sysName)
+snmpget -v2c -c 'COMMUNITY' HOST_OR_IP 1.3.6.1.2.1.1.5.0
+
+
+UI idea: a dropdown of “recipes” (System info / Interfaces / CPU+Mem / LLDP / Vendor OIDs) that fills in OIDs and flags.
+
+Secure defaults:
+
+prefer SNMPv3 authPriv
+
+keep -t low and -r small by default
+
+warn if user selects 0.0.0.0/0 or broad targets (if you ever add “remote runs”)
+
+LDAP tool pack
+What to ship
+
+ldapsearch builder
+
+ldap:// vs ldaps://
+
+StartTLS mode (-ZZ)
+
+bind DN + password (never persist by default)
+
+base DN + scope + filter + attributes list
+
+common filters (user by uid/mail, group membership)
+
+AD-focused recipes
+
+Find user by sAMAccountName
+
+Find group + members
+
+Check nested groups (limitations noted)
+
+Copy/paste templates
+StartTLS on 389 (recommended if available)
+ldapsearch -H "ldap://LDAP_HOST:389" -ZZ \
+  -D "cn=binduser,dc=example,dc=com" -W \
+  -b "dc=example,dc=com" -s sub \
+  "(uid=jdoe)" cn mail memberOf
+
+LDAPS on 636
+ldapsearch -H "ldaps://LDAP_HOST:636" \
+  -D "cn=binduser,dc=example,dc=com" -W \
+  -b "dc=example,dc=com" -s sub \
+  "(mail=jdoe@example.com)" dn cn mail
+
+AD: find user by sAMAccountName
+ldapsearch -H "ldap://AD_HOST:389" -ZZ \
+  -D "EXAMPLE\\binduser" -W \
+  -b "DC=example,DC=com" \
+  "(&(objectClass=user)(sAMAccountName=jdoe))" dn cn mail memberOf
+
+AD: find group members
+ldapsearch -H "ldap://AD_HOST:389" -ZZ \
+  -D "EXAMPLE\\binduser" -W \
+  -b "DC=example,DC=com" \
+  "(&(objectClass=group)(cn=VPN-Users))" member
+
+
+Troubleshooting snippets
+
+# quick TCP check
+nc -vz LDAP_HOST 389
+nc -vz LDAP_HOST 636
+
+# validate TLS chain
+openssl s_client -connect LDAP_HOST:636 -servername LDAP_HOST -showcerts </dev/null
+
+SMTP tool pack (legit testing/diagnostics)
+
+Yes—there are useful “SMTP commands,” but the practical approach is connectivity + STARTTLS + auth testing for your mail server or a service you administer.
+
+What to ship
+
+SMTP connectivity tester commands
+
+STARTTLS handshake inspector
+
+Authenticated send test (via swaks) to validate credentials and delivery path
+
+Copy/paste templates
+Check port reachability
+nc -vz SMTP_HOST 25
+nc -vz SMTP_HOST 587
+nc -vz SMTP_HOST 465
+
+STARTTLS on 587
+openssl s_client -starttls smtp -connect SMTP_HOST:587 -servername SMTP_HOST -crlf -showcerts
+
+Basic protocol dialogue (manual)
+nc SMTP_HOST 25
+# then type:
+EHLO test.local
+STARTTLS
+# (if STARTTLS supported, switch to openssl approach instead)
+
+Best tool for real testing: swaks (send a test email)
+swaks --to you@yourdomain.com --from you@yourdomain.com \
+  --server SMTP_HOST --port 587 --tls \
+  --auth LOGIN --auth-user "SMTP_USER" --auth-password "SMTP_PASS" \
+  --header "Subject: SMTP test" --body "hello"
+
+
+Safety constraint: keep this positioned as diagnostics for systems you own/administer; avoid providing guidance aimed at sending unsolicited mail.
+
+How to integrate these into your app cleanly
+Frontend panels
+
+SNMP Panel: version selector (v2c/v3) → recipe dropdown → command output + “explain flags”
+
+LDAP Panel: connection mode (StartTLS/LDAPS) → bind/base/filter builder → output
+
+SMTP Panel: ports + TLS inspector + swaks generator
+
+“Paste output → helpers”
+
+Paste snmpwalk ifName output → generate snmpget for selected ifIndex counters
+
+Paste LDAP result → auto-suggest baseDN and attributes
+
+Paste openssl s_client output → parse cert expiry/fingerprint (client-side)
+
+Secure UX defaults
+
+Don’t persist secrets; add “Remember for session only” toggle
+
+Add “redact secrets” button before copying (mask passwords in commands)
+
+Clear clipboard warnings optional
+
+If you want, I can provide the exact React component structure for these panels plus a small TypeScript library to:
+
+render command templates from form inputs
+
+mask secrets safely
+
+parse common SNMP/LDAP/openssl outputs into structured tables.
+
+I also want some templates to add static route commands on linux,cisco,arista,juniper,brocade,unifi,fortinet as well as other commands for network engineers for BGP,OSPF,IS-IS,BFD,VLANS,MPLS,SNMP and anything else that would help with troubleshooting like vlan database, find mac address, find IP from arp and mac and other things like that. 
+Implement this as a “Command Template Library” (offline) with vendor + feature filters
+
+Structure it like:
+
+Vendor: Linux, Cisco IOS/IOS-XE, Arista EOS, Juniper Junos, Brocade ICX/MLX, UniFi (USG/UDM/EdgeOS if you add it), FortiOS
+
+Feature: Static Route, BGP, OSPF, IS-IS, BFD, VLANs, MPLS, L2 troubleshooting, SNMP
+
+Task: “Add route”, “Verify adjacency”, “Find MAC”, “Trace IP→MAC→Port”, etc.
+
+Inputs: prefix, next-hop, interface, VRF, ASN, neighbor IP, VLAN ID, MAC, IP, etc.
+
+Outputs: copy/paste commands + “verify” commands + “rollback” snippet
+
+Below is a starter pack you can ship immediately.
+
+Static route templates (add + verify + remove)
+Linux (iproute2)
+
+Add:
+
+sudo ip route add 203.0.113.0/24 via 192.168.1.1 dev eth0
+# or default route:
+sudo ip route replace default via 192.168.1.1 dev eth0
+
+
+VRF (example):
+
+sudo ip route add 203.0.113.0/24 via 192.168.1.1 dev eth0 vrf mgmt
+
+
+Verify:
+
+ip route show
+ip route get 203.0.113.10
+
+
+Remove:
+
+sudo ip route del 203.0.113.0/24 via 192.168.1.1 dev eth0
+
+Cisco IOS/IOS-XE
+
+Add:
+
+conf t
+ip route 203.0.113.0 255.255.255.0 192.0.2.1
+! or with exit interface:
+ip route 203.0.113.0 255.255.255.0 GigabitEthernet0/0 192.0.2.1
+end
+wr mem
+
+
+VRF:
+
+conf t
+ip route vrf MGMT 203.0.113.0 255.255.255.0 192.0.2.1
+end
+
+
+Verify:
+
+show ip route 203.0.113.0
+show ip cef 203.0.113.10
+
+
+Remove:
+
+conf t
+no ip route 203.0.113.0 255.255.255.0 192.0.2.1
+end
+
+Arista EOS
+
+Add:
+
+conf t
+ip route 203.0.113.0/24 192.0.2.1
+end
+write memory
+
+
+VRF:
+
+conf t
+ip route vrf MGMT 203.0.113.0/24 192.0.2.1
+end
+
+
+Verify:
+
+show ip route 203.0.113.0/24
+show ip route vrf MGMT 203.0.113.0/24
+
+
+Remove:
+
+conf t
+no ip route 203.0.113.0/24 192.0.2.1
+end
+
+Juniper Junos
+
+Add:
+
+configure
+set routing-options static route 203.0.113.0/24 next-hop 192.0.2.1
+commit
+
+
+Routing-instance:
+
+configure
+set routing-instances MGMT routing-options static route 203.0.113.0/24 next-hop 192.0.2.1
+commit
+
+
+Verify:
+
+show route 203.0.113.0/24
+show route table MGMT.inet.0 203.0.113.0/24
+
+
+Remove:
+
+configure
+delete routing-options static route 203.0.113.0/24
+commit
+
+Brocade ICX (FastIron)
+
+Add:
+
+conf t
+ip route 203.0.113.0/24 192.0.2.1
+write memory
+
+
+Verify:
+
+show ip route 203.0.113.0/24
+
+
+Remove:
+
+conf t
+no ip route 203.0.113.0/24 192.0.2.1
+write memory
+
+UniFi (practical note)
+
+On UniFi gateways, “static routes” are often configured in the UI; CLI depends on platform:
+
+EdgeRouter/EdgeOS supports set protocols static route ...
+
+UDM/USG CLI changes can be non-persistent across re-provision unless done via supported config mechanisms.
+If you want persistence templates, include platform selector: EdgeOS vs USG/UDM.
+
+EdgeOS example
+
+configure
+set protocols static route 203.0.113.0/24 next-hop 192.0.2.1
+commit; save
+exit
+
+Fortinet FortiOS
+
+Add:
+
+config router static
+    edit 0
+        set dst 203.0.113.0/24
+        set gateway 192.0.2.1
+        set device "port1"
+    next
+end
+
+
+VRF (if using VRF):
+
+config router static
+    edit 0
+        set vrf 10
+        set dst 203.0.113.0/24
+        set gateway 192.0.2.1
+        set device "port1"
+    next
+end
+
+
+Verify:
+
+get router info routing-table details 203.0.113.0/24
+diagnose ip route list
+
+
+Remove:
+
+config router static
+    delete <id>
+end
+
+L2 troubleshooting: find MAC → port, and IP ↔ ARP ↔ MAC
+Cisco
+show mac address-table | inc aabb.ccdd.eeff
+show mac address-table vlan 123
+show arp | inc 192.0.2.50
+show ip arp vlan 123 | inc aabb.ccdd.eeff
+show interfaces status | inc Gi1/0/10
+show interfaces Gi1/0/10 switchport
+
+Arista EOS
+show mac address-table address aabb.ccdd.eeff
+show mac address-table vlan 123
+show arp | include 192.0.2.50
+show ip arp vrf MGMT | include 192.0.2.50
+show interfaces status | include Et1
+show interfaces Et1 switchport
+
+Junos
+show ethernet-switching table | match aabb:ccdd:eeff
+show ethernet-switching table vlan 123
+show arp | match 192.0.2.50
+show arp no-resolve | match aabb:ccdd:eeff
+show interfaces terse | match ge-0/0/10
+show configuration interfaces ge-0/0/10 | display set
+
+Brocade ICX
+show mac-address | include aabb.ccdd.eeff
+show mac-address vlan 123
+show arp | include 192.0.2.50
+show interfaces brief
+show running-config interface ethernet 1/1/10
+
+Linux
+ip neigh show | grep -i 192.0.2.50
+ip neigh show | grep -i aa:bb:cc:dd:ee:ff
+bridge fdb show | grep -i aa:bb:cc:dd:ee:ff
+ip link show
+
+BGP “get me unblocked fast” templates (verify-first)
+Common checks (vendor-agnostic)
+
+Neighbor state (Idle/Active/Established)
+
+TCP/179 reachability (path + ACL)
+
+Source interface/TTL (eBGP multihop)
+
+ASN mismatch, MD5 auth mismatch
+
+Prefix-lists/route-maps/policies blocking
+
+Next-hop reachability / recursion
+
+VRF table selection
+
+Cisco
+show ip bgp summary
+show ip bgp neighbors <PEER_IP> | inc BGP state|Remote AS|Local host|Hold time|keepalive
+show ip route <PEER_IP>
+show tcp brief | inc :179
+
+Arista EOS
+show ip bgp summary
+show ip bgp neighbors <PEER_IP> | include BGP state|Remote AS|Local AS|Hold
+show ip route <PEER_IP>
+show tcp connections | include 179
+
+Junos
+show bgp summary
+show bgp neighbor <PEER_IP>
+show route <PEER_IP>
+show configuration protocols bgp | display set | match <PEER_IP>
+
+Brocade ICX (depends on routing image/features)
+show ip bgp summary
+show ip bgp neighbors <PEER_IP>
+show ip route <PEER_IP>
+
+OSPF “why isn’t it forming” templates
+Cisco
+show ip ospf neighbor
+show ip ospf interface brief
+show ip ospf interface <IFACE>
+show ip route ospf
+
+Arista
+show ip ospf neighbor
+show ip ospf interface
+show ip route ospf
+
+Junos
+show ospf neighbor
+show ospf interface
+show route protocol ospf
+
+
+Key mismatch checklist to include in UI:
+
+Area ID mismatch
+
+Network type mismatch (broadcast/p2p)
+
+MTU mismatch
+
+Hello/dead timers mismatch
+
+Authentication mismatch
+
+Interface in passive mode
+
+VLANs: create/assign/verify
+
+(Keep as “recipes” because syntax diverges heavily.)
+
+Cisco
+conf t
+vlan 123
+ name USERS
+interface Gi1/0/10
+ switchport mode access
+ switchport access vlan 123
+ spanning-tree portfast
+end
+show vlan brief
+show interfaces Gi1/0/10 switchport
+
+Arista
+conf t
+vlan 123
+ name USERS
+interface Ethernet1
+ switchport mode access
+ switchport access vlan 123
+end
+show vlan
+show interfaces Ethernet1 switchport
+
+Junos (EX/QFX switching)
+configure
+set vlans USERS vlan-id 123
+set interfaces ge-0/0/10 unit 0 family ethernet-switching port-mode access
+set interfaces ge-0/0/10 unit 0 family ethernet-switching vlan members USERS
+commit
+show vlans
+show ethernet-switching interface ge-0/0/10
+
+Brocade ICX
+conf t
+vlan 123 name USERS
+untagged ethernet 1/1/10
+write memory
+show vlan 123
+show interfaces ethernet 1/1/10
+
+SNMP verification recipes (device-side)
+
+Add “is SNMP even reachable” + “what’s configured” patterns.
+
+ACL/local-in permitting UDP/161
+
+correct source address/VRF
+
+SNMPv3 engine/time/authpriv
+
+Example generic “quick verify” commands to template:
+
+show snmp / show snmp community / show snmp user variants per vendor
+
+plus tcpdump/diag sniffer patterns (vendor-specific) as optional advanced snippets
+
+MPLS / IS-IS / BFD (ship as checklists + verify commands first)
+
+Because config is topology-dependent, make these panels primarily:
+
+“Show me state” commands (LSPs, adjacencies, sessions)
+
+“Common failure causes” checklist
+
+minimal config skeletons (optional toggle)
+
+Examples to include:
+
+Junos:
+
+show bfd session
+show isis adjacency
+show mpls lsp
+show route table inet.3
+
+
+Cisco/Arista equivalents if MPLS enabled.
+
+How to ship this in your app without it becoming a wall of text
+UI model
+
+Left sidebar: Feature
+
+Top filters: Vendor, OS/Platform, VRF?, IPv4/IPv6
+
+Main: Task cards (Add / Verify / Remove / Troubleshoot)
+
+Each card: “Inputs” form → “Commands” output → “Copy” → “Copy (redacted)”
+
+Data format (easy to maintain)
+
+Store templates as JSON/YAML:
+
+id, vendor, feature, task
+
+inputs (fields)
+
+commands (string templates)
+
+verify_commands, rollback_commands
+
+notes + pitfalls
+Thought for 7s
+Target product: “NetKnife” (browser-first, secure-by-default)
+Core principle
+
+Everything that can run locally should run locally in the browser.
+Only add AWS-backed calls for things the browser can’t do (DNS from fixed resolver, RDAP/ASN, TLS chain inspection, HTTP header scan, etc.). This keeps it fast, cheap, and avoids turning the site into a “remote probing service.”
+
+UX that stays easy
+Layout
+
+Left sidebar: Tools
+
+Top bar: Vendor, Platform, VRF, IPv4/IPv6
+
+Main pane: Inputs → Output
+
+Output always has:
+
+Copy
+
+Copy (redacted) (secrets masked)
+
+Verify tab (show commands)
+
+Rollback tab (undo commands)
+
+Safety UX conventions
+
+Any AWS-backed tool is labeled: Runs from AWS (remote vantage).
+
+Secrets never saved by default; optional “Remember for session only”.
+
+Feature set that’s actually useful
+A) Offline (browser-only) tools (your main value)
+
+Network
+
+Subnet/CIDR (sipcalc-like) + summarization
+
+IP range expand/contract, wildcard ↔ CIDR
+
+“IP ∈ CIDR?” checks
+
+IPv6 compress/expand/normalize
+
+Binary/hex mask helpers
+
+Command Template Library (big differentiator)
+
+Static routes (Linux/Cisco/Arista/Junos/Brocade/FortiOS/UniFi EdgeOS)
+
+BGP/OSPF/IS-IS/BFD “verify-first” playbooks
+
+VLAN create/assign/verify
+
+L2 triage: MAC→port, IP→ARP→MAC, CAM/ARP aging checks
+
+SNMP command builder (v2c/v3) + common OIDs
+
+LDAP ldapsearch builder + AD recipes
+
+SMTP diagnostics builder (openssl s_client -starttls smtp, swaks)
+
+Security helpers
+
+Password generator (WebCrypto)
+
+PGP encrypt/decrypt/sign/verify (OpenPGP.js)
+
+CSR generator + self-signed cert generator (browser-only; private key never leaves browser)
+
+Base64/URL encode/decode
+
+JWT decode/inspect
+
+Hashing for text/files
+
+Regex helper for grep -E / grep -P + examples + awk/sed alternatives
+
+Prompt templates for ops/security workflows
+
+“Scoped dorks” generator (only for domains you own)
+
+B) Remote (AWS API) tools (small, constrained, protected)
+
+DNS (DoH) via a fixed upstream resolver
+
+RDAP/ASN lookups for IP/domain (cache w/ TTL)
+
+TLS inspector: cert chain, SANs, expiry, fingerprints
+
+HTTP header scan (SSRF-safe): redirects + security headers report
+
+Breach check (k-anonymity only; hash client-side)
+
+Architecture options (keep it simple, keep it secure)
+Option 1 (recommended): Static + serverless “add-on APIs”
+
+S3 (private) + CloudFront (OAC)
+
+WAF on CloudFront (baseline bot/rate limits)
+
+API Gateway (HTTP API) + Lambda
+
+DynamoDB TTL cache for rate-limited calls (RDAP/DNS)
+
+CloudWatch Logs (structured JSON)
+
+Option 2: Containerized backend (only if you outgrow Lambda)
+
+ECS/Fargate behind ALB + WAF
+
+Still keep the same frontend
+
+Only worth it if you need long-running jobs or heavy libraries
+
+Security model (non-negotiables)
+Remote endpoints must be “abuse-resistant”
+
+For any endpoint that can fetch/resolve/connect:
+
+Allow only http/https where applicable
+
+Only ports 80/443 for URL fetchers
+
+Resolve DNS server-side, then block private/loopback/link-local ranges
+
+Redirect limit (e.g., 5)
+
+Tight timeouts (3–5s)
+
+Max response size (headers only; do not fetch bodies unless needed)
+
+No arbitrary shell execution, ever
+
+Authentication (choose based on whether you want public access)
+
+If public: strict throttles + WAF + caching + minimal endpoints
+
+If private/team: Cognito + JWT authorizer on API Gateway
+
+Frontend security headers (CloudFront Response Headers Policy)
+
+CSP (start restrictive; allow required CDNs only)
+
+HSTS
+
+X-Content-Type-Options, Referrer-Policy, Frame-Options/Frame-Ancestors
+
+Repo layout (Terraform-first, maintainable)
+netknife/
+  frontend/                 # React/Vite TS app
+  templates/                # YAML command templates (versioned)
+  backend/
+    functions/
+      dns/
+      rdap/
+      tls/
+      headers/
+      pwned/
+  infra/
+    modules/
+      static_site/
+      api/
+      waf/
+      dynamodb_cache/
+    envs/
+      dev/
+      prod/
+
+Command templates: store as YAML (easy to grow)
+Template schema (minimal)
+id: static_route_cisco_ipv4
+vendor: cisco_ios
+feature: routing_static
+task: add_route
+inputs:
+  prefix: { label: "Destination prefix", example: "203.0.113.0/24" }
+  next_hop: { label: "Next-hop", example: "192.0.2.1" }
+commands:
+  - "conf t"
+  - "ip route {{prefix|cidr_to_netmask}} {{next_hop}}"
+  - "end"
+  - "wr mem"
+verify:
+  - "show ip route {{prefix}}"
+  - "show ip cef {{prefix|first_ip}}"
+rollback:
+  - "conf t"
+  - "no ip route {{prefix|cidr_to_netmask}} {{next_hop}}"
+  - "end"
+notes:
+  - "For VRF: use `ip route vrf <VRF> ...`."
+
+
+Your frontend renders templates with a small set of helpers/filters like:
+
+cidr_to_netmask, first_ip, last_ip, vendor_iface_normalize, etc.
+
+Ship plan (fast, realistic)
+Phase 1 — Frontend-only MVP (publish in a weekend)
+
+Deliver:
+
+Subnet/CIDR tool
+
+Password generator
+
+PGP tool
+
+Cert generator (self-signed + CSR)
+
+Regex helper (grep -E / grep -P)
+
+Command Template Library (routes + VLAN + L2 triage + BGP/OSPF verify)
+
+Prompt templates + scoped dorks
+
+Infra:
+
+S3 private + CloudFront OAC
+
+Security headers policy
+
+Phase 2 — Add safe remote APIs
+
+Deliver:
+
+DNS (DoH)
+
+RDAP/ASN (cached)
+
+TLS inspector
+
+HTTP header scan (SSRF-safe)
+
+Optional: Cognito auth (if you want private)
+
+Infra:
+
+API Gateway + Lambda + WAF rules
+
+DynamoDB TTL cache
+
+Phase 3 — Polish
+
+PWA offline support (service worker)
+
+“Paste output → parse” helpers (SNMP ifIndex mapping, openssl s_client parsing)
+
+Export bundles (markdown/pdf) for tickets/runbooks
+
+Practical “starter tool list” for network engineers (high ROI)
+
+If you want the toolset to feel immediately indispensable, prioritize:
+
+Subnet/CIDR + summarization
+
+Command templates: routes / VLAN / BGP/OSPF verify / MAC-IP triage
+
+TLS inspector (remote)
+
+DNS + RDAP/ASN (remote)
+
+Regex builder + log triage prompts
+
+SNMP/LDAP/SMTP builders
+
+Next concrete deliverable (no extra decisions required)
+
+If you want to start building immediately, the fastest path is:
+
+React/Vite + TypeScript
+
+Implement the template renderer + redaction
+
+Seed templates/ with ~40 high-value tasks (routes, VLAN, L2 triage, BGP/OSPF verify, SNMP/LDAP/SMTP builders)
+
+If you want, I can provide:
+
+A ready-to-run templates/ seed pack (YAML) for the vendors/features you listed
+
+A TypeScript template engine (filters + redaction + copy buttons)
+
+A Terraform modules/api for the DNS/RDAP/TLS/headers endpoints with SSRF guardrails and WAF throttling defaults
+
+lets stay lambda serverless with a static site. I want to add a login screen as well and the only user allowed for now would be me alex.lux so I don't want account creation for it. 
+
+Give me step by step instructions on how to do this project start to finish with as much detail as possible. Think long and hard
+Thought for 27s
+End state you’re building
+
+A static SPA (React) on S3 (private) + CloudFront (OAC), with Cognito login (no self-signup; only alex.lux), and API Gateway HTTP API + Lambda for the few “remote vantage” tools (DNS/RDAP/TLS/headers). API is protected by a JWT authorizer (Cognito). Everything deployed with Terraform.
+
+0) Prereqs on your laptop
+
+Install:
+
+AWS CLI v2
+
+Terraform >= 1.6
+
+Node.js >= 20 + npm
+
+jq
+
+Configure AWS:
+
+aws configure
+aws sts get-caller-identity
+
+
+Pick a region (example): us-west-2.
+
+1) Repo layout
+
+Create:
+
+mkdir -p netknife/{frontend,backend/functions/{dns,rdap,tls,headers},infra/{modules/{static_site,auth,api},envs/{dev,prod}}}
+cd netknife
+git init
+
+2) Terraform state backend (recommended)
+
+Create a state bucket + lock table once (replace names with globally-unique):
+
+export AWS_REGION=us-west-2
+export TF_STATE_BUCKET="alex-netknife-tfstate-12345"
+export TF_LOCK_TABLE="alex-netknife-tflock"
+
+aws s3api create-bucket \
+  --bucket "$TF_STATE_BUCKET" \
+  --region "$AWS_REGION" \
+  --create-bucket-configuration LocationConstraint="$AWS_REGION"
+
+aws s3api put-bucket-versioning \
+  --bucket "$TF_STATE_BUCKET" \
+  --versioning-configuration Status=Enabled
+
+aws dynamodb create-table \
+  --table-name "$TF_LOCK_TABLE" \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST
+
+3) Terraform: environment wiring (infra/envs/dev)
+3.1 infra/envs/dev/backend.tf
+terraform {
+  backend "s3" {
+    bucket         = "alex-netknife-tfstate-12345"
+    key            = "netknife/dev/terraform.tfstate"
+    region         = "us-west-2"
+    dynamodb_table = "alex-netknife-tflock"
+    encrypt        = true
+  }
+}
+
+3.2 infra/envs/dev/providers.tf
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = ">= 5.0" }
+  }
+}
+
+provider "aws" {
+  region = "us-west-2"
+}
+
+3.3 infra/envs/dev/variables.tf
+variable "project" { type = string, default = "netknife" }
+variable "env"     { type = string, default = "dev" }
+
+variable "site_bucket_name" {
+  type    = string
+  default = "alex-netknife-dev-site-12345"
+}
+
+variable "cognito_username" {
+  type    = string
+  default = "alex.lux"
+}
+
+4) Static site module (S3 private + CloudFront OAC + security headers)
+
+Create infra/modules/static_site/main.tf:
+
+variable "bucket_name" { type = string }
+variable "project"     { type = string }
+variable "env"         { type = string }
+
+resource "aws_s3_bucket" "site" {
+  bucket = var.bucket_name
+}
+
+resource "aws_s3_bucket_public_access_block" "site" {
+  bucket                  = aws_s3_bucket.site.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = "${var.project}-${var.env}-oac"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# Security headers (good baseline; tighten CSP later once you know exact needs)
+resource "aws_cloudfront_response_headers_policy" "security" {
+  name = "${var.project}-${var.env}-security-headers"
+
+  security_headers_config {
+    content_type_options { override = true }
+    frame_options { frame_option = "DENY" override = true }
+    referrer_policy { referrer_policy = "same-origin" override = true }
+
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      include_subdomains         = true
+      preload                    = true
+      override                   = true
+    }
+
+    xss_protection {
+      protection = true
+      mode_block = true
+      override   = true
+    }
+  }
+}
+
+resource "aws_cloudfront_distribution" "cdn" {
+  enabled             = true
+  default_root_object = "index.html"
+
+  origin {
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "s3-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "s3-origin"
+    viewer_protocol_policy = "redirect-to-https"
+
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD", "OPTIONS"]
+    compress         = true
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
+
+    forwarded_values {
+      query_string = true
+      cookies { forward = "none" }
+    }
+  }
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+
+data "aws_iam_policy_document" "bucket_policy" {
+  statement {
+    sid     = "AllowCloudFrontRead"
+    actions = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.site.arn}/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.cdn.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "site" {
+  bucket = aws_s3_bucket.site.id
+  policy = data.aws_iam_policy_document.bucket_policy.json
+}
+
+output "bucket_name"       { value = aws_s3_bucket.site.bucket }
+output "cloudfront_domain" { value = aws_cloudfront_distribution.cdn.domain_name }
+output "cloudfront_id"     { value = aws_cloudfront_distribution.cdn.id }
+
+5) Auth module (Cognito: no self-signup, only you)
+
+Create infra/modules/auth/main.tf:
+
+variable "project" { type = string }
+variable "env"     { type = string }
+
+# Callback URLs get set from the environment after static site is created
+variable "callback_urls" { type = list(string) }
+variable "logout_urls"   { type = list(string) }
+
+resource "aws_cognito_user_pool" "pool" {
+  name = "${var.project}-${var.env}-userpool"
+
+  # No self-signup by default; we’ll only admin-create your user.
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
+  password_policy {
+    minimum_length    = 14
+    require_lowercase = true
+    require_uppercase = true
+    require_numbers   = true
+    require_symbols   = true
+  }
+
+  # Keep sign-in simple: username only (alex.lux)
+  username_configuration {
+    case_sensitive = false
+  }
+}
+
+resource "aws_cognito_user_pool_domain" "domain" {
+  domain       = "${var.project}-${var.env}-auth-${random_id.suffix.hex}"
+  user_pool_id = aws_cognito_user_pool.pool.id
+}
+
+resource "random_id" "suffix" {
+  byte_length = 4
+}
+
+resource "aws_cognito_user_pool_client" "client" {
+  name         = "${var.project}-${var.env}-spa-client"
+  user_pool_id = aws_cognito_user_pool.pool.id
+
+  generate_secret = false
+
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows  = ["code"]
+  allowed_oauth_scopes = ["openid", "email", "profile"]
+
+  callback_urls = var.callback_urls
+  logout_urls   = var.logout_urls
+
+  supported_identity_providers = ["COGNITO"]
+
+  explicit_auth_flows = [
+    "ALLOW_USER_SRP_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_PASSWORD_AUTH"
+  ]
+}
+
+output "user_pool_id" { value = aws_cognito_user_pool.pool.id }
+output "client_id"    { value = aws_cognito_user_pool_client.client.id }
+
+output "issuer" {
+  # issuer URL for JWT validation
+  value = "https://${aws_cognito_user_pool_domain.domain.domain}.auth.${data.aws_region.current.name}.amazoncognito.com"
+}
+
+data "aws_region" "current" {}
+output "domain" { value = aws_cognito_user_pool_domain.domain.domain }
+
+6) API module (HTTP API + Lambda + Cognito JWT authorizer)
+
+This module:
+
+Creates HTTP API
+
+Adds JWT authorizer (Cognito issuer + audience)
+
+Wires example Lambda(s)
+
+Create infra/modules/api/main.tf:
+
+variable "project" { type = string }
+variable "env"     { type = string }
+
+variable "cognito_issuer" { type = string }
+variable "cognito_audience" { type = string } # app client id
+
+locals {
+  name = "${var.project}-${var.env}"
+}
+
+resource "aws_apigatewayv2_api" "http" {
+  name          = "${local.name}-http-api"
+  protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_credentials = true
+    allow_headers     = ["authorization", "content-type"]
+    allow_methods     = ["POST", "OPTIONS"]
+    allow_origins     = ["*"] # tighten later to your CloudFront domain once known
+    max_age           = 3600
+  }
+}
+
+resource "aws_apigatewayv2_authorizer" "jwt" {
+  api_id          = aws_apigatewayv2_api.http.id
+  authorizer_type = "JWT"
+  name            = "${local.name}-jwt-auth"
+
+  identity_sources = ["$request.header.Authorization"]
+
+  jwt_configuration {
+    issuer   = var.cognito_issuer
+    audience = [var.cognito_audience]
+  }
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.http.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+# --- Lambda: example DNS function ---
+data "archive_file" "dns_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/dns"
+  output_path = "${path.module}/dns.zip"
+}
+
+resource "aws_iam_role" "lambda_role" {
+  name = "${local.name}-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = { Service = "lambda.amazonaws.com" },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "basic" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "dns" {
+  function_name = "${local.name}-dns"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+
+  filename         = data.archive_file.dns_zip.output_path
+  source_code_hash = data.archive_file.dns_zip.output_base64sha256
+
+  timeout = 5
+  memory_size = 128
+}
+
+resource "aws_apigatewayv2_integration" "dns" {
+  api_id           = aws_apigatewayv2_api.http.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.dns.arn
+}
+
+resource "aws_apigatewayv2_route" "dns" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /dns"
+
+  target = "integrations/${aws_apigatewayv2_integration.dns.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "apigw_invoke_dns" {
+  statement_id  = "AllowAPIGatewayInvokeDNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.dns.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+output "api_url" {
+  value = aws_apigatewayv2_api.http.api_endpoint
+}
+
+7) Backend Lambda code (start with DNS; add others the same way)
+
+Create backend/functions/dns/index.js:
+
+// Minimal DNS-over-HTTPS resolver (Cloudflare JSON API)
+// Input: { "name": "example.com", "type": "A" }
+
+const DOH = "https://cloudflare-dns.com/dns-query";
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+export const handler = async (event) => {
+  try {
+    const raw = event.body ? JSON.parse(event.body) : {};
+    const name = String(raw.name || "").trim();
+    const type = String(raw.type || "A").trim().toUpperCase();
+
+    if (!name || name.length > 253) return json(400, { error: "Invalid name" });
+    if (!/^[A-Z0-9-._]+$/i.test(name)) return json(400, { error: "Invalid characters" });
+
+    const allowed = new Set(["A","AAAA","CNAME","MX","TXT","NS","SRV"]);
+    if (!allowed.has(type)) return json(400, { error: "Unsupported type" });
+
+    const url = new URL(DOH);
+    url.searchParams.set("name", name);
+    url.searchParams.set("type", type);
+
+    const r = await fetch(url, {
+      headers: { accept: "application/dns-json" },
+    });
+
+    const data = await r.json();
+    return json(200, {
+      name, type,
+      status: data.Status,
+      answer: data.Answer || [],
+      authority: data.Authority || [],
+      comment: data.Comment || null,
+    });
+  } catch (e) {
+    return json(500, { error: "Server error" });
+  }
+};
+
+
+Validation:
+
+node -e 'console.log("ok")'
+
+8) Wire the environment (call modules in infra/envs/dev/main.tf)
+
+Create infra/envs/dev/main.tf:
+
+module "static_site" {
+  source      = "../../modules/static_site"
+  project     = var.project
+  env         = var.env
+  bucket_name = var.site_bucket_name
+}
+
+# Auth needs callback URLs, which depend on the CloudFront domain
+locals {
+  site_url = "https://${module.static_site.cloudfront_domain}"
+}
+
+module "auth" {
+  source = "../../modules/auth"
+  project = var.project
+  env     = var.env
+
+  callback_urls = ["${local.site_url}/callback"]
+  logout_urls   = ["${local.site_url}/"]
+}
+
+module "api" {
+  source = "../../modules/api"
+  project = var.project
+  env     = var.env
+
+  cognito_issuer   = module.auth.issuer
+  cognito_audience = module.auth.client_id
+}
+
+output "site_url"   { value = local.site_url }
+output "api_url"    { value = module.api.api_url }
+output "user_pool"  { value = module.auth.user_pool_id }
+output "client_id"  { value = module.auth.client_id }
+output "auth_domain"{ value = module.auth.domain }
+output "cloudfront_id" { value = module.static_site.cloudfront_id }
+output "bucket_name"   { value = module.static_site.bucket_name }
+
+
+Deploy infra:
+
+cd infra/envs/dev
+terraform init
+terraform apply
+
+
+Capture outputs:
+
+terraform output -raw site_url
+terraform output -raw api_url
+terraform output -raw user_pool
+terraform output -raw client_id
+terraform output -raw auth_domain
+
+9) Create the only user (alex.lux) with admin-only creation
+
+Cognito is configured to disallow self sign-up; you must create the user.
+
+Set vars:
+
+export USER_POOL_ID="$(cd infra/envs/dev && terraform output -raw user_pool)"
+export USERNAME="alex.lux"
+export TEMP_PASSWORD='TempPassword-ChangeMe-123!'
+
+
+Create user:
+
+aws cognito-idp admin-create-user \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "$USERNAME" \
+  --temporary-password "$TEMP_PASSWORD" \
+  --message-action SUPPRESS
+
+
+Set a permanent password (so you don’t have to do “force change” in Hosted UI if you prefer):
+
+export PERM_PASSWORD='UseARealLongPassword-Here-123!'
+
+aws cognito-idp admin-set-user-password \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "$USERNAME" \
+  --password "$PERM_PASSWORD" \
+  --permanent
+
+10) Frontend: React/Vite SPA with a login screen (no signup)
+10.1 Create app
+cd ../../frontend
+npm create vite@latest . -- --template react-ts
+npm i
+npm i oidc-client-ts
+
+10.2 Add env vars
+
+Create frontend/.env:
+
+VITE_API_URL=https://REPLACE_ME
+VITE_COGNITO_DOMAIN=REPLACE_ME
+VITE_COGNITO_REGION=us-west-2
+VITE_COGNITO_CLIENT_ID=REPLACE_ME
+VITE_APP_URL=https://REPLACE_ME
+
+
+Populate using Terraform outputs:
+
+cd ../infra/envs/dev
+API_URL="$(terraform output -raw api_url)"
+AUTH_DOMAIN="$(terraform output -raw auth_domain)"
+CLIENT_ID="$(terraform output -raw client_id)"
+SITE_URL="$(terraform output -raw site_url)"
+
+cd ../../../frontend
+perl -0777 -i -pe "s|VITE_API_URL=.*|VITE_API_URL=$API_URL|g; s|VITE_COGNITO_DOMAIN=.*|VITE_COGNITO_DOMAIN=$AUTH_DOMAIN|g; s|VITE_COGNITO_CLIENT_ID=.*|VITE_COGNITO_CLIENT_ID=$CLIENT_ID|g; s|VITE_APP_URL=.*|VITE_APP_URL=$SITE_URL|g" .env
+cat .env
+
+10.3 Add OIDC helper
+
+Create frontend/src/auth.ts:
+
+import { UserManager, WebStorageStateStore, type User } from "oidc-client-ts";
+
+const region = import.meta.env.VITE_COGNITO_REGION;
+const domain = import.meta.env.VITE_COGNITO_DOMAIN;
+const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
+const appUrl = import.meta.env.VITE_APP_URL;
+
+const authority = `https://${domain}.auth.${region}.amazoncognito.com`;
+
+export const userManager = new UserManager({
+  authority,
+  client_id: clientId,
+  redirect_uri: `${appUrl}/callback`,
+  post_logout_redirect_uri: `${appUrl}/`,
+  response_type: "code",
+  scope: "openid profile email",
+  // Store tokens in session storage (safer than localStorage)
+  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+});
+
+export async function getAccessToken(): Promise<string | null> {
+  const user: User | null = await userManager.getUser();
+  return user?.access_token ?? null;
+}
+
+10.4 App pages (Login, Callback, Home)
+
+Replace frontend/src/App.tsx with:
+
+import { useEffect, useState } from "react";
+import { userManager, getAccessToken } from "./auth";
+
+function Login() {
+  return (
+    <div style={{ padding: 24, fontFamily: "system-ui" }}>
+      <h2>NetKnife</h2>
+      <p>Private tools for alex.lux</p>
+      <button onClick={() => userManager.signinRedirect()}>
+        Sign in
+      </button>
+    </div>
+  );
+}
+
+function Callback() {
+  const [msg, setMsg] = useState("Completing sign-in...");
+
+  useEffect(() => {
+    (async () => {
+      await userManager.signinRedirectCallback();
+      window.location.href = "/";
+    })().catch(() => setMsg("Login failed"));
+  }, []);
+
+  return <div style={{ padding: 24 }}>{msg}</div>;
+}
+
+function Home() {
+  const [tokenPresent, setTokenPresent] = useState(false);
+  const [dnsResult, setDnsResult] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      const t = await getAccessToken();
+      setTokenPresent(!!t);
+    })();
+  }, []);
+
+  async function callDns() {
+    const t = await getAccessToken();
+    const r = await fetch(`${import.meta.env.VITE_API_URL}/dns`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(t ? { authorization: `Bearer ${t}` } : {}),
+      },
+      body: JSON.stringify({ name: "example.com", type: "A" }),
+    });
+    setDnsResult(await r.json());
+  }
+
+  return (
+    <div style={{ padding: 24, fontFamily: "system-ui" }}>
+      <h2>NetKnife</h2>
+
+      <div style={{ marginBottom: 12 }}>
+        <button onClick={() => userManager.signoutRedirect()}>Sign out</button>
+      </div>
+
+      <p>Token present: {String(tokenPresent)}</p>
+
+      <hr />
+
+      <h3>DNS (remote)</h3>
+      <button onClick={callDns}>Resolve example.com A</button>
+      <pre style={{ whiteSpace: "pre-wrap" }}>
+        {dnsResult ? JSON.stringify(dnsResult, null, 2) : ""}
+      </pre>
+    </div>
+  );
+}
+
+export default function App() {
+  const path = window.location.pathname;
+
+  if (path === "/callback") return <Callback />;
+
+  // simple auth gate
+  const [ready, setReady] = useState(false);
+  const [authed, setAuthed] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const t = await getAccessToken();
+      setAuthed(!!t);
+      setReady(true);
+    })();
+  }, []);
+
+  if (!ready) return <div style={{ padding: 24 }}>Loading...</div>;
+  if (!authed) return <Login />;
+  return <Home />;
+}
+
+
+Local test:
+
+npm run dev
+
+
+This will not work fully until deployed because callback URL is the CloudFront URL; you can still validate rendering.
+
+11) Deploy frontend to S3 + invalidate CloudFront
+
+Build:
+
+npm ci
+npm run build
+
+
+Upload:
+
+export BUCKET_NAME="$(cd ../infra/envs/dev && terraform output -raw bucket_name)"
+aws s3 sync dist/ "s3://$BUCKET_NAME/" --delete
+
+
+Invalidate CloudFront:
+
+export CF_ID="$(cd ../infra/envs/dev && terraform output -raw cloudfront_id)"
+aws cloudfront create-invalidation --distribution-id "$CF_ID" --paths "/*"
+
+
+Open site:
+
+cd ../infra/envs/dev
+terraform output -raw site_url
+
+
+Login with:
+
+Username: alex.lux
+
+Password: your permanent password
+
+Validate:
+
+You land back on /
+
+DNS test returns JSON
+
+API returns 401 if you remove the Authorization header
+
+12) Add the remaining Lambdas (repeat the same pattern)
+
+For each function:
+
+Create backend/functions/<name>/index.js
+
+Add an archive_file + aws_lambda_function
+
+Add API integration + route
+
+Attach JWT auth to route
+
+Recommended next functions:
+
+POST /rdap (IP/domain RDAP)
+
+POST /tls (cert chain summary, expiry, SAN, fingerprint)
+
+POST /headers (SSRF-safe HTTP header scan)
+
+Security requirements for /headers:
+
+allow only https:// (or http+https)
+
+resolve host, block RFC1918/loopback/link-local
+
+allow ports 80/443 only
+
+max redirects 5, timeout 5s, cap response bytes
+
+13) Tighten security after MVP is proven
+
+Do these once you confirm everything works:
+
+Restrict API CORS allow_origins to your site_url
+
+Add WAF (CloudFront first; optionally API stage)
+
+Add CloudWatch alarms on:
+
+Lambda errors > 0
+
+API 5xx
+
+Consider Cognito MFA for your user (optional but recommended)
+
+14) Suggested “tool roadmap” inside the app
+
+Start with offline-first panels:
+
+Subnet/CIDR + summarization
+
+Command templates (static routes, VLANs, L2 triage, BGP/OSPF verify)
+
+Regex builder
+
+PGP + password generator + CSR/self-signed cert generator
+Then add remote panels:
+
+DNS (done)
+
+RDAP/ASN
+
+TLS inspector
+
+HTTP headers scan
+
+If you want the next step as code
+
+Say “generate the Phase 2 lambdas” and I’ll provide:
+
+rdap, tls, and SSRF-safe headers Lambda code
+
+The exact Terraform additions for each route/integration/permission
+
+A minimal frontend panel for each (same auth/token handling as DNS)
+
+generate the phase 2 lambdas
+Thought for 26s
+Phase 2 Lambdas (RDAP, TLS inspector, HTTP headers scan) + Terraform wiring
+
+Below is a complete, copy/paste-ready set of Lambda handlers (Node.js 20, CommonJS) and the Terraform additions to package/deploy them behind your existing HTTP API + Cognito JWT authorizer.
+
+Important: In the earlier DNS example, the handler used ESM (export const handler). AWS Lambda defaults to CommonJS unless you ship a package.json with "type":"module" or use .mjs. For consistency, switch all handlers to CommonJS (exports.handler = ...). I’m including a corrected DNS handler too.
+
+1) Backend: create function folders + code
+
+Create the folders:
+
+mkdir -p backend/functions/{dns,rdap,tls,headers}
+
+1.1 DNS (corrected CommonJS) — backend/functions/dns/index.js
+// DNS-over-HTTPS resolver (Cloudflare JSON endpoint)
+// Input: { "name": "example.com", "type": "A" }
+
+const DOH = "https://cloudflare-dns.com/dns-query";
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+exports.handler = async (event) => {
+  try {
+    const raw = event.body ? JSON.parse(event.body) : {};
+    const name = String(raw.name || "").trim();
+    const type = String(raw.type || "A").trim().toUpperCase();
+
+    if (!name || name.length > 253) return json(400, { error: "Invalid name" });
+    if (!/^[A-Z0-9-._]+$/i.test(name)) return json(400, { error: "Invalid characters" });
+
+    const allowed = new Set(["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV"]);
+    if (!allowed.has(type)) return json(400, { error: "Unsupported type" });
+
+    const url = new URL(DOH);
+    url.searchParams.set("name", name);
+    url.searchParams.set("type", type);
+
+    const r = await fetch(url, { headers: { accept: "application/dns-json" } });
+    const data = await r.json();
+
+    return json(200, {
+      name,
+      type,
+      status: data.Status,
+      answer: data.Answer || [],
+      authority: data.Authority || [],
+      comment: data.Comment || null,
+    });
+  } catch {
+    return json(500, { error: "Server error" });
+  }
+};
+
+1.2 RDAP lookup — backend/functions/rdap/index.js
+
+Accepts { "query": "8.8.8.8" } or { "query": "example.com" }
+
+Uses RDAP via rdap.org bootstrap aggregator for portability.
+
+Limits redirects and enforces an allowlist of RDAP hosts.
+
+const { setTimeout: sleep } = require("timers/promises");
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    body: JSON.stringify(body),
+  };
+}
+
+function isIP(q) {
+  // lightweight check; fine for routing to endpoint
+  return /^[0-9.]+$/.test(q) || q.includes(":");
+}
+
+function isDomain(q) {
+  // allow IDN punycode too; keep conservative
+  return /^[a-z0-9.-]+$/i.test(q) && q.includes(".") && !q.endsWith(".");
+}
+
+const ALLOWED_RDAP_HOSTS = new Set([
+  "rdap.org",
+  "rdap.arin.net",
+  "rdap.db.ripe.net",
+  "rdap.apnic.net",
+  "rdap.lacnic.net",
+  "rdap.afrinic.net",
+]);
+
+async function fetchJsonAllowRedirect(url, maxRedirects = 3) {
+  let current = url;
+  for (let i = 0; i <= maxRedirects; i++) {
+    const u = new URL(current);
+    if (!ALLOWED_RDAP_HOSTS.has(u.hostname)) {
+      throw new Error("Disallowed RDAP host");
+    }
+
+    const r = await fetch(current, { redirect: "manual", headers: { accept: "application/rdap+json, application/json" } });
+
+    // Handle redirects manually so we can enforce allowlist
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get("location");
+      if (!loc) throw new Error("Redirect without location");
+      current = new URL(loc, current).toString();
+      continue;
+    }
+
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+    return { status: r.status, url: current, data };
+  }
+  throw new Error("Too many redirects");
+}
+
+exports.handler = async (event) => {
+  try {
+    const raw = event.body ? JSON.parse(event.body) : {};
+    const query = String(raw.query || "").trim().toLowerCase();
+
+    if (!query || query.length > 253) return json(400, { error: "Invalid query" });
+
+    let endpoint;
+    if (isIP(query)) {
+      endpoint = `https://rdap.org/ip/${encodeURIComponent(query)}`;
+    } else if (isDomain(query)) {
+      endpoint = `https://rdap.org/domain/${encodeURIComponent(query)}`;
+    } else {
+      return json(400, { error: "Query must be an IP or domain" });
+    }
+
+    const result = await fetchJsonAllowRedirect(endpoint, 3);
+
+    return json(200, {
+      query,
+      rdap_url: result.url,
+      status: result.status,
+      data: result.data,
+    });
+  } catch (e) {
+    return json(500, { error: "Server error" });
+  }
+};
+
+1.3 TLS inspector — backend/functions/tls/index.js
+
+Input: { "host": "example.com", "port": 443, "sni": "example.com" }
+
+Returns chain summary, expiry, SAN, SHA-256 fingerprint, key/sig info.
+
+Uses Node tls + crypto.X509Certificate.
+
+const tls = require("tls");
+const crypto = require("crypto");
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    body: JSON.stringify(body),
+  };
+}
+
+function sha256Hex(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+
+function colonize(hex) {
+  return hex.match(/.{1,2}/g).join(":").toUpperCase();
+}
+
+function extractSAN(x509) {
+  // subjectAltName string looks like: 'DNS:example.com, DNS:www.example.com, IP Address:1.2.3.4'
+  const san = x509.subjectAltName || "";
+  return san
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function connectTLS({ host, port, sni, timeoutMs }) {
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect(
+      {
+        host,
+        port,
+        servername: sni || host,
+        rejectUnauthorized: false, // inspection tool; do not fail on invalid chain
+        timeout: timeoutMs,
+      },
+      () => resolve(socket)
+    );
+
+    socket.on("error", reject);
+    socket.setTimeout(timeoutMs, () => reject(new Error("TLS timeout")));
+  });
+}
+
+function buildChainDetailed(peer) {
+  const chain = [];
+  const seen = new Set();
+
+  let cur = peer;
+  while (cur && cur.raw && cur.raw.length) {
+    const fp = sha256Hex(cur.raw);
+    if (seen.has(fp)) break;
+    seen.add(fp);
+
+    const x509 = new crypto.X509Certificate(cur.raw);
+    chain.push({
+      subject: x509.subject,
+      issuer: x509.issuer,
+      valid_from: x509.validFrom,
+      valid_to: x509.validTo,
+      serial_number: x509.serialNumber,
+      fingerprint_sha256: colonize(fp),
+      san: extractSAN(x509),
+      signature_algorithm: x509.signatureAlgorithm,
+      public_key_type: x509.publicKey?.asymmetricKeyType || null,
+      public_key_size: x509.publicKey?.asymmetricKeySize || null,
+    });
+
+    cur = cur.issuerCertificate && cur.issuerCertificate !== cur ? cur.issuerCertificate : null;
+  }
+
+  return chain;
+}
+
+exports.handler = async (event) => {
+  try {
+    const raw = event.body ? JSON.parse(event.body) : {};
+    const host = String(raw.host || "").trim();
+    const sni = raw.sni ? String(raw.sni).trim() : "";
+    const port = raw.port ? Number(raw.port) : 443;
+
+    if (!host || host.length > 253) return json(400, { error: "Invalid host" });
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return json(400, { error: "Invalid port" });
+    if (!/^[a-z0-9.-]+$/i.test(host) && !host.includes(":")) return json(400, { error: "Host must be DNS name or IP" });
+
+    const socket = await connectTLS({ host, port, sni, timeoutMs: 5000 });
+
+    const peer = socket.getPeerCertificate(true);
+    socket.end();
+    socket.destroy();
+
+    if (!peer || !peer.raw) return json(502, { error: "No certificate presented" });
+
+    const chain = buildChainDetailed(peer);
+
+    // compute days remaining for leaf
+    const leaf = chain[0];
+    const validTo = new Date(leaf.valid_to).getTime();
+    const now = Date.now();
+    const days_remaining = Math.floor((validTo - now) / (1000 * 60 * 60 * 24));
+
+    return json(200, {
+      host,
+      port,
+      sni: sni || host,
+      days_remaining,
+      chain,
+    });
+  } catch {
+    return json(500, { error: "Server error" });
+  }
+};
+
+1.4 HTTP headers scan (SSRF-safe) — backend/functions/headers/index.js
+
+Input: { "url": "https://example.com" }
+
+Enforces:
+
+scheme http/https
+
+ports 80/443 only (or empty)
+
+DNS resolve and block private/loopback/link-local/etc
+
+max redirects 5
+
+timeout 5s per hop
+
+cancels body immediately (headers-only scan)
+
+const dns = require("dns").promises;
+const net = require("net");
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    body: JSON.stringify(body),
+  };
+}
+
+function isPrivateIPv4(ip) {
+  const parts = ip.split(".").map((x) => Number(x));
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmark
+  if (a >= 224) return true; // multicast/reserved
+  return false;
+}
+
+function isPrivateIPv6(ip) {
+  const normalized = ip.toLowerCase();
+  if (normalized === "::1" || normalized === "::") return true;
+  if (normalized.startsWith("fe80:")) return true; // link-local
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // unique local fc00::/7
+  if (normalized.startsWith("ff")) return true; // multicast
+  return false;
+}
+
+function isBlockedIP(ip) {
+  const ver = net.isIP(ip);
+  if (ver === 4) return isPrivateIPv4(ip);
+  if (ver === 6) return isPrivateIPv6(ip);
+  return true;
+}
+
+function summarizeSecurityHeaders(h) {
+  const get = (k) => h.get(k);
+  const keys = [
+    "strict-transport-security",
+    "content-security-policy",
+    "x-frame-options",
+    "x-content-type-options",
+    "referrer-policy",
+    "permissions-policy",
+    "cross-origin-opener-policy",
+    "cross-origin-embedder-policy",
+    "cross-origin-resource-policy",
+  ];
+
+  const present = {};
+  const missing = [];
+
+  for (const k of keys) {
+    const v = get(k);
+    if (v) present[k] = v;
+    else missing.push(k);
+  }
+
+  return { present, missing };
+}
+
+async function resolveAndBlock(hostname) {
+  const results = await dns.lookup(hostname, { all: true });
+  if (!results.length) throw new Error("DNS failed");
+
+  for (const r of results) {
+    if (isBlockedIP(r.address)) throw new Error("Blocked destination (private/reserved IP)");
+  }
+
+  return results.map((r) => r.address);
+}
+
+async function fetchHeadersOnce(urlStr) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 5000);
+
+  try {
+    const r = await fetch(urlStr, {
+      method: "GET",
+      redirect: "manual",
+      signal: ctrl.signal,
+      headers: {
+        "user-agent": "netknife/1.0",
+        "accept": "*/*",
+      },
+    });
+
+    // cancel body ASAP (headers-only)
+    try { r.body?.cancel(); } catch {}
+
+    const headersObj = {};
+    r.headers.forEach((v, k) => { headersObj[k] = v; });
+
+    return {
+      status: r.status,
+      location: r.headers.get("location"),
+      headers: headersObj,
+    };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+exports.handler = async (event) => {
+  try {
+    const raw = event.body ? JSON.parse(event.body) : {};
+    const inputUrl = String(raw.url || "").trim();
+
+    if (!inputUrl || inputUrl.length > 2048) return json(400, { error: "Invalid url" });
+
+    let u;
+    try { u = new URL(inputUrl); } catch { return json(400, { error: "Malformed url" }); }
+
+    if (!["http:", "https:"].includes(u.protocol)) return json(400, { error: "Only http/https allowed" });
+
+    const port = u.port ? Number(u.port) : (u.protocol === "https:" ? 443 : 80);
+    if (![80, 443].includes(port)) return json(400, { error: "Only ports 80/443 allowed" });
+
+    // SSRF protection: resolve and block private/reserved
+    await resolveAndBlock(u.hostname);
+
+    const chain = [];
+    let current = u.toString();
+
+    for (let i = 0; i < 5; i++) {
+      const curUrl = new URL(current);
+      // re-check on each hop
+      const hopPort = curUrl.port ? Number(curUrl.port) : (curUrl.protocol === "https:" ? 443 : 80);
+      if (!["http:", "https:"].includes(curUrl.protocol)) throw new Error("Bad redirect protocol");
+      if (![80, 443].includes(hopPort)) throw new Error("Bad redirect port");
+      await resolveAndBlock(curUrl.hostname);
+
+      const res = await fetchHeadersOnce(curUrl.toString());
+      const sec = summarizeSecurityHeaders(new Map(Object.entries(res.headers)));
+
+      chain.push({
+        url: curUrl.toString(),
+        status: res.status,
+        location: res.location,
+        security_headers: sec,
+        headers: res.headers,
+      });
+
+      if (res.status >= 300 && res.status < 400 && res.location) {
+        current = new URL(res.location, curUrl).toString();
+        continue;
+      }
+
+      // done
+      return json(200, {
+        input: inputUrl,
+        final_url: curUrl.toString(),
+        redirects: chain.length - 1,
+        chain,
+      });
+    }
+
+    return json(400, { error: "Too many redirects" });
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : "Server error";
+    return json(500, { error: msg });
+  }
+};
+
+2) Terraform: add these Lambdas + routes to infra/modules/api/main.tf
+
+Open infra/modules/api/main.tf and add the following blocks after the existing DNS resources (keep the existing aws_iam_role.lambda_role + attachment; reuse them).
+
+2.1 RDAP
+data "archive_file" "rdap_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/rdap"
+  output_path = "${path.module}/rdap.zip"
+}
+
+resource "aws_lambda_function" "rdap" {
+  function_name = "${local.name}-rdap"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+
+  filename         = data.archive_file.rdap_zip.output_path
+  source_code_hash = data.archive_file.rdap_zip.output_base64sha256
+
+  timeout     = 8
+  memory_size = 128
+}
+
+resource "aws_apigatewayv2_integration" "rdap" {
+  api_id           = aws_apigatewayv2_api.http.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.rdap.arn
+}
+
+resource "aws_apigatewayv2_route" "rdap" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /rdap"
+  target    = "integrations/${aws_apigatewayv2_integration.rdap.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "apigw_invoke_rdap" {
+  statement_id  = "AllowAPIGatewayInvokeRDAP"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.rdap.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+2.2 TLS
+data "archive_file" "tls_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/tls"
+  output_path = "${path.module}/tls.zip"
+}
+
+resource "aws_lambda_function" "tls" {
+  function_name = "${local.name}-tls"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+
+  filename         = data.archive_file.tls_zip.output_path
+  source_code_hash = data.archive_file.tls_zip.output_base64sha256
+
+  timeout     = 8
+  memory_size = 128
+}
+
+resource "aws_apigatewayv2_integration" "tls" {
+  api_id           = aws_apigatewayv2_api.http.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.tls.arn
+}
+
+resource "aws_apigatewayv2_route" "tls" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /tls"
+  target    = "integrations/${aws_apigatewayv2_integration.tls.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "apigw_invoke_tls" {
+  statement_id  = "AllowAPIGatewayInvokeTLS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.tls.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+2.3 Headers
+data "archive_file" "headers_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/headers"
+  output_path = "${path.module}/headers.zip"
+}
+
+resource "aws_lambda_function" "headers" {
+  function_name = "${local.name}-headers"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+
+  filename         = data.archive_file.headers_zip.output_path
+  source_code_hash = data.archive_file.headers_zip.output_base64sha256
+
+  timeout     = 10
+  memory_size = 256
+}
+
+resource "aws_apigatewayv2_integration" "headers" {
+  api_id           = aws_apigatewayv2_api.http.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.headers.arn
+}
+
+resource "aws_apigatewayv2_route" "headers" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /headers"
+  target    = "integrations/${aws_apigatewayv2_integration.headers.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "apigw_invoke_headers" {
+  statement_id  = "AllowAPIGatewayInvokeHeaders"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.headers.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+3) Deploy Phase 2
+
+From repo root:
+
+cd infra/envs/dev
+terraform apply
+
+4) Quick API tests (authenticated)
+4.1 Get an access token (from the browser)
+
+After logging into your site, open DevTools Console and run:
+
+sessionStorage
+
+
+You’ll see OIDC storage keys. Easiest: add a small “Copy token” button in your UI (recommended). For now, use your existing frontend function getAccessToken() and print it in the UI.
+
+4.2 cURL tests
+
+Set:
+
+export API_URL="$(cd infra/envs/dev && terraform output -raw api_url)"
+export TOKEN="PASTE_ACCESS_TOKEN_HERE"
+
+
+RDAP:
+
+curl -sS "$API_URL/rdap" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"query":"8.8.8.8"}' | jq .
+
+
+TLS:
+
+curl -sS "$API_URL/tls" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"host":"example.com","port":443,"sni":"example.com"}' | jq .
+
+
+Headers:
+
+curl -sS "$API_URL/headers" \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"url":"https://example.com"}' | jq .
+
+5) Frontend wiring (minimal)
+
+Add buttons similar to the DNS call:
+
+POST ${API_URL}/rdap body {query}
+
+POST ${API_URL}/tls body {host, port, sni}
+
+POST ${API_URL}/headers body {url}
+
+Use the same authorization: Bearer <token> header.
+
+6) Hardening tweaks (do next)
+
+CORS allow_origins in API module: set to your CloudFront site URL instead of "*"
+
+Add WAF rate limiting on API (optional but recommended once it’s live)
+
+Add DynamoDB TTL caching for RDAP/DNS (reduces rate-limit pain)
+
+If you want, I can provide the DynamoDB TTL cache implementation (Terraform + tiny wrapper in RDAP/DNS lambdas) next.
+
+yes to all this
+
+6) Hardening tweaks (do next)
+
+CORS allow_origins in API module: set to your CloudFront site URL instead of "*"
+
+Add WAF rate limiting on API (optional but recommended once it’s live)
+
+Add DynamoDB TTL caching for RDAP/DNS (reduces rate-limit pain)
+
+If you want, I can provide the DynamoDB TTL cache implementation (Terraform + tiny wrapper in RDAP/DNS lambdas) next.
+Thought for 18s
+Hardening + DynamoDB TTL cache (Terraform + Lambda changes)
+
+This implements all 3 items:
+
+CORS allow_origins locked to your CloudFront site URL
+
+WAF rate limiting on the API Gateway HTTP API stage
+
+DynamoDB TTL caching for DNS + RDAP (Lambda-side wrapper)
+
+A) Terraform changes
+A1) Update API module to accept allowed_origins
+
+Create/modify infra/modules/api/variables.tf:
+
+variable "project" { type = string }
+variable "env"     { type = string }
+
+variable "cognito_issuer"   { type = string }
+variable "cognito_audience" { type = string } # Cognito app client id
+
+variable "allowed_origins" {
+  type        = list(string)
+  description = "CORS allowlist (e.g. CloudFront site URL)"
+}
+
+
+Then update the cors_configuration in infra/modules/api/main.tf:
+
+resource "aws_apigatewayv2_api" "http" {
+  name          = "${local.name}-http-api"
+  protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_credentials = true
+    allow_headers     = ["authorization", "content-type"]
+    allow_methods     = ["POST", "OPTIONS"]
+    allow_origins     = var.allowed_origins
+    max_age           = 3600
+  }
+}
+
+A2) Add DynamoDB TTL cache table inside the API module
+
+Add to infra/modules/api/main.tf (near the top, after locals is fine):
+
+resource "aws_dynamodb_table" "cache" {
+  name         = "${local.name}-cache"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "cache_key"
+
+  attribute {
+    name = "cache_key"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at" # epoch seconds
+    enabled        = true
+  }
+}
+
+output "cache_table_name" {
+  value = aws_dynamodb_table.cache.name
+}
+
+A3) Allow Lambda role to read/write cache table
+
+Add this to infra/modules/api/main.tf (after the basic execution role attachment):
+
+resource "aws_iam_role_policy" "cache_access" {
+  name = "${local.name}-cache-access"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem"
+      ]
+      Resource = aws_dynamodb_table.cache.arn
+    }]
+  })
+}
+
+A4) Pass cache env vars to DNS + RDAP Lambdas
+
+In aws_lambda_function.dns add environment:
+
+resource "aws_lambda_function" "dns" {
+  # ...existing...
+  timeout     = 5
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "300"
+    }
+  }
+}
+
+
+In aws_lambda_function.rdap add environment:
+
+resource "aws_lambda_function" "rdap" {
+  # ...existing...
+  timeout     = 8
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "86400"
+    }
+  }
+}
+
+
+(Other Lambdas can omit these env vars.)
+
+A5) Add WAF rate limiting to the HTTP API stage
+
+Add to infra/modules/api/main.tf:
+
+resource "aws_wafv2_web_acl" "api" {
+  name  = "${local.name}-api-waf"
+  scope = "REGIONAL"
+
+  default_action { allow {} }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${local.name}-api-waf"
+    sampled_requests_enabled   = true
+  }
+
+  rule {
+    name     = "RateLimitPerIP"
+    priority = 1
+
+    action { block {} }
+
+    statement {
+      rate_based_statement {
+        limit              = 1000  # requests per 5 minutes per IP
+        aggregate_key_type = "IP"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "RateLimitPerIP"
+      sampled_requests_enabled   = true
+    }
+  }
+}
+
+resource "aws_wafv2_web_acl_association" "api" {
+  resource_arn = aws_apigatewayv2_stage.default.arn
+  web_acl_arn  = aws_wafv2_web_acl.api.arn
+}
+
+
+Notes:
+
+This is a clean baseline. You can lower the limit later.
+
+Because you’re the only user, you can be aggressive (e.g., 200/5min) once stable.
+
+A6) Update env wiring to pass the CloudFront URL to the API module
+
+In infra/envs/dev/main.tf, update your API module call:
+
+module "api" {
+  source = "../../modules/api"
+  project = var.project
+  env     = var.env
+
+  cognito_issuer   = module.auth.issuer
+  cognito_audience = module.auth.client_id
+
+  allowed_origins = [local.site_url]
+}
+
+B) Lambda updates (DNS + RDAP caching)
+
+These are drop-in replacements.
+
+B1) backend/functions/dns/index.js (cached)
+const AWS = require("aws-sdk");
+const DOH = "https://cloudflare-dns.com/dns-query";
+
+const ddb = new AWS.DynamoDB.DocumentClient();
+const CACHE_TABLE = process.env.CACHE_TABLE;
+const TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS || "300");
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    body: JSON.stringify(body),
+  };
+}
+
+async function cacheGet(cache_key) {
+  if (!CACHE_TABLE) return null;
+  const res = await ddb.get({ TableName: CACHE_TABLE, Key: { cache_key } }).promise();
+  if (!res.Item) return null;
+  if (res.Item.expires_at <= Math.floor(Date.now() / 1000)) return null;
+  return res.Item.value;
+}
+
+async function cachePut(cache_key, value, ttlSeconds) {
+  if (!CACHE_TABLE) return;
+  const expires_at = Math.floor(Date.now() / 1000) + ttlSeconds;
+  await ddb.put({
+    TableName: CACHE_TABLE,
+    Item: { cache_key, value, expires_at },
+  }).promise();
+}
+
+exports.handler = async (event) => {
+  try {
+    const raw = event.body ? JSON.parse(event.body) : {};
+    const name = String(raw.name || "").trim();
+    const type = String(raw.type || "A").trim().toUpperCase();
+
+    if (!name || name.length > 253) return json(400, { error: "Invalid name" });
+    if (!/^[A-Z0-9-._]+$/i.test(name)) return json(400, { error: "Invalid characters" });
+
+    const allowed = new Set(["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV"]);
+    if (!allowed.has(type)) return json(400, { error: "Unsupported type" });
+
+    const cache_key = `dns:${type}:${name.toLowerCase()}`;
+    const cached = await cacheGet(cache_key);
+    if (cached) return json(200, { ...cached, cached: true });
+
+    const url = new URL(DOH);
+    url.searchParams.set("name", name);
+    url.searchParams.set("type", type);
+
+    const r = await fetch(url, { headers: { accept: "application/dns-json" } });
+    const data = await r.json();
+
+    const out = {
+      name,
+      type,
+      status: data.Status,
+      answer: data.Answer || [],
+      authority: data.Authority || [],
+      comment: data.Comment || null,
+    };
+
+    await cachePut(cache_key, out, TTL_SECONDS);
+    return json(200, { ...out, cached: false });
+  } catch {
+    return json(500, { error: "Server error" });
+  }
+};
+
+B2) backend/functions/rdap/index.js (cached)
+const AWS = require("aws-sdk");
+const ddb = new AWS.DynamoDB.DocumentClient();
+
+const CACHE_TABLE = process.env.CACHE_TABLE;
+const TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS || "86400");
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    body: JSON.stringify(body),
+  };
+}
+
+async function cacheGet(cache_key) {
+  if (!CACHE_TABLE) return null;
+  const res = await ddb.get({ TableName: CACHE_TABLE, Key: { cache_key } }).promise();
+  if (!res.Item) return null;
+  if (res.Item.expires_at <= Math.floor(Date.now() / 1000)) return null;
+  return res.Item.value;
+}
+
+async function cachePut(cache_key, value, ttlSeconds) {
+  if (!CACHE_TABLE) return;
+  const expires_at = Math.floor(Date.now() / 1000) + ttlSeconds;
+  await ddb.put({
+    TableName: CACHE_TABLE,
+    Item: { cache_key, value, expires_at },
+  }).promise();
+}
+
+function isIP(q) {
+  return /^[0-9.]+$/.test(q) || q.includes(":");
+}
+function isDomain(q) {
+  return /^[a-z0-9.-]+$/i.test(q) && q.includes(".") && !q.endsWith(".");
+}
+
+const ALLOWED_RDAP_HOSTS = new Set([
+  "rdap.org",
+  "rdap.arin.net",
+  "rdap.db.ripe.net",
+  "rdap.apnic.net",
+  "rdap.lacnic.net",
+  "rdap.afrinic.net",
+]);
+
+async function fetchJsonAllowRedirect(url, maxRedirects = 3) {
+  let current = url;
+  for (let i = 0; i <= maxRedirects; i++) {
+    const u = new URL(current);
+    if (!ALLOWED_RDAP_HOSTS.has(u.hostname)) throw new Error("Disallowed RDAP host");
+
+    const r = await fetch(current, {
+      redirect: "manual",
+      headers: { accept: "application/rdap+json, application/json" },
+    });
+
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get("location");
+      if (!loc) throw new Error("Redirect without location");
+      current = new URL(loc, current).toString();
+      continue;
+    }
+
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+    return { status: r.status, url: current, data };
+  }
+  throw new Error("Too many redirects");
+}
+
+exports.handler = async (event) => {
+  try {
+    const raw = event.body ? JSON.parse(event.body) : {};
+    const query = String(raw.query || "").trim().toLowerCase();
+
+    if (!query || query.length > 253) return json(400, { error: "Invalid query" });
+
+    const cache_key = `rdap:${query}`;
+    const cached = await cacheGet(cache_key);
+    if (cached) return json(200, { ...cached, cached: true });
+
+    let endpoint;
+    if (isIP(query)) endpoint = `https://rdap.org/ip/${encodeURIComponent(query)}`;
+    else if (isDomain(query)) endpoint = `https://rdap.org/domain/${encodeURIComponent(query)}`;
+    else return json(400, { error: "Query must be an IP or domain" });
+
+    const result = await fetchJsonAllowRedirect(endpoint, 3);
+
+    const out = {
+      query,
+      rdap_url: result.url,
+      status: result.status,
+      data: result.data,
+    };
+
+    await cachePut(cache_key, out, TTL_SECONDS);
+    return json(200, { ...out, cached: false });
+  } catch (e) {
+    return json(500, { error: (e && e.message) ? e.message : "Server error" });
+  }
+};
+
+C) Deploy steps
+C1) Terraform apply
+cd infra/envs/dev
+terraform apply
+
+C2) Validate CORS is locked down
+
+From your browser app domain, calls should succeed.
+From some other origin, the browser should block due to CORS.
+
+C3) Validate caching works
+
+Call DNS or RDAP once → expect "cached": false
+
+Call again → expect "cached": true
+
+Confirm items exist in DynamoDB table:
+
+TABLE="$(terraform -chdir=infra/envs/dev output -raw api_cache_table_name 2>/dev/null || true)"
+# If you didn't expose it yet, see note below.
+
+
+You likely haven’t output the cache table name from env yet. Add this output in infra/envs/dev/main.tf:
+
+output "cache_table_name" { value = module.api.cache_table_name }
+
+
+Then:
+
+cd infra/envs/dev
+terraform apply
+terraform output -raw cache_table_name
+
+D) One small fix: add the env output for cache table
+
+In infra/modules/api/main.tf you already added:
+
+output "cache_table_name" {
+  value = aws_dynamodb_table.cache.name
+}
+
+
+Then in infra/envs/dev/main.tf add:
+
+output "cache_table_name" { value = module.api.cache_table_name }
+
+E) Recommended tightening (after confirming it works)
+
+Change WAF rate limit from 1000 to 200 (since you’re the only user).
+
+Consider setting DNS TTL to 60 instead of 300 if you want fresher answers.
+
+Add CloudWatch alarm: AWS/Lambda Errors for each function > 0.
+
+If you want the next deliverable, say: “add alarms + WAF logging”, and I’ll provide Terraform for CloudWatch alarms and optional WAF logging to CloudWatch Logs / S3.
+
+add alarms + WAF logging as well as budgeting and how much this will cost? 
+Thought for 2m 48s
+What you’re adding (Terraform-managed)
+
+Alerting: SNS topic + CloudWatch alarms for Lambda + API Gateway + (optional) WAF
+
+WAF logging: WAF → CloudWatch Logs log group (with redaction)
+
+Budgeting: AWS Budgets cost budget (no “actions” to keep it free) 
+Terraform Registry
+
+Cost Anomaly Detection: monitor + alerts (no additional charge) 
+Amazon Web Services, Inc.
+
+Cost expectations: realistic monthly range + what drives it (WAF is the main fixed cost) 
+Amazon Web Services, Inc.
++3
+Amazon Web Services, Inc.
++3
+Amazon Web Services, Inc.
++3
+
+Assumptions
+
+You already have:
+
+CloudFront static site + API Gateway HTTP API + Lambda endpoints (your “Phase 2”)
+
+Cognito login (single user) for the web app (Cognito MAU pricing is generally minimal for 1 user)
+
+Region for “runtime” resources: us-west-2 (fine).
+
+Cost Management resources (Budgets + Cost Anomaly) are safest with a provider alias in us-east-1 (AWS Cost tools are global-ish; this avoids weirdness).
+
+Step 1 — Create an “ops” Terraform module
+
+Create:
+
+infra/modules/ops/
+  main.tf
+  variables.tf
+  outputs.tf
+
+infra/modules/ops/variables.tf
+variable "name_prefix" {
+  type = string
+}
+
+variable "alert_email" {
+  type = string
+}
+
+# For API Gateway (HTTP API)
+variable "api_id" {
+  type = string
+}
+variable "api_stage" {
+  type    = string
+  default = "$default"
+}
+
+# Lambda functions to alarm on
+variable "lambda_function_names" {
+  type = list(string)
+}
+
+# Optional: WAF Web ACL ARN (if you attached WAF to API Gateway or CloudFront)
+variable "waf_web_acl_arn" {
+  type    = string
+  default = null
+}
+
+# WAF logging destination: CloudWatch log group name must start with aws-waf-logs-
+# (AWS requirement for WAF logging to CloudWatch Logs) :contentReference[oaicite:4]{index=4}
+variable "waf_log_group_name" {
+  type    = string
+  default = null
+}
+
+variable "monthly_budget_usd" {
+  type    = number
+  default = 25
+}
+
+variable "budget_alert_thresholds" {
+  type    = list(number)
+  default = [80, 100]
+}
+
+infra/modules/ops/main.tf
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
+data "aws_caller_identity" "this" {}
+data "aws_region" "this" {}
+
+############################
+# SNS topic for alerts
+############################
+resource "aws_sns_topic" "alerts" {
+  name = "${var.name_prefix}-alerts"
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+############################
+# CloudWatch Log Groups (Lambda) - retention control
+############################
+resource "aws_cloudwatch_log_group" "lambda" {
+  for_each          = toset(var.lambda_function_names)
+  name              = "/aws/lambda/${each.value}"
+  retention_in_days = 30
+}
+
+############################
+# Lambda alarms
+############################
+
+# Errors > 0 in 5 minutes
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  for_each            = toset(var.lambda_function_names)
+  alarm_name          = "${var.name_prefix}-lambda-errors-${each.value}"
+  alarm_description   = "Lambda Errors > 0 (5m): ${each.value}"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    FunctionName = each.value
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# Throttles > 0 in 5 minutes
+resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
+  for_each            = toset(var.lambda_function_names)
+  alarm_name          = "${var.name_prefix}-lambda-throttles-${each.value}"
+  alarm_description   = "Lambda Throttles > 0 (5m): ${each.value}"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Throttles"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    FunctionName = each.value
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+}
+
+# Duration p95 > 2 seconds (tune later)
+resource "aws_cloudwatch_metric_alarm" "lambda_duration_p95" {
+  for_each            = toset(var.lambda_function_names)
+  alarm_name          = "${var.name_prefix}-lambda-durationp95-${each.value}"
+  alarm_description   = "Lambda Duration p95 > 2000ms (5m): ${each.value}"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Duration"
+  extended_statistic  = "p95"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 2000
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    FunctionName = each.value
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+}
+
+############################
+# API Gateway (HTTP API) alarms
+############################
+
+# 5XX spikes
+resource "aws_cloudwatch_metric_alarm" "apigw_5xx" {
+  alarm_name          = "${var.name_prefix}-apigw-5xx"
+  alarm_description   = "API Gateway 5XX > 0 (5m)"
+  namespace           = "AWS/ApiGateway"
+  metric_name         = "5XXError"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    ApiId = var.api_id
+    Stage = var.api_stage
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# Latency p95 (tune later)
+resource "aws_cloudwatch_metric_alarm" "apigw_latency_p95" {
+  alarm_name          = "${var.name_prefix}-apigw-latencyp95"
+  alarm_description   = "API Gateway Latency p95 > 1500ms (5m)"
+  namespace           = "AWS/ApiGateway"
+  metric_name         = "Latency"
+  extended_statistic  = "p95"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1500
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  dimensions = {
+    ApiId = var.api_id
+    Stage = var.api_stage
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+}
+
+############################
+# WAF Logging -> CloudWatch Logs (optional)
+############################
+
+# Log group name must start with aws-waf-logs- :contentReference[oaicite:5]{index=5}
+resource "aws_cloudwatch_log_group" "waf" {
+  count             = var.waf_web_acl_arn != null && var.waf_log_group_name != null ? 1 : 0
+  name              = var.waf_log_group_name
+  retention_in_days = 30
+}
+
+# Resource policy to allow WAF log delivery to CloudWatch Logs.
+# (You need logs:PutResourcePolicy permission in your Terraform IAM principal.)
+resource "aws_cloudwatch_log_resource_policy" "waf_logs_policy" {
+  count       = var.waf_web_acl_arn != null && var.waf_log_group_name != null ? 1 : 0
+  policy_name = "AWSWAF-LOGS"
+
+  policy_document = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid      = "AWSWAFLogsToCloudWatch",
+        Effect   = "Allow",
+        Principal = { Service = "delivery.logs.amazonaws.com" },
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"],
+        Resource = "${aws_cloudwatch_log_group.waf[0].arn}:*"
+      }
+    ]
+  })
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "waf" {
+  count = var.waf_web_acl_arn != null && var.waf_log_group_name != null ? 1 : 0
+
+  resource_arn            = var.waf_web_acl_arn
+  log_destination_configs = [aws_cloudwatch_log_group.waf[0].arn]
+
+  # Redact sensitive headers (keep adding as needed)
+  redacted_fields {
+    single_header { name = "authorization" }
+  }
+  redacted_fields {
+    single_header { name = "cookie" }
+  }
+  redacted_fields {
+    single_header { name = "x-api-key" }
+  }
+}
+
+# Optional WAF alarm: blocked requests spike
+resource "aws_cloudwatch_metric_alarm" "waf_blocked" {
+  count               = var.waf_web_acl_arn != null ? 1 : 0
+  alarm_name          = "${var.name_prefix}-waf-blocked-spike"
+  alarm_description   = "WAF BlockedRequests > 100 (5m)"
+  namespace           = "AWS/WAFV2"
+  metric_name         = "BlockedRequests"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 100
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+
+  # WebACL dimension formatting differs by scope; easiest path:
+  # set this after you confirm metric dimensions in CloudWatch Metrics UI.
+  # Keeping alarm stubbed out prevents false assumptions.
+  actions_enabled = false
+}
+
+infra/modules/ops/outputs.tf
+output "alerts_topic_arn" {
+  value = aws_sns_topic.alerts.arn
+}
+
+Step 2 — Add a Cost/Budget module (provider alias in us-east-1)
+
+Create:
+
+infra/modules/cost/
+  main.tf
+  variables.tf
+  outputs.tf
+
+infra/modules/cost/variables.tf
+variable "name_prefix" {
+  type = string
+}
+
+variable "alerts_topic_arn" {
+  type = string
+}
+
+variable "monthly_budget_usd" {
+  type = number
+  default = 25
+}
+
+variable "budget_alert_thresholds" {
+  type    = list(number)
+  default = [80, 100]
+}
+
+variable "anomaly_threshold_usd" {
+  type    = number
+  default = 5
+}
+
+infra/modules/cost/main.tf
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
+############################
+# AWS Budgets (no actions => no additional charge) :contentReference[oaicite:6]{index=6}
+############################
+resource "aws_budgets_budget" "monthly_cost" {
+  name         = "${var.name_prefix}-monthly-cost"
+  budget_type  = "COST"
+  limit_amount = tostring(var.monthly_budget_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  dynamic "notification" {
+    for_each = toset(var.budget_alert_thresholds)
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                 = notification.value
+      threshold_type            = "PERCENTAGE"
+      notification_type         = "ACTUAL"
+      subscriber_sns_topic_arns  = [var.alerts_topic_arn]
+    }
+  }
+
+  # Forecasted 100% alert
+  notification {
+    comparison_operator         = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "FORECASTED"
+    subscriber_sns_topic_arns  = [var.alerts_topic_arn]
+  }
+}
+
+############################
+# Cost Anomaly Detection (no additional charge for managed monitoring) :contentReference[oaicite:7]{index=7}
+############################
+resource "aws_ce_anomaly_monitor" "all_services" {
+  name              = "${var.name_prefix}-anomaly-monitor"
+  monitor_type      = "DIMENSIONAL"
+  monitor_dimension = "SERVICE"
+}
+
+resource "aws_ce_anomaly_subscription" "alerts" {
+  name      = "${var.name_prefix}-anomaly-subscription"
+  frequency = "DAILY"
+
+  monitor_arn_list = [aws_ce_anomaly_monitor.all_services.arn]
+
+  threshold_expression {
+    dimension {
+      key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+      match_options = ["GREATER_THAN_OR_EQUAL"]
+      values        = [tostring(var.anomaly_threshold_usd)]
+    }
+  }
+
+  subscriber {
+    type    = "SNS"
+    address = var.alerts_topic_arn
+  }
+}
+
+infra/modules/cost/outputs.tf
+output "budget_name" {
+  value = aws_budgets_budget.monthly_cost.name
+}
+
+Step 3 — Wire modules into your environment
+
+In infra/envs/prod/main.tf (or dev/main.tf), add a second provider for cost tooling:
+
+provider "aws" {
+  region = "us-west-2"
+}
+
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+
+Then call modules:
+
+module "ops" {
+  source = "../../modules/ops"
+
+  name_prefix = "nettools-prod"
+  alert_email = "YOUR_EMAIL_HERE"
+
+  api_id    = module.api.api_id
+  api_stage = "$default"
+
+  lambda_function_names = [
+    module.api.lambda_dns_name,
+    module.api.lambda_rdap_name,
+    module.api.lambda_tls_name,
+    module.api.lambda_headers_name,
+    module.api.lambda_pwned_name
+  ]
+
+  # If you have a WAF ACL attached to API/CloudFront:
+  waf_web_acl_arn      = module.waf.web_acl_arn
+  waf_log_group_name   = "aws-waf-logs-nettools-prod"
+  monthly_budget_usd   = 25
+}
+
+module "cost" {
+  source = "../../modules/cost"
+  providers = { aws = aws.us_east_1 }
+
+  name_prefix      = "nettools-prod"
+  alerts_topic_arn = module.ops.alerts_topic_arn
+
+  monthly_budget_usd     = 25
+  anomaly_threshold_usd  = 5
+}
+
+
+Note: adjust the module outputs (module.api.lambda_*_name, module.waf.web_acl_arn) to match your actual API/WAF module outputs.
+
+Step 4 — Deploy
+cd infra/envs/prod
+terraform init
+terraform apply
+
+Critical manual step
+
+Confirm the SNS email subscription: you’ll receive an AWS email; click “Confirm subscription” or alerts won’t deliver.
+
+Step 5 — Validate (tight feedback loop)
+5.1 Confirm alarms exist
+
+AWS Console → CloudWatch → Alarms → verify:
+
+nettools-prod-lambda-errors-*
+
+nettools-prod-apigw-5xx
+
+etc.
+
+5.2 Force a Lambda error (safe)
+
+Temporarily call an endpoint with invalid payload (e.g., missing required field) and ensure your Lambda returns a 4xx/5xx based on your handler.
+
+Confirm Errors increments → alarm triggers → SNS email fires.
+
+5.3 Confirm WAF logs
+
+AWS Console → CloudWatch Logs → log group aws-waf-logs-nettools-prod
+
+Hit your API from browser and verify log events appear.
+
+Verify redaction: confirm authorization/cookie aren’t present.
+
+Cost: realistic monthly range (what drives it)
+Fixed-ish costs (if enabled)
+
+AWS WAF: charged per Web ACL, per rule, and per request 
+Amazon Web Services, Inc.
+
+For a small personal project, WAF can easily become the largest predictable line item.
+
+Usage-based (usually tiny for personal use)
+
+Lambda: per-request + compute 
+Amazon Web Services, Inc.
+
+API Gateway HTTP API: per-request 
+Amazon Web Services, Inc.
+
+CloudWatch Alarms: per alarm-month (and logs ingestion/storage) 
+Amazon Web Services, Inc.
+
+Budgets: no additional charge if you don’t use budget actions 
+Terraform Registry
+
+Cost Anomaly Detection: managed monitoring expansion is “no additional charge” 
+Amazon Web Services, Inc.
+
+Cognito: 1 user is typically near-zero
+
+Two practical scenarios
+
+Personal use (10k API calls/month, minimal logs)
+
+Likely a few dollars/month without WAF
+
+With WAF enabled, often ~$10+/month depending on how many rules you configure 
+Amazon Web Services, Inc.
+
+Moderate (1M API calls/month)
+
+API Gateway HTTP API + Lambda still typically single-digit dollars in many cases 
+Amazon Web Services, Inc.
++1
+
+WAF request fees start to matter (still usually smaller than base WAF+rules unless traffic is high) 
+Amazon Web Services, Inc.
+
+Optional cost-safety lever (worth considering)
+
+CloudFront now has flat-rate plans starting at $0/month with explicit request/data allowances 
+Amazon Web Services, Inc.
+. If you want predictable spend, you can choose that approach later (it changes how you think about CloudFront/WAF cost).
+
+Hardening tweaks you requested (apply now)
+
+CORS: set allowed origins to your CloudFront URL only (not *).
+
+WAF logging redaction: already included above (authorization/cookie/x-api-key).
+
+Alarms tuning:
+
+Change Duration p95 thresholds once you know normal latency.
+
+Consider a silence window (composite alarm or ops runbook) if you don’t want noisy email.
+
+Next deliverable I can generate cleanly
+
+If you paste your current Terraform module outputs (API module outputs + WAF module outputs + list of Lambda function names), I can return the exact envs/prod wiring block (no placeholders) and a WAF alarm that uses the correct CloudWatch metric dimensions for your ACL (those dimensions vary by scope).
+
+what is RDAP? Also have you suggested a front end UI? Can you take UI/UX methodologies in to consideration and provide an excelent static front end. 
+Thought for 8s
+RDAP: what it is and why you want it
+
+RDAP (Registration Data Access Protocol) is the modern replacement for “classic WHOIS” lookups. Instead of unstructured text over port 43, RDAP provides structured JSON over HTTPS for:
+
+IP address allocations (who holds the netblock)
+
+ASNs (where available)
+
+Domains (registrar/registry data, statuses, nameservers, etc.)
+
+Why it’s better than WHOIS:
+
+Consistent parsing (JSON)
+
+HTTPS transport
+
+Standard fields (less brittle than scraping arbitrary WHOIS text)
+
+Better for automation and API responses
+
+In your tool, RDAP is the correct backend for “WHOIS/ASN info” whenever possible.
+
+Frontend UI/UX: what I recommend (static, fast, “engineer tool” feel)
+UX goals (methodologies baked in)
+
+Time-to-value < 10 seconds: open → pick tool → paste input → get output
+
+Progressive disclosure: show “common fields” first; advanced options behind an “Advanced” accordion
+
+Consistency: every tool uses the same layout pattern (Input → Output → Copy/Redact)
+
+Safety affordances: secrets masked by default; explicit “Remote vantage” labeling
+
+Zero learning curve: tool pages read like runbooks
+
+Information architecture
+
+Sidebar (grouped, searchable):
+
+Offline tools (no backend)
+
+Subnet/CIDR (sipcalc-like)
+
+Summarization
+
+Regex helper (grep -E / -P)
+
+Password generator
+
+PGP/CSR/self-signed cert generator
+
+Encoding/hash/JWT
+
+Command templates library (vendor/feature filters)
+
+Remote tools (AWS-backed; clearly labeled)
+
+DNS (DoH)
+
+RDAP lookup
+
+TLS inspect
+
+HTTP headers scan
+
+Top bar:
+
+Search (type to jump to tool)
+
+“Remote vantage: AWS us-west-2” indicator when a remote tool is selected
+
+User menu: Sign out
+
+Main pane layout (standardized for every tool):
+
+Left column: Inputs
+
+Right column: Output
+
+Tabs: Result | Raw JSON | Notes
+
+Buttons: Copy | Copy (redacted) | Download (JSON)
+
+Bottom drawer (optional):
+
+“Recent” history (last 20 runs) stored in session storage only
+
+Visual design system (clean, technical)
+
+Light/dark mode
+
+Monospace blocks for outputs and command templates
+
+Big, obvious copy buttons
+
+Minimal colors; rely on:
+
+Neutral surfaces
+
+One accent for primary actions
+
+Status colors only for: success/warn/error
+
+Clear badges:
+
+OFFLINE
+
+REMOTE (AWS)
+
+Accessibility basics:
+
+All form fields have labels + help text
+
+Keyboard navigation works end-to-end
+
+Output blocks have “Copy” and “Copy redacted” as real buttons (not icons only)
+
+Implementation stack (static SPA)
+
+Recommended:
+
+React + Vite + TypeScript
+
+Tailwind + shadcn/ui (fast to build a polished UI)
+
+react-router (tool routing)
+
+react-hook-form + zod (tight validation)
+
+oidc-client-ts (Cognito Hosted UI login; you already started this)
+
+Folder structure (frontend)
+frontend/src/
+  app/
+    App.tsx
+    routes.tsx
+    layout/
+      Shell.tsx
+      Sidebar.tsx
+      Topbar.tsx
+  tools/
+    registry.ts
+    offline/
+      SubnetTool.tsx
+      RegexTool.tsx
+      CommandTemplatesTool.tsx
+    remote/
+      DnsTool.tsx
+      RdapTool.tsx
+      TlsTool.tsx
+      HeadersTool.tsx
+  components/
+    OutputCard.tsx
+    CopyButtons.tsx
+    RemoteBadge.tsx
+    JsonViewer.tsx
+    AdvancedSection.tsx
+  lib/
+    api.ts
+    redact.ts
+    format.ts
+    auth.ts
+
+UI skeleton code (drop-in starting point)
+1) Tool registry (drives sidebar + routes)
+// frontend/src/tools/registry.ts
+export type ToolKind = "offline" | "remote";
+
+export type Tool = {
+  id: string;
+  name: string;
+  kind: ToolKind;
+  group: string;
+  path: string;
+  component: React.LazyExoticComponent<() => JSX.Element>;
+  description?: string;
+};
+
+import React from "react";
+
+export const tools: Tool[] = [
+  {
+    id: "subnet",
+    name: "Subnet / CIDR",
+    kind: "offline",
+    group: "Offline",
+    path: "/tools/subnet",
+    component: React.lazy(() => import("./offline/SubnetTool")),
+    description: "sipcalc-like subnet calculator (runs locally)",
+  },
+  {
+    id: "regex",
+    name: "Regex Helper",
+    kind: "offline",
+    group: "Offline",
+    path: "/tools/regex",
+    component: React.lazy(() => import("./offline/RegexTool")),
+  },
+  {
+    id: "cmdlib",
+    name: "Command Templates",
+    kind: "offline",
+    group: "Offline",
+    path: "/tools/cmdlib",
+    component: React.lazy(() => import("./offline/CommandTemplatesTool")),
+  },
+  {
+    id: "dns",
+    name: "DNS (DoH)",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/dns",
+    component: React.lazy(() => import("./remote/DnsTool")),
+  },
+  {
+    id: "rdap",
+    name: "RDAP Lookup",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/rdap",
+    component: React.lazy(() => import("./remote/RdapTool")),
+  },
+  {
+    id: "tls",
+    name: "TLS Inspect",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/tls",
+    component: React.lazy(() => import("./remote/TlsTool")),
+  },
+  {
+    id: "headers",
+    name: "HTTP Headers Scan",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/headers",
+    component: React.lazy(() => import("./remote/HeadersTool")),
+  },
+];
+
+2) Shell layout (sidebar + topbar + content)
+// frontend/src/app/layout/Shell.tsx
+import { Outlet, useLocation } from "react-router-dom";
+import Sidebar from "./Sidebar";
+import Topbar from "./Topbar";
+
+export default function Shell() {
+  const loc = useLocation();
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="flex">
+        <Sidebar />
+        <div className="flex-1">
+          <Topbar path={loc.pathname} />
+          <main className="p-4 md:p-6">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+3) Sidebar with search + grouping
+// frontend/src/app/layout/Sidebar.tsx
+import { useMemo, useState } from "react";
+import { NavLink } from "react-router-dom";
+import { tools } from "../../tools/registry";
+
+export default function Sidebar() {
+  const [q, setQ] = useState("");
+
+  const grouped = useMemo(() => {
+    const filtered = tools.filter(t =>
+      t.name.toLowerCase().includes(q.toLowerCase()) ||
+      (t.description || "").toLowerCase().includes(q.toLowerCase())
+    );
+    const map = new Map<string, typeof filtered>();
+    for (const t of filtered) {
+      map.set(t.group, [...(map.get(t.group) || []), t]);
+    }
+    return Array.from(map.entries());
+  }, [q]);
+
+  return (
+    <aside className="w-72 border-r border-border p-4 hidden md:block">
+      <div className="mb-4">
+        <div className="text-lg font-semibold">NetKnife</div>
+        <div className="text-xs text-muted-foreground">Private tools</div>
+      </div>
+
+      <input
+        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        placeholder="Search tools…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+
+      <div className="mt-4 space-y-4">
+        {grouped.map(([group, items]) => (
+          <div key={group}>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              {group}
+            </div>
+            <div className="space-y-1">
+              {items.map((t) => (
+                <NavLink
+                  key={t.id}
+                  to={t.path}
+                  className={({ isActive }) =>
+                    `block rounded-md px-3 py-2 text-sm ${
+                      isActive ? "bg-muted font-medium" : "hover:bg-muted"
+                    }`
+                  }
+                >
+                  <div className="flex items-center justify-between">
+                    <span>{t.name}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
+                      {t.kind === "remote" ? "REMOTE" : "OFFLINE"}
+                    </span>
+                  </div>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+4) Output card with Copy + Copy(redacted)
+// frontend/src/components/OutputCard.tsx
+import CopyButtons from "./CopyButtons";
+
+export default function OutputCard({
+  title,
+  value,
+  redact,
+}: {
+  title: string;
+  value: string;
+  redact?: (s: string) => string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="font-medium">{title}</div>
+        <CopyButtons value={value} redact={redact} />
+      </div>
+      <pre className="p-4 text-sm overflow-auto whitespace-pre-wrap font-mono">
+        {value || ""}
+      </pre>
+    </div>
+  );
+}
+
+// frontend/src/components/CopyButtons.tsx
+export default function CopyButtons({
+  value,
+  redact,
+}: {
+  value: string;
+  redact?: (s: string) => string;
+}) {
+  async function copy(text: string) {
+    await navigator.clipboard.writeText(text);
+  }
+
+  return (
+    <div className="flex gap-2">
+      <button
+        className="px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground"
+        onClick={() => copy(value)}
+        disabled={!value}
+      >
+        Copy
+      </button>
+      <button
+        className="px-3 py-1.5 rounded-md text-sm bg-secondary text-secondary-foreground"
+        onClick={() => copy(redact ? redact(value) : value)}
+        disabled={!value}
+      >
+        Copy (redacted)
+      </button>
+    </div>
+  );
+}
+
+Tool UX patterns to apply consistently
+
+For every tool panel:
+
+“Example inputs” button to populate fields
+
+“Advanced” accordion for optional flags
+
+Output shows:
+
+human summary (top)
+
+raw JSON (tab)
+
+“Notes” (pitfalls, how to interpret)
+
+Always show: Offline/Remote badge + what data is sent to AWS (for remote)
+
+Next step (so the UI is genuinely “excellent”)
+
+If you confirm:
+
+React/Vite + Tailwind + shadcn is OK, and
+
+You want desktop-first with mobile fallback,
+
+I can generate:
+
+A complete frontend/src/ scaffold (routes, shell, 4 remote panels, 3 offline panels)
+
+A polished command-template browser panel (vendor/feature/task filters + searchable templates)
+
+A consistent “InputForm” component with zod validation and error handling
+
+A “Remote request disclosure” component (shows what leaves the browser)
+
+You already have the backend endpoints; the UI above is built to make them feel like a cohesive engineer-grade tool rather than a set of pages.
+
+it would also be cool to have a peeringdb queries be available as well. 
+
+confirming
+
+React/Vite + Tailwind + shadcn is OK, and
+
+You want desktop-first with mobile fallback,
+
+also generate:
+
+A complete frontend/src/ scaffold (routes, shell, 4 remote panels, 3 offline panels)
+
+A polished command-template browser panel (vendor/feature/task filters + searchable templates)
+
+A consistent “InputForm” component with zod validation and error handling
+
+A “Remote request disclosure” component (shows what leaves the browser)
+Thought for 35s
+PeeringDB addition (what it is + how we’ll query it)
+
+PeeringDB provides a public JSON REST API at https://www.peeringdb.com/api/… 
+docs.peeringdb.com
++1
+. Example: query a network by ASN with GET https://www.peeringdb.com/api/net?asn=42 
+docs.peeringdb.com
+. There are query limits (anonymous 20/min per IP; authenticated higher) so you should keep your DynamoDB TTL cache and keep the UI “search as submit” (not typeahead) 
+docs.peeringdb.com
+.
+
+Because browser CORS behavior can vary over time, the most reliable approach is: Frontend → your API (/peeringdb) → Lambda → PeeringDB (fixed allowlist host). (PeeringDB has had CORS-related changes historically.) 
+GitHub
++1
+
+Frontend scaffold (React/Vite + Tailwind + shadcn) — complete frontend/src/
+0) Install + initialize
+
+From repo root:
+
+cd frontend
+
+# 1) Create project (if not created yet)
+npm create vite@latest . -- --template react-ts
+
+# 2) Core deps
+npm i react-router-dom
+npm i react-hook-form zod @hookform/resolvers
+npm i oidc-client-ts
+
+# 3) Tailwind
+npm i -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+
+# 4) shadcn/ui
+npx shadcn@latest init
+
+# 5) Add shadcn components used in this scaffold
+npx shadcn@latest add button input textarea card tabs badge separator select accordion alert-dialog toast
+
+Tailwind config
+
+tailwind.config.js:
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  theme: { extend: {} },
+  plugins: [],
+};
+
+
+src/index.css:
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+
+1) Environment variables
+
+Create frontend/.env.example:
+
+VITE_APP_NAME=NetKnife
+VITE_API_URL=https://YOUR_API_ID.execute-api.us-west-2.amazonaws.com
+VITE_REGION=us-west-2
+
+# Cognito Hosted UI / OIDC
+VITE_COGNITO_DOMAIN=https://YOUR_DOMAIN_PREFIX.auth.us-west-2.amazoncognito.com
+VITE_COGNITO_CLIENT_ID=YOUR_APP_CLIENT_ID
+VITE_COGNITO_ISSUER=https://cognito-idp.us-west-2.amazonaws.com/YOUR_USER_POOL_ID
+VITE_OIDC_REDIRECT_URI=https://tools.yourdomain.com/callback
+VITE_OIDC_POST_LOGOUT_REDIRECT_URI=https://tools.yourdomain.com/
+
+
+Copy it to .env and fill values:
+
+cp .env.example .env
+
+2) frontend/src/ scaffold (copy/paste files)
+2.1 src/main.tsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { RouterProvider } from "react-router-dom";
+import { router } from "./app/router";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
+  </React.StrictMode>
+);
+
+2.2 src/app/router.tsx
+import React, { Suspense } from "react";
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import Shell from "./ui/Shell";
+import LoginPage from "./views/LoginPage";
+import CallbackPage from "./views/CallbackPage";
+import { tools } from "../tools/registry";
+import ProtectedRoute from "./views/ProtectedRoute";
+
+function ToolLoader({ id }: { id: string }) {
+  const tool = tools.find((t) => t.id === id);
+  if (!tool) return <div>Tool not found</div>;
+  const Cmp = tool.component;
+  return (
+    <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
+      <Cmp />
+    </Suspense>
+  );
+}
+
+const defaultToolPath = tools[0]?.path ?? "/login";
+
+export const router = createBrowserRouter([
+  { path: "/login", element: <LoginPage /> },
+  { path: "/callback", element: <CallbackPage /> },
+
+  {
+    path: "/",
+    element: (
+      <ProtectedRoute>
+        <Shell />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <Navigate to={defaultToolPath} replace /> },
+      ...tools.map((t) => ({
+        path: t.path.replace(/^\//, ""),
+        element: <ToolLoader id={t.id} />,
+      })),
+    ],
+  },
+]);
+
+2.3 src/app/views/ProtectedRoute.tsx
+import { ReactNode, useEffect, useState } from "react";
+import { getUser } from "../../lib/auth";
+import { Navigate } from "react-router-dom";
+
+export default function ProtectedRoute({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+  const [authed, setAuthed] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const u = await getUser();
+      setAuthed(!!u && !u.expired);
+      setReady(true);
+    })();
+  }, []);
+
+  if (!ready) return <div className="p-6 text-sm text-muted-foreground">Loading session…</div>;
+  if (!authed) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+2.4 src/app/views/LoginPage.tsx
+import { login } from "../../lib/auth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-6 space-y-3">
+          <div className="text-xl font-semibold">NetKnife</div>
+          <div className="text-sm text-muted-foreground">
+            Private tools. Sign in to continue.
+          </div>
+          <Button className="w-full" onClick={() => login()}>
+            Sign in
+          </Button>
+          <div className="text-xs text-muted-foreground">
+            No self-service account creation.
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+2.5 src/app/views/CallbackPage.tsx
+import { useEffect } from "react";
+import { completeLogin } from "../../lib/auth";
+import { useNavigate } from "react-router-dom";
+
+export default function CallbackPage() {
+  const nav = useNavigate();
+
+  useEffect(() => {
+    (async () => {
+      await completeLogin();
+      nav("/", { replace: true });
+    })();
+  }, [nav]);
+
+  return <div className="p-6 text-sm text-muted-foreground">Completing sign-in…</div>;
+}
+
+3) App shell + navigation
+3.1 src/app/ui/Shell.tsx
+import { Outlet, useLocation } from "react-router-dom";
+import Sidebar from "./Sidebar";
+import Topbar from "./Topbar";
+
+export default function Shell() {
+  const loc = useLocation();
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="flex">
+        <Sidebar />
+        <div className="flex-1 min-w-0">
+          <Topbar pathname={loc.pathname} />
+          <main className="p-4 md:p-6 max-w-[1400px]">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+3.2 src/app/ui/Sidebar.tsx
+import { useMemo, useState } from "react";
+import { NavLink } from "react-router-dom";
+import { tools } from "../../tools/registry";
+import { Badge } from "@/components/ui/badge";
+
+export default function Sidebar() {
+  const [q, setQ] = useState("");
+
+  const groups = useMemo(() => {
+    const filtered = tools.filter((t) => {
+      const hay = `${t.name} ${t.description ?? ""}`.toLowerCase();
+      return hay.includes(q.toLowerCase());
+    });
+
+    const map = new Map<string, typeof filtered>();
+    for (const t of filtered) map.set(t.group, [...(map.get(t.group) || []), t]);
+    return Array.from(map.entries());
+  }, [q]);
+
+  return (
+    <aside className="w-72 border-r border-border p-4 hidden md:block">
+      <div className="mb-4">
+        <div className="text-lg font-semibold">NetKnife</div>
+        <div className="text-xs text-muted-foreground">Swiss-army tools</div>
+      </div>
+
+      <input
+        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        placeholder="Search tools…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+
+      <div className="mt-4 space-y-5">
+        {groups.map(([group, items]) => (
+          <div key={group}>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              {group}
+            </div>
+            <div className="space-y-1">
+              {items.map((t) => (
+                <NavLink
+                  key={t.id}
+                  to={t.path}
+                  className={({ isActive }) =>
+                    `block rounded-md px-3 py-2 text-sm ${
+                      isActive ? "bg-muted font-medium" : "hover:bg-muted"
+                    }`
+                  }
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate">{t.name}</span>
+                    <Badge variant={t.kind === "remote" ? "destructive" : "secondary"}>
+                      {t.kind === "remote" ? "REMOTE" : "OFFLINE"}
+                    </Badge>
+                  </div>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+3.3 src/app/ui/Topbar.tsx
+import { Button } from "@/components/ui/button";
+import { logout } from "../../lib/auth";
+
+export default function Topbar({ pathname }: { pathname: string }) {
+  return (
+    <div className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
+      <div className="px-4 md:px-6 py-3 flex items-center justify-between">
+        <div className="text-sm text-muted-foreground truncate">{pathname}</div>
+        <Button variant="secondary" onClick={() => logout()}>
+          Sign out
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+4) Tool registry (4 remote panels + 3 offline panels + PeeringDB)
+4.1 src/tools/registry.tsx
+import React from "react";
+
+export type ToolKind = "offline" | "remote";
+
+export type Tool = {
+  id: string;
+  name: string;
+  kind: ToolKind;
+  group: string;
+  path: string;
+  component: React.LazyExoticComponent<() => JSX.Element>;
+  description?: string;
+};
+
+export const tools: Tool[] = [
+  // OFFLINE (3)
+  {
+    id: "subnet",
+    name: "Subnet / CIDR",
+    kind: "offline",
+    group: "Offline",
+    path: "/tools/subnet",
+    component: React.lazy(() => import("./offline/SubnetTool")),
+    description: "sipcalc-like subnet calculator (browser-only)",
+  },
+  {
+    id: "regex",
+    name: "Regex Helper",
+    kind: "offline",
+    group: "Offline",
+    path: "/tools/regex",
+    component: React.lazy(() => import("./offline/RegexTool")),
+    description: "Build grep -E / grep -P patterns with examples",
+  },
+  {
+    id: "cmdlib",
+    name: "Command Templates",
+    kind: "offline",
+    group: "Offline",
+    path: "/tools/cmdlib",
+    component: React.lazy(() => import("./offline/CommandTemplatesTool")),
+    description: "Searchable vendor/feature/task command library",
+  },
+
+  // REMOTE (AWS-backed) (4 + PeeringDB)
+  {
+    id: "dns",
+    name: "DNS (DoH)",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/dns",
+    component: React.lazy(() => import("./remote/DnsTool")),
+  },
+  {
+    id: "rdap",
+    name: "RDAP Lookup",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/rdap",
+    component: React.lazy(() => import("./remote/RdapTool")),
+  },
+  {
+    id: "tls",
+    name: "TLS Inspect",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/tls",
+    component: React.lazy(() => import("./remote/TlsTool")),
+  },
+  {
+    id: "headers",
+    name: "HTTP Headers Scan",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/headers",
+    component: React.lazy(() => import("./remote/HeadersTool")),
+  },
+  {
+    id: "peeringdb",
+    name: "PeeringDB Query",
+    kind: "remote",
+    group: "Remote (AWS)",
+    path: "/tools/peeringdb",
+    component: React.lazy(() => import("./remote/PeeringDbTool")),
+    description: "Query PeeringDB via your API proxy",
+  },
+];
+
+5) Shared components (InputForm + Remote disclosure + Output)
+5.1 src/components/RemoteDisclosure.tsx
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+
+export default function RemoteDisclosure({
+  title = "Remote tool",
+  region,
+  sends,
+  notes,
+}: {
+  title?: string;
+  region: string;
+  sends: string[];
+  notes?: string;
+}) {
+  return (
+    <Card className="border-destructive/30">
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-medium">{title}</div>
+          <Badge variant="destructive">REMOTE (AWS)</Badge>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          Runs from AWS ({region}). Results reflect AWS vantage, not the user’s local network path.
+        </div>
+        <div className="text-sm">
+          <div className="font-medium mb-1">Data sent to AWS:</div>
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {sends.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+        </div>
+        {notes ? <div className="text-xs text-muted-foreground">{notes}</div> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+5.2 src/components/OutputCard.tsx
+import { Card, CardContent } from "@/components/ui/card";
+import CopyButtons from "./CopyButtons";
+
+export default function OutputCard({
+  title,
+  value,
+  redact,
+}: {
+  title: string;
+  value: string;
+  redact?: (s: string) => string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="font-medium">{title}</div>
+          <CopyButtons value={value} redact={redact} />
+        </div>
+        <pre className="p-4 text-sm overflow-auto whitespace-pre-wrap font-mono min-h-[140px]">
+          {value || ""}
+        </pre>
+      </CardContent>
+    </Card>
+  );
+}
+
+5.3 src/components/CopyButtons.tsx
+import { Button } from "@/components/ui/button";
+
+export default function CopyButtons({
+  value,
+  redact,
+}: {
+  value: string;
+  redact?: (s: string) => string;
+}) {
+  const copy = async (txt: string) => navigator.clipboard.writeText(txt);
+
+  return (
+    <div className="flex gap-2">
+      <Button size="sm" onClick={() => copy(value)} disabled={!value}>
+        Copy
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => copy(redact ? redact(value) : value)}
+        disabled={!value}
+      >
+        Copy (redacted)
+      </Button>
+    </div>
+  );
+}
+
+5.4 src/components/InputForm.tsx (react-hook-form + zod)
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, FieldValues, Path, UseFormReturn } from "react-hook-form";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+
+export function useZodForm<TSchema extends z.ZodTypeAny>(schema: TSchema, defaults: z.infer<TSchema>) {
+  return useForm<z.infer<TSchema>>({
+    resolver: zodResolver(schema),
+    defaultValues: defaults,
+    mode: "onSubmit",
+  });
+}
+
+export function FormRow({
+  label,
+  help,
+  children,
+  error,
+}: {
+  label: string;
+  help?: string;
+  children: React.ReactNode;
+  error?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="text-sm font-medium">{label}</div>
+      {help ? <div className="text-xs text-muted-foreground">{help}</div> : null}
+      {children}
+      {error ? <div className="text-xs text-destructive">{error}</div> : null}
+    </div>
+  );
+}
+
+export function SubmitRow({
+  isSubmitting,
+  onExample,
+}: {
+  isSubmitting: boolean;
+  onExample?: () => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      <Button type="submit" disabled={isSubmitting}>
+        Run
+      </Button>
+      {onExample ? (
+        <Button type="button" variant="secondary" onClick={onExample} disabled={isSubmitting}>
+          Example
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+6) Auth + API client
+6.1 src/lib/auth.ts
+import { UserManager, WebStorageStateStore } from "oidc-client-ts";
+
+const cognitoDomain = import.meta.env.VITE_COGNITO_DOMAIN;
+const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
+const issuer = import.meta.env.VITE_COGNITO_ISSUER;
+const redirectUri = import.meta.env.VITE_OIDC_REDIRECT_URI;
+const postLogoutRedirectUri = import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI;
+
+const mgr = new UserManager({
+  authority: issuer,
+  client_id: clientId,
+  redirect_uri: redirectUri,
+  post_logout_redirect_uri: postLogoutRedirectUri,
+  response_type: "code",
+  scope: "openid email profile",
+  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+  automaticSilentRenew: false,
+});
+
+export async function login() {
+  // Cognito hosted UI works via standard OIDC authorize URL.
+  await mgr.signinRedirect({
+    extraQueryParams: {
+      // Some Cognito setups prefer the hosted UI domain as the redirect base
+      // (issuer remains cognito-idp). Keep as-is unless you hit issues.
+    },
+  });
+}
+
+export async function completeLogin() {
+  await mgr.signinRedirectCallback();
+}
+
+export async function logout() {
+  await mgr.signoutRedirect();
+}
+
+export async function getUser() {
+  return mgr.getUser();
+}
+
+export async function getAccessToken(): Promise<string | null> {
+  const u = await mgr.getUser();
+  if (!u || u.expired) return null;
+  return u.access_token;
+}
+
+6.2 src/lib/api.ts
+import { getAccessToken } from "./auth";
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+export class ApiError extends Error {
+  status: number;
+  body: any;
+  constructor(status: number, body: any) {
+    super(`API error ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+export async function apiPost<T>(path: string, body: any): Promise<T> {
+  const token = await getAccessToken();
+  if (!token) throw new ApiError(401, { error: "Not authenticated" });
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  let data: any = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+
+  if (!res.ok) throw new ApiError(res.status, data);
+  return data as T;
+}
+
+6.3 src/lib/redact.ts
+export function redactSecrets(s: string) {
+  return s
+    .replace(/(authorization:\s*Bearer\s+)[A-Za-z0-9._-]+/gi, "$1***REDACTED***")
+    .replace(/(--auth-password\s+)(\S+)/gi, "$1***REDACTED***")
+    .replace(/(-A\s+)(\S+)/g, "$1***REDACTED***")
+    .replace(/(-X\s+)(\S+)/g, "$1***REDACTED***")
+    .replace(/(password["']?\s*[:=]\s*["']?)([^"'\s]+)/gi, "$1***REDACTED***");
+}
+
+7) Remote panels (DNS/RDAP/TLS/Headers/PeeringDB)
+
+Each uses the same UX pattern:
+
+RemoteDisclosure
+
+Input (zod + RHF)
+
+OutputCard (pretty JSON + copy/redact)
+
+7.1 src/tools/remote/DnsTool.tsx
+import { z } from "zod";
+import { useState } from "react";
+import RemoteDisclosure from "../../components/RemoteDisclosure";
+import OutputCard from "../../components/OutputCard";
+import { FormRow, SubmitRow, useZodForm } from "../../components/InputForm";
+import { Input } from "@/components/ui/input";
+import { apiPost } from "../../lib/api";
+import { redactSecrets } from "../../lib/redact";
+
+const schema = z.object({
+  name: z.string().min(1).max(253),
+  type: z.enum(["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV"]).default("A"),
+});
+
+export default function DnsTool() {
+  const form = useZodForm(schema, { name: "example.com", type: "A" });
+  const [out, setOut] = useState("");
+
+  return (
+    <div className="space-y-4">
+      <RemoteDisclosure
+        region={import.meta.env.VITE_REGION}
+        sends={["domain name", "record type"]}
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit(async (v) => {
+            const r = await apiPost<any>("/dns", v);
+            setOut(JSON.stringify(r, null, 2));
+          })}
+        >
+          <FormRow label="Name" error={form.formState.errors.name?.message}>
+            <Input {...form.register("name")} placeholder="example.com" />
+          </FormRow>
+
+          <FormRow label="Type" error={form.formState.errors.type?.message}>
+            <Input {...form.register("type")} placeholder="A" />
+            <div className="text-xs text-muted-foreground">A, AAAA, CNAME, MX, TXT, NS, SRV</div>
+          </FormRow>
+
+          <SubmitRow
+            isSubmitting={form.formState.isSubmitting}
+            onExample={() => form.reset({ name: "cloudflare.com", type: "A" })}
+          />
+        </form>
+
+        <OutputCard title="Result" value={out} redact={redactSecrets} />
+      </div>
+    </div>
+  );
+}
+
+7.2 src/tools/remote/RdapTool.tsx
+import { z } from "zod";
+import { useState } from "react";
+import RemoteDisclosure from "../../components/RemoteDisclosure";
+import OutputCard from "../../components/OutputCard";
+import { FormRow, SubmitRow, useZodForm } from "../../components/InputForm";
+import { Input } from "@/components/ui/input";
+import { apiPost } from "../../lib/api";
+import { redactSecrets } from "../../lib/redact";
+
+const schema = z.object({
+  query: z.string().min(1).max(253),
+});
+
+export default function RdapTool() {
+  const form = useZodForm(schema, { query: "8.8.8.8" });
+  const [out, setOut] = useState("");
+
+  return (
+    <div className="space-y-4">
+      <RemoteDisclosure
+        region={import.meta.env.VITE_REGION}
+        sends={["domain or IP address"]}
+        notes="Uses RDAP (JSON WHOIS replacement) via your backend."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit(async (v) => {
+            const r = await apiPost<any>("/rdap", v);
+            setOut(JSON.stringify(r, null, 2));
+          })}
+        >
+          <FormRow label="Query" help="IP (v4/v6) or domain" error={form.formState.errors.query?.message}>
+            <Input {...form.register("query")} placeholder="8.8.8.8 or example.com" />
+          </FormRow>
+
+          <SubmitRow
+            isSubmitting={form.formState.isSubmitting}
+            onExample={() => form.reset({ query: "example.com" })}
+          />
+        </form>
+
+        <OutputCard title="Result" value={out} redact={redactSecrets} />
+      </div>
+    </div>
+  );
+}
+
+7.3 src/tools/remote/TlsTool.tsx
+import { z } from "zod";
+import { useState } from "react";
+import RemoteDisclosure from "../../components/RemoteDisclosure";
+import OutputCard from "../../components/OutputCard";
+import { FormRow, SubmitRow, useZodForm } from "../../components/InputForm";
+import { Input } from "@/components/ui/input";
+import { apiPost } from "../../lib/api";
+import { redactSecrets } from "../../lib/redact";
+
+const schema = z.object({
+  host: z.string().min(1).max(253),
+  port: z.coerce.number().int().min(1).max(65535).default(443),
+  sni: z.string().optional(),
+});
+
+export default function TlsTool() {
+  const form = useZodForm(schema, { host: "example.com", port: 443, sni: "example.com" });
+  const [out, setOut] = useState("");
+
+  return (
+    <div className="space-y-4">
+      <RemoteDisclosure
+        region={import.meta.env.VITE_REGION}
+        sends={["host", "port", "SNI"]}
+        notes="Connects from AWS to fetch peer certificate and chain metadata."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit(async (v) => {
+            const r = await apiPost<any>("/tls", v);
+            setOut(JSON.stringify(r, null, 2));
+          })}
+        >
+          <FormRow label="Host" error={form.formState.errors.host?.message}>
+            <Input {...form.register("host")} placeholder="example.com" />
+          </FormRow>
+
+          <FormRow label="Port" error={form.formState.errors.port?.message}>
+            <Input {...form.register("port")} />
+          </FormRow>
+
+          <FormRow label="SNI (optional)" error={form.formState.errors.sni?.message}>
+            <Input {...form.register("sni")} placeholder="example.com" />
+          </FormRow>
+
+          <SubmitRow
+            isSubmitting={form.formState.isSubmitting}
+            onExample={() => form.reset({ host: "cloudflare.com", port: 443, sni: "cloudflare.com" })}
+          />
+        </form>
+
+        <OutputCard title="Result" value={out} redact={redactSecrets} />
+      </div>
+    </div>
+  );
+}
+
+7.4 src/tools/remote/HeadersTool.tsx
+import { z } from "zod";
+import { useState } from "react";
+import RemoteDisclosure from "../../components/RemoteDisclosure";
+import OutputCard from "../../components/OutputCard";
+import { FormRow, SubmitRow, useZodForm } from "../../components/InputForm";
+import { Input } from "@/components/ui/input";
+import { apiPost } from "../../lib/api";
+import { redactSecrets } from "../../lib/redact";
+
+const schema = z.object({
+  url: z.string().url().max(2048),
+});
+
+export default function HeadersTool() {
+  const form = useZodForm(schema, { url: "https://example.com" });
+  const [out, setOut] = useState("");
+
+  return (
+    <div className="space-y-4">
+      <RemoteDisclosure
+        region={import.meta.env.VITE_REGION}
+        sends={["URL (scheme + host + path)"]}
+        notes="Backend blocks private IPs and non-80/443 ports."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit(async (v) => {
+            const r = await apiPost<any>("/headers", v);
+            setOut(JSON.stringify(r, null, 2));
+          })}
+        >
+          <FormRow label="URL" error={form.formState.errors.url?.message}>
+            <Input {...form.register("url")} placeholder="https://example.com" />
+          </FormRow>
+
+          <SubmitRow
+            isSubmitting={form.formState.isSubmitting}
+            onExample={() => form.reset({ url: "https://cloudflare.com" })}
+          />
+        </form>
+
+        <OutputCard title="Result" value={out} redact={redactSecrets} />
+      </div>
+    </div>
+  );
+}
+
+7.5 src/tools/remote/PeeringDbTool.tsx
+
+This panel expects your backend route POST /peeringdb that proxies to PeeringDB API. Query patterns (e.g., net?asn=…) are per PeeringDB docs 
+docs.peeringdb.com
++2
+docs.peeringdb.com
++2
+.
+
+import { z } from "zod";
+import { useState } from "react";
+import RemoteDisclosure from "../../components/RemoteDisclosure";
+import OutputCard from "../../components/OutputCard";
+import { FormRow, SubmitRow, useZodForm } from "../../components/InputForm";
+import { Input } from "@/components/ui/input";
+import { apiPost } from "../../lib/api";
+import { redactSecrets } from "../../lib/redact";
+
+const schema = z.object({
+  resource: z.enum(["net", "org", "ix", "fac"]),
+  asn: z.string().optional(),
+  name: z.string().optional(),
+});
+
+export default function PeeringDbTool() {
+  const form = useZodForm(schema, { resource: "net", asn: "42", name: "" });
+  const [out, setOut] = useState("");
+
+  return (
+    <div className="space-y-4">
+      <RemoteDisclosure
+        region={import.meta.env.VITE_REGION}
+        sends={["resource type (net/org/ix/fac)", "asn or name query"]}
+        notes="Proxied via your API to avoid CORS variability and to cache within PeeringDB query limits."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit(async (v) => {
+            const r = await apiPost<any>("/peeringdb", v);
+            setOut(JSON.stringify(r, null, 2));
+          })}
+        >
+          <FormRow label="Resource (net/org/ix/fac)" help="PeeringDB object type" error={form.formState.errors.resource?.message}>
+            <Input {...form.register("resource")} placeholder="net" />
+          </FormRow>
+
+          <FormRow label="ASN (optional)" help="Used mostly for net lookups (e.g., asn=42)" error={form.formState.errors.asn?.message}>
+            <Input {...form.register("asn")} placeholder="42" />
+          </FormRow>
+
+          <FormRow label="Name (optional)" help="Search by name (less precise than ASN)" error={form.formState.errors.name?.message}>
+            <Input {...form.register("name")} placeholder="Example Network" />
+          </FormRow>
+
+          <SubmitRow
+            isSubmitting={form.formState.isSubmitting}
+            onExample={() => form.reset({ resource: "net", asn: "13335", name: "" })}
+          />
+        </form>
+
+        <OutputCard title="Result" value={out} redact={redactSecrets} />
+      </div>
+    </div>
+  );
+}
+
+8) Offline panels (Subnet, Regex, Command Templates)
+8.1 src/tools/offline/SubnetTool.tsx (IPv4 MVP)
+import { useMemo, useState } from "react";
+import OutputCard from "../../components/OutputCard";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
+function ipToInt(ip: string) {
+  const p = ip.split(".").map((x) => Number(x));
+  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) throw new Error("bad ip");
+  return ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+}
+
+function intToIp(n: number) {
+  return [
+    (n >>> 24) & 255,
+    (n >>> 16) & 255,
+    (n >>> 8) & 255,
+    n & 255,
+  ].join(".");
+}
+
+function maskFromCidr(cidr: number) {
+  if (cidr < 0 || cidr > 32) throw new Error("bad cidr");
+  return cidr === 0 ? 0 : (0xffffffff << (32 - cidr)) >>> 0;
+}
+
+export default function SubnetTool() {
+  const [cidr, setCidr] = useState("192.168.4.0/22");
+  const [out, setOut] = useState("");
+
+  const computed = useMemo(() => {
+    try {
+      const [ip, c] = cidr.split("/");
+      const prefix = Number(c);
+      const ipInt = ipToInt(ip.trim());
+      const mask = maskFromCidr(prefix);
+      const network = ipInt & mask;
+      const broadcast = network | (~mask >>> 0);
+      const hosts = prefix >= 31 ? 0 : (broadcast - network - 1);
+
+      const firstHost = prefix >= 31 ? null : network + 1;
+      const lastHost = prefix >= 31 ? null : broadcast - 1;
+
+      const res = {
+        input: cidr,
+        ip: ip.trim(),
+        prefix,
+        netmask: intToIp(mask),
+        wildcard: intToIp((~mask) >>> 0),
+        network: intToIp(network),
+        broadcast: intToIp(broadcast),
+        first_host: firstHost !== null ? intToIp(firstHost) : null,
+        last_host: lastHost !== null ? intToIp(lastHost) : null,
+        usable_hosts: hosts,
+      };
+      return JSON.stringify(res, null, 2);
+    } catch (e: any) {
+      return JSON.stringify({ error: e?.message ?? "invalid input" }, null, 2);
+    }
+  }, [cidr]);
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">
+        Offline subnet calculator (browser-only). IPv4 MVP.
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-3">
+          <div className="text-sm font-medium">CIDR</div>
+          <Input value={cidr} onChange={(e) => setCidr(e.target.value)} placeholder="192.168.1.0/24" />
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setCidr("10.0.0.0/28")}>Example</Button>
+            <Button onClick={() => setOut(computed)}>Compute</Button>
+          </div>
+        </div>
+
+        <OutputCard title="Result" value={out || computed} />
+      </div>
+    </div>
+  );
+}
+
+8.2 src/tools/offline/RegexTool.tsx
+import { useMemo, useState } from "react";
+import OutputCard from "../../components/OutputCard";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
+export default function RegexTool() {
+  const [pattern, setPattern] = useState("([0-9]{1,3}\\.){3}[0-9]{1,3}");
+  const [text, setText] = useState("src=192.168.1.10 dst=10.0.0.2 user=jdoe");
+  const [mode, setMode] = useState<"ERE" | "PCRE">("PCRE");
+
+  const commands = useMemo(() => {
+    const grep = mode === "ERE"
+      ? `grep -E '${pattern}' file.log`
+      : `grep -P '${pattern}' file.log`;
+    const live = mode === "ERE"
+      ? `tail -f /var/log/syslog | grep --line-buffered -E '${pattern}'`
+      : `tail -f /var/log/syslog | grep --line-buffered -P '${pattern}'`;
+    return JSON.stringify({ mode, grep, live }, null, 2);
+  }, [pattern, mode]);
+
+  const jsMatches = useMemo(() => {
+    try {
+      const re = new RegExp(pattern, "g");
+      const matches = text.match(re) ?? [];
+      return JSON.stringify({ matches, count: matches.length }, null, 2);
+    } catch (e: any) {
+      return JSON.stringify({ error: e?.message ?? "bad regex" }, null, 2);
+    }
+  }, [pattern, text]);
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">
+        Build patterns for grep and test quickly (JS test is approximate; grep flavors differ).
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-3">
+          <div className="text-sm font-medium">Mode (hint)</div>
+          <Input value={mode} onChange={(e) => setMode(e.target.value === "ERE" ? "ERE" : "PCRE")} />
+          <div className="text-xs text-muted-foreground">Type ERE or PCRE</div>
+
+          <div className="text-sm font-medium">Pattern</div>
+          <Input value={pattern} onChange={(e) => setPattern(e.target.value)} />
+
+          <div className="text-sm font-medium">Test text</div>
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} />
+
+          <Button variant="secondary" onClick={() => {
+            setPattern("([1-9][0-9]*)");
+            setText("dropped=0 dropped=3 dropped=12");
+            setMode("ERE");
+          }}>
+            Example: non-zero ints
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          <OutputCard title="Commands" value={commands} />
+          <OutputCard title="Test result" value={jsMatches} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+8.3 Command Template browser (polished filters + searchable)
+src/tools/offline/templates.ts
+export type CmdTemplate = {
+  id: string;
+  vendor: string;
+  feature: string;
+  task: string;
+  title: string;
+  inputs: { key: string; label: string; placeholder: string }[];
+  commands: string[];
+  verify?: string[];
+  rollback?: string[];
+  notes?: string[];
+};
+
+export const templates: CmdTemplate[] = [
+  {
+    id: "staticroute-ios-add",
+    vendor: "Cisco IOS/IOS-XE",
+    feature: "Routing",
+    task: "Static route",
+    title: "Add static route",
+    inputs: [
+      { key: "prefix", label: "Prefix", placeholder: "203.0.113.0" },
+      { key: "mask", label: "Mask", placeholder: "255.255.255.0" },
+      { key: "nexthop", label: "Next-hop", placeholder: "192.0.2.1" },
+    ],
+    commands: [
+      "conf t",
+      "ip route {{prefix}} {{mask}} {{nexthop}}",
+      "end",
+      "wr mem",
+    ],
+    verify: ["show ip route {{prefix}}"],
+    rollback: ["conf t", "no ip route {{prefix}} {{mask}} {{nexthop}}", "end"],
+  },
+  {
+    id: "bgp-junos-check",
+    vendor: "Juniper Junos",
+    feature: "Routing",
+    task: "BGP",
+    title: "BGP neighbor quick checks",
+    inputs: [{ key: "peer", label: "Peer IP", placeholder: "198.51.100.1" }],
+    commands: [
+      "show bgp summary",
+      "show bgp neighbor {{peer}}",
+      "show route {{peer}}",
+    ],
+    notes: ["Check: ASN mismatch, auth, policy, next-hop reachability, VRF table."],
+  },
+  // Add more over time…
+];
+
+export function renderTemplate(s: string, vars: Record<string, string>) {
+  return s.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`);
+}
+
+src/tools/offline/CommandTemplatesTool.tsx
+import { useMemo, useState } from "react";
+import { templates, renderTemplate, CmdTemplate } from "./templates";
+import OutputCard from "../../components/OutputCard";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+
+function uniq(xs: string[]) {
+  return Array.from(new Set(xs)).sort((a, b) => a.localeCompare(b));
+}
+
+export default function CommandTemplatesTool() {
+  const [q, setQ] = useState("");
+  const [vendor, setVendor] = useState("");
+  const [feature, setFeature] = useState("");
+  const [task, setTask] = useState("");
+  const [selected, setSelected] = useState<CmdTemplate | null>(templates[0] ?? null);
+
+  const vendors = useMemo(() => uniq(templates.map(t => t.vendor)), []);
+  const features = useMemo(() => uniq(templates.map(t => t.feature)), []);
+  const tasks = useMemo(() => uniq(templates.map(t => t.task)), []);
+
+  const filtered = useMemo(() => {
+    return templates.filter(t => {
+      const hay = `${t.title} ${t.vendor} ${t.feature} ${t.task}`.toLowerCase();
+      if (q && !hay.includes(q.toLowerCase())) return false;
+      if (vendor && t.vendor !== vendor) return false;
+      if (feature && t.feature !== feature) return false;
+      if (task && t.task !== task) return false;
+      return true;
+    });
+  }, [q, vendor, feature, task]);
+
+  const [vars, setVars] = useState<Record<string, string>>({});
+
+  const rendered = useMemo(() => {
+    if (!selected) return "";
+    const obj = {
+      title: selected.title,
+      vendor: selected.vendor,
+      feature: selected.feature,
+      task: selected.task,
+      commands: selected.commands.map(c => renderTemplate(c, vars)),
+      verify: (selected.verify ?? []).map(c => renderTemplate(c, vars)),
+      rollback: (selected.rollback ?? []).map(c => renderTemplate(c, vars)),
+      notes: selected.notes ?? [],
+    };
+    return JSON.stringify(obj, null, 2);
+  }, [selected, vars]);
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">
+        Offline command library. Filter by vendor/feature/task and render copy/paste sequences.
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[420px_1fr]">
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <Input placeholder="Search (e.g., static route, bgp)..." value={q} onChange={(e) => setQ(e.target.value)} />
+
+            <div className="grid gap-2">
+              <Input placeholder="Vendor filter (optional)" value={vendor} onChange={(e) => setVendor(e.target.value)} />
+              <Input placeholder="Feature filter (optional)" value={feature} onChange={(e) => setFeature(e.target.value)} />
+              <Input placeholder="Task filter (optional)" value={task} onChange={(e) => setTask(e.target.value)} />
+              <div className="text-xs text-muted-foreground">
+                Vendor examples: {vendors.slice(0, 3).join(", ")}…
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-3 space-y-2">
+              <div className="text-sm font-medium">Matches ({filtered.length})</div>
+              <div className="max-h-[360px] overflow-auto space-y-1">
+                {filtered.map((t) => (
+                  <button
+                    key={t.id}
+                    className={`w-full text-left rounded-md px-3 py-2 text-sm border ${
+                      selected?.id === t.id ? "bg-muted border-border" : "hover:bg-muted border-transparent"
+                    }`}
+                    onClick={() => { setSelected(t); setVars({}); }}
+                  >
+                    <div className="font-medium">{t.title}</div>
+                    <div className="text-xs text-muted-foreground">{t.vendor} • {t.feature} • {t.task}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {selected ? (
+              <div className="border-t border-border pt-3 space-y-3">
+                <div className="text-sm font-medium">Inputs</div>
+                {selected.inputs.map((i) => (
+                  <div key={i.key} className="space-y-1">
+                    <div className="text-xs text-muted-foreground">{i.label}</div>
+                    <Input
+                      placeholder={i.placeholder}
+                      value={vars[i.key] ?? ""}
+                      onChange={(e) => setVars((v) => ({ ...v, [i.key]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+                <Button variant="secondary" onClick={() => setVars({})}>Clear inputs</Button>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <OutputCard title="Rendered" value={rendered} />
+      </div>
+    </div>
+  );
+}
+
+9) Run locally
+npm run dev
+
+10) CloudFront SPA routing (required)
+
+For a single-page app with routes like /tools/dns, configure CloudFront to serve index.html on 403/404:
+
+Custom Error Response: 403 → /index.html (200)
+
+Custom Error Response: 404 → /index.html (200)
+
+Next backend note: PeeringDB /peeringdb endpoint
+
+If you want this fully end-to-end now, implement a Lambda that only allows resource in {net,org,ix,fac} and only queries https://www.peeringdb.com/api/{resource} with asn/name parameters. The API structure is documented by PeeringDB 
+docs.peeringdb.com
++2
+docs.peeringdb.com
++2
+ and has published query limits 
+docs.peeringdb.com
+.

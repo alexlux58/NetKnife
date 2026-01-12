@@ -35,7 +35,7 @@ aws_region = "us-west-2"
 # To use a custom domain like tools.alexflux.com:
 # 1. Set custom_domain to your full domain
 # 2. Set cloudflare_zone_id to your Cloudflare zone ID
-# 3. Export CLOUDFLARE_API_TOKEN before running terraform
+# 3. Set cloudflare_api_token (or run ./sync-cloudflare-token.sh to auto-sync)
 
 # Custom domain for the site (leave empty to use CloudFront domain)
 custom_domain = "tools.alexflux.com"
@@ -52,6 +52,11 @@ cloudflare_zone_name = "alexflux.com"
 # The subdomain part (e.g., "tools" creates tools.alexflux.com)
 # Should match the subdomain in custom_domain above
 cloudflare_subdomain = "tools"
+
+# Cloudflare API Token (required if using custom_domain)
+# Get from: https://dash.cloudflare.com/profile/api-tokens
+# Or run ./sync-cloudflare-token.sh to automatically sync from openarena project
+cloudflare_api_token = "YOUR_CLOUDFLARE_API_TOKEN"
 
 # ============================================================================
 # COST CONFIGURATION

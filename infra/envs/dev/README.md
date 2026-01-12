@@ -442,7 +442,7 @@ netknife/infra/envs/dev/
 ├── deploy-complete.sh         # Complete automated deployment
 ├── deploy.sh                  # Simplified deployment script
 ├── redeploy.sh                # Complete redeployment script
-├── load-env.sh                # Loads Cloudflare token automatically
+├── sync-cloudflare-token.sh   # Syncs Cloudflare token to terraform.tfvars
 ├── verify-deployment.sh       # Deployment verification script
 ├── check-dns.sh               # DNS diagnostic script
 └── README.md                  # This file
@@ -512,34 +512,26 @@ terraform output -json | jq -r '{
 
 Then manually update `frontend/.env.production` with these values.
 
-## Environment Variables
+## Cloudflare API Token Setup
 
-### Cloudflare API Token
+The Cloudflare API token must be in `terraform.tfvars` (not an environment variable) because Terraform uses `var.cloudflare_api_token`.
 
-The deployment scripts automatically load the Cloudflare API token from multiple sources (in order):
-
-1. **Local `.env` file** (if exists in this directory)
-2. **OpenArena project `.env` file** (automatically sources from `../../../../openarena-aws/.env`)
-3. **Environment variable** (if already set)
-
-**To set up for future deployments:**
-
-**Option 1: Create local .env file (recommended)**
+**Automatic Setup (Recommended):**
 ```bash
-cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
-cp .env.example .env
-# Edit .env and add: CLOUDFLARE_API_TOKEN="your-token"
+./sync-cloudflare-token.sh
 ```
 
-**Option 2: Use OpenArena token automatically**
-The `load-env.sh` script automatically sources the token from the openarena project if available. No setup needed!
+This script automatically:
+1. Finds the token from your openarena project's `.env` file
+2. Syncs it to `terraform.tfvars` as `cloudflare_api_token = "..."`
 
-**Option 3: Set environment variable**
-```bash
-export CLOUDFLARE_API_TOKEN="your-token"
+**Manual Setup:**
+Add to `terraform.tfvars`:
+```hcl
+cloudflare_api_token = "your-token-here"
 ```
 
-The deployment scripts (`deploy-complete.sh`, `deploy.sh`) automatically call `load-env.sh` to load the token.
+The deployment scripts (`deploy-complete.sh`, `deploy.sh`) automatically run `sync-cloudflare-token.sh` before deployment.
 
 ## Status
 
@@ -581,8 +573,8 @@ This script handles everything:
 ```bash
 cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
 
-# Load environment (Cloudflare token)
-source load-env.sh 2>/dev/null || true
+# Sync Cloudflare token to terraform.tfvars
+./sync-cloudflare-token.sh
 
 # Initialize if needed
 ./init.sh

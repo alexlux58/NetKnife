@@ -9,9 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/../../.."
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 
-# Load environment variables (Cloudflare token)
-if [ -f "$SCRIPT_DIR/load-env.sh" ]; then
-    source "$SCRIPT_DIR/load-env.sh" 2>/dev/null || true
+# Sync Cloudflare token to terraform.tfvars (from .env or openarena project)
+if [ -f "$SCRIPT_DIR/sync-cloudflare-token.sh" ]; then
+    "$SCRIPT_DIR/sync-cloudflare-token.sh" 2>/dev/null || true
 fi
 
 echo "=========================================="
@@ -56,13 +56,15 @@ if [ ! -f "$SCRIPT_DIR/terraform.tfvars" ]; then
 fi
 
 # Check Cloudflare token if using custom domain
-if grep -q "custom_domain" "$SCRIPT_DIR/terraform.tfvars" && [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-    echo -e "${YELLOW}⚠️  CLOUDFLARE_API_TOKEN not set${NC}"
-    echo "   If using custom domain, export CLOUDFLARE_API_TOKEN before running"
-    read -p "   Continue anyway? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+if grep -q "custom_domain" "$SCRIPT_DIR/terraform.tfvars" 2>/dev/null; then
+    if ! grep -q "^cloudflare_api_token\s*=" "$SCRIPT_DIR/terraform.tfvars" 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  cloudflare_api_token not found in terraform.tfvars${NC}"
+        echo "   Run ./sync-cloudflare-token.sh to sync from openarena project"
+        read -p "   Continue anyway? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
     fi
 fi
 

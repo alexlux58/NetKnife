@@ -8,9 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/../../.."
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 
-# Load environment variables (Cloudflare token)
-if [ -f "$SCRIPT_DIR/load-env.sh" ]; then
-    source "$SCRIPT_DIR/load-env.sh" 2>/dev/null || true
+# Sync Cloudflare token to terraform.tfvars (from .env or openarena project)
+if [ -f "$SCRIPT_DIR/sync-cloudflare-token.sh" ]; then
+    "$SCRIPT_DIR/sync-cloudflare-token.sh" 2>/dev/null || true
 fi
 
 echo "=========================================="
@@ -20,21 +20,22 @@ echo ""
 
 cd "$SCRIPT_DIR"
 
-# Check for Cloudflare token
-if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-    echo "⚠️  CLOUDFLARE_API_TOKEN not set"
-    echo ""
-    echo "If you're using a custom domain (tools.alexflux.com), you need to:"
-    echo "  1. Get token from: https://dash.cloudflare.com/profile/api-tokens"
-    echo "  2. Run: export CLOUDFLARE_API_TOKEN=\"your-token\""
-    echo "  3. Then run this script again"
-    echo ""
-    read -p "Continue without Cloudflare token? (DNS records won't be created) [y/N]: " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+# Check for Cloudflare token in terraform.tfvars (if using custom domain)
+if grep -q "custom_domain" "$SCRIPT_DIR/terraform.tfvars" 2>/dev/null; then
+    if ! grep -q "^cloudflare_api_token\s*=" "$SCRIPT_DIR/terraform.tfvars" 2>/dev/null; then
+        echo "⚠️  cloudflare_api_token not found in terraform.tfvars"
+        echo ""
+        echo "To fix:"
+        echo "  1. Run: ./sync-cloudflare-token.sh (auto-syncs from openarena)"
+        echo "  2. Or manually add to terraform.tfvars: cloudflare_api_token = \"your-token\""
+        echo ""
+        read -p "Continue without Cloudflare token? (DNS records won't be created) [y/N]: " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+        echo ""
     fi
-    echo ""
 fi
 
 # Step 1: Initialize Terraform
@@ -127,7 +128,7 @@ echo "Site URL: $SITE_URL"
 echo ""
 echo "Next steps:"
 echo "  1. Wait 2-5 minutes for CloudFront to deploy"
-if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+if ! grep -q "^cloudflare_api_token\s*=" "$SCRIPT_DIR/terraform.tfvars" 2>/dev/null; then
     echo "  2. ⚠️  Create DNS record manually in Cloudflare:"
     echo "     - Name: tools"
     echo "     - Type: CNAME"

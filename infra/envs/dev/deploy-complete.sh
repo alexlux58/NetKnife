@@ -146,21 +146,29 @@ if [ -n "$USER_POOL_ID" ]; then
         read -sp "   Enter password: " PASSWORD
         echo ""
         
-        aws cognito-idp admin-create-user \
+        CREATE_OUTPUT=$(aws cognito-idp admin-create-user \
           --user-pool-id "$USER_POOL_ID" \
           --username alex.lux \
           --user-attributes Name=email,Value="$EMAIL" \
           --temporary-password "TempPass123!" \
-          --region us-west-2 > /dev/null 2>&1 || true
+          --region us-west-2 2>&1) || true
 
-        aws cognito-idp admin-set-user-password \
+        if echo "$CREATE_OUTPUT" | grep -q "already exists\|UsernameExistsException"; then
+            echo "   User already exists, updating password..."
+        else
+            echo "   User created successfully"
+        fi
+
+        if aws cognito-idp admin-set-user-password \
           --user-pool-id "$USER_POOL_ID" \
           --username alex.lux \
           --password "$PASSWORD" \
           --permanent \
-          --region us-west-2 > /dev/null 2>&1
-
-        echo -e "${GREEN}✅ User created${NC}"
+          --region us-west-2 2>&1; then
+            echo -e "${GREEN}✅ User created/updated${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Warning: Failed to set password (user may need to change it on first login)${NC}"
+        fi
     fi
 else
     echo -e "${YELLOW}⚠️  Could not get User Pool ID, skipping user creation${NC}"

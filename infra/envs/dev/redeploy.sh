@@ -66,22 +66,32 @@ if [ -z "$PASSWORD" ]; then
 fi
 
 echo "   Creating user: $USERNAME..."
-aws cognito-idp admin-create-user \
+CREATE_OUTPUT=$(aws cognito-idp admin-create-user \
   --user-pool-id "$USER_POOL_ID" \
   --username "$USERNAME" \
   --user-attributes Name=email,Value="$EMAIL" \
   --temporary-password "TempPass123!" \
-  --region us-west-2 > /dev/null 2>&1 || true
+  --region us-west-2 2>&1) || true
+
+if echo "$CREATE_OUTPUT" | grep -q "already exists\|UsernameExistsException"; then
+    echo "   User already exists, will update password..."
+else
+    echo "   User created successfully"
+fi
 
 echo "   Setting permanent password..."
-aws cognito-idp admin-set-user-password \
+if aws cognito-idp admin-set-user-password \
   --user-pool-id "$USER_POOL_ID" \
   --username "$USERNAME" \
   --password "$PASSWORD" \
   --permanent \
-  --region us-west-2 > /dev/null 2>&1
+  --region us-west-2 2>&1; then
+    echo "✅ Password set successfully"
+else
+    echo "⚠️  Warning: Failed to set password (user may need to change it on first login)"
+fi
 
-echo "✅ User created: $USERNAME"
+echo "✅ User ready: $USERNAME"
 echo ""
 
 # Step 6: Update frontend environment

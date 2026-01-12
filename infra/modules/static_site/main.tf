@@ -70,6 +70,18 @@ variable "cloudflare_zone_id" {
   default     = ""
 }
 
+variable "cloudflare_zone_name" {
+  type        = string
+  description = "Cloudflare zone name (e.g., alexflux.com). Required if custom_domain is set."
+  default     = ""
+}
+
+variable "cloudflare_subdomain" {
+  type        = string
+  description = "Cloudflare subdomain for DNS record (e.g., 'tools' creates tools.alexflux.com). Required if custom_domain is set."
+  default     = ""
+}
+
 variable "enable_cloudflare_proxy" {
   type        = bool
   description = "Enable Cloudflare proxy (orange cloud) for DNS record. Recommended: false for CloudFront."
@@ -310,11 +322,19 @@ resource "aws_s3_bucket_policy" "site" {
 # Creates a CNAME record pointing the custom domain to CloudFront.
 # Only created if cloudflare_zone_id and custom_domain are set.
 
+# Cloudflare DNS record (optional)
+# Creates a CNAME record pointing the subdomain to CloudFront.
+# Only created if cloudflare_zone_id, cloudflare_zone_name, and cloudflare_subdomain are set.
+# Follows the same pattern as openarena for consistency.
+locals {
+  cloudflare_enabled = var.cloudflare_zone_id != "" && var.cloudflare_zone_name != "" && var.cloudflare_subdomain != ""
+}
+
 resource "cloudflare_dns_record" "site" {
-  count = var.cloudflare_zone_id != "" && var.custom_domain != "" ? 1 : 0
+  count = local.cloudflare_enabled ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
-  name    = var.custom_domain
+  name    = var.cloudflare_subdomain  # e.g., "tools" (not "tools.alexflux.com")
   content = aws_cloudfront_distribution.cdn.domain_name
   type    = "CNAME"
   proxied = var.enable_cloudflare_proxy

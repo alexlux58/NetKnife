@@ -210,15 +210,38 @@ npm run build
 
 ### Step 5: Deploy Frontend
 
+**Option 1: Automated Deployment (Recommended)**
+
 ```bash
+cd frontend
+./deploy.sh
+```
+
+This script automatically:
+1. Gets the bucket name from Terraform
+2. Uploads files from `dist/` to S3
+3. Invalidates CloudFront cache
+4. Shows deployment status
+
+**Option 2: Manual Deployment**
+
+```bash
+# Get bucket name from Terraform
+cd infra/envs/dev
+BUCKET_NAME=$(terraform output -raw bucket_name)
+CLOUDFRONT_ID=$(terraform output -raw cloudfront_id)
+
 # Upload to S3
-aws s3 sync dist/ s3://<site_bucket_name>/ --delete
+cd ../../../frontend
+aws s3 sync dist/ "s3://$BUCKET_NAME/" --delete
 
 # Invalidate CloudFront cache
 aws cloudfront create-invalidation \
-  --distribution-id <cloudfront_distribution_id> \
+  --distribution-id "$CLOUDFRONT_ID" \
   --paths "/*"
 ```
+
+**Note**: The `--delete` flag removes files from S3 that no longer exist in `dist/`.
 
 ### Step 6: Verify Deployment
 
@@ -474,24 +497,45 @@ aws cognito-idp admin-enable-user \
 
 #### Frontend Deployment
 
+**Quick Deploy (Recommended)**:
+```bash
+cd frontend
+./deploy.sh
+```
+
+**Manual Deploy**:
 ```bash
 # Build frontend
 cd frontend
 npm run build
 
+# Get current bucket name and CloudFront ID
+cd ../infra/envs/dev
+BUCKET_NAME=$(terraform output -raw bucket_name)
+CLOUDFRONT_ID=$(terraform output -raw cloudfront_id)
+
 # Deploy to S3
-aws s3 sync dist/ s3://netknife-site-ACCOUNT_ID --delete --region us-west-2
+cd ../../../frontend
+aws s3 sync dist/ "s3://$BUCKET_NAME/" --delete
 
 # Invalidate CloudFront cache
 aws cloudfront create-invalidation \
-  --distribution-id EXXXXXXXXXX \
-  --paths "/*" \
-  --region us-west-2
+  --distribution-id "$CLOUDFRONT_ID" \
+  --paths "/*"
 
 # Check CloudFront distribution status
 aws cloudfront get-distribution \
-  --id EXXXXXXXXXX \
+  --id "$CLOUDFRONT_ID" \
   --query 'Distribution.Status'
+```
+
+**Update Environment Variables**:
+If you've updated infrastructure, update the frontend environment variables:
+```bash
+cd frontend
+./update-env.sh
+npm run build
+./deploy.sh
 ```
 
 #### DynamoDB Cache Issues

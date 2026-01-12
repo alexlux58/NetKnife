@@ -144,6 +144,18 @@ variable "cloudflare_zone_id" {
   description = "Cloudflare zone ID for DNS management. Required if custom_domain is set."
 }
 
+variable "cloudflare_zone_name" {
+  type        = string
+  default     = ""
+  description = "Cloudflare zone name (e.g., alexflux.com). Required if custom_domain is set. Used to properly format DNS record names."
+}
+
+variable "cloudflare_subdomain" {
+  type        = string
+  default     = ""
+  description = "Cloudflare subdomain for DNS record (e.g., 'tools' creates tools.alexflux.com). Required if custom_domain is set."
+}
+
 variable "cloudflare_api_token" {
   type        = string
   sensitive   = true
@@ -230,9 +242,11 @@ module "static_site" {
   bucket_name = var.site_bucket_name
 
   # Custom domain configuration (optional)
-  custom_domain       = var.custom_domain
+  custom_domain        = var.custom_domain
   acm_certificate_arn = var.custom_domain != "" ? module.acm[0].certificate_arn : ""
-  cloudflare_zone_id  = var.cloudflare_zone_id
+  cloudflare_zone_id   = var.cloudflare_zone_id
+  cloudflare_zone_name = var.cloudflare_zone_name
+  cloudflare_subdomain = var.cloudflare_subdomain
 }
 
 # Site URL for other modules (uses custom domain if set)

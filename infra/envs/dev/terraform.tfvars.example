@@ -44,6 +44,15 @@ custom_domain = "tools.alexflux.com"
 # Find at: https://dash.cloudflare.com → Domain → API section → Zone ID
 cloudflare_zone_id = "YOUR_CLOUDFLARE_ZONE_ID"
 
+# Cloudflare Zone Name (required if using custom_domain)
+# The root domain name managed by Cloudflare (e.g., "alexflux.com")
+cloudflare_zone_name = "alexflux.com"
+
+# Cloudflare Subdomain (required if using custom_domain)
+# The subdomain part (e.g., "tools" creates tools.alexflux.com)
+# Should match the subdomain in custom_domain above
+cloudflare_subdomain = "tools"
+
 # ============================================================================
 # COST CONFIGURATION
 # ============================================================================

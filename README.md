@@ -144,7 +144,7 @@ cp infra/envs/dev/terraform.tfvars.example infra/envs/dev/terraform.tfvars
 ```bash
 # Initialize Terraform
 cd infra/envs/dev
-terraform init
+./init.sh  # Or: terraform init
 
 # If using custom domain with Cloudflare, export your API token:
 export CLOUDFLARE_API_TOKEN="your-cloudflare-api-token"
@@ -154,7 +154,7 @@ terraform plan
 
 # Deploy (this creates: S3, CloudFront, Cognito, API Gateway, Lambda, DynamoDB, WAF)
 # If using custom domain, also creates: ACM certificate + Cloudflare DNS records
-terraform apply
+terraform apply -auto-approve
 
 # Save the outputs - you'll need them for the frontend
 terraform output
@@ -166,6 +166,8 @@ Note the following outputs:
 - `cognito_domain` - For OIDC configuration
 - `cognito_client_id` - For frontend authentication
 - `cognito_issuer` - For JWT validation
+
+**⚠️ Important**: After redeploying, the Cognito domain will have a new random suffix. You must update the frontend environment variables (see Step 4).
 
 ### Step 3: Create Admin User
 
@@ -208,7 +210,7 @@ EOF
 npm run build
 ```
 
-### Step 5: Deploy Frontend
+### Step 6: Deploy Frontend
 
 **Option 1: Automated Deployment (Recommended)**
 

@@ -434,9 +434,15 @@ netknife/infra/envs/dev/
 ├── main.tf                    # Main Terraform configuration
 ├── terraform.tfvars           # Variable values (sensitive - not in git)
 ├── terraform.tfvars.example   # Example variables template
+├── .env                       # Environment variables (sensitive - not in git)
+├── .env.example               # Example environment variables
 ├── terraform.tfstate          # Infrastructure state (backup regularly!)
 ├── init.sh                    # Initialization script with error handling
 ├── apply.sh                   # Apply script with proper input handling
+├── deploy-complete.sh         # Complete automated deployment
+├── deploy.sh                  # Simplified deployment script
+├── redeploy.sh                # Complete redeployment script
+├── load-env.sh                # Loads Cloudflare token automatically
 ├── verify-deployment.sh       # Deployment verification script
 ├── check-dns.sh               # DNS diagnostic script
 └── README.md                  # This file
@@ -469,6 +475,10 @@ netknife/infra/envs/dev/
 
 - `init.sh` - Handles initialization with TLS workarounds
 - `apply.sh` - Handles apply with proper input handling
+- `deploy-complete.sh` - Complete automated deployment (infrastructure + frontend)
+- `deploy.sh` - Simplified deployment script
+- `redeploy.sh` - Complete redeployment after destroy
+- `load-env.sh` - Loads Cloudflare token from .env or openarena project
 - `verify-deployment.sh` - Comprehensive deployment verification
 - `check-dns.sh` - DNS diagnostic and troubleshooting
 
@@ -502,6 +512,35 @@ terraform output -json | jq -r '{
 
 Then manually update `frontend/.env.production` with these values.
 
+## Environment Variables
+
+### Cloudflare API Token
+
+The deployment scripts automatically load the Cloudflare API token from multiple sources (in order):
+
+1. **Local `.env` file** (if exists in this directory)
+2. **OpenArena project `.env` file** (automatically sources from `../../../../openarena-aws/.env`)
+3. **Environment variable** (if already set)
+
+**To set up for future deployments:**
+
+**Option 1: Create local .env file (recommended)**
+```bash
+cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
+cp .env.example .env
+# Edit .env and add: CLOUDFLARE_API_TOKEN="your-token"
+```
+
+**Option 2: Use OpenArena token automatically**
+The `load-env.sh` script automatically sources the token from the openarena project if available. No setup needed!
+
+**Option 3: Set environment variable**
+```bash
+export CLOUDFLARE_API_TOKEN="your-token"
+```
+
+The deployment scripts (`deploy-complete.sh`, `deploy.sh`) automatically call `load-env.sh` to load the token.
+
 ## Status
 
 - ✅ Project cleaned up
@@ -509,12 +548,142 @@ Then manually update `frontend/.env.production` with these values.
 - ✅ DNS configuration matches openarena pattern
 - ✅ Troubleshooting documentation consolidated
 - ✅ Frontend environment update script created
+- ✅ Cloudflare token auto-loading from openarena project
+- ✅ All markdown files consolidated into README
 - ⏳ Ready for deployment
+
+## Complete Deployment Guide
+
+### Quick Deployment (Automated - Recommended)
+
+**Use the complete deployment script**:
+```bash
+./deploy-complete.sh
+```
+
+This script handles everything:
+1. ✅ Checks prerequisites
+2. ✅ Initializes Terraform
+3. ✅ Deploys infrastructure
+4. ✅ Creates/verifies Cognito user
+5. ✅ Updates frontend environment variables (CRITICAL - fixes Cognito domain issues)
+6. ✅ Builds frontend
+7. ✅ Deploys frontend to S3
+8. ✅ Invalidates CloudFront cache
+9. ✅ Verifies deployment
+
+**Why use this?** The Cognito domain uses a random suffix that changes when infrastructure is recreated. This script automatically updates the frontend configuration, preventing the "Cognito login broken" issue.
+
+
+### Alternative: Step-by-Step Manual Deployment
+
+**Step 1: Initialize and Deploy Infrastructure**
+```bash
+cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
+
+# Load environment (Cloudflare token)
+source load-env.sh 2>/dev/null || true
+
+# Initialize if needed
+./init.sh
+
+# Deploy
+terraform apply -auto-approve
+```
+
+**Step 2: Create Admin User (if needed)**
+```bash
+USER_POOL_ID=$(terraform output -raw user_pool_id)
+aws cognito-idp admin-create-user \
+  --user-pool-id "$USER_POOL_ID" \
+  --username alex.lux \
+  --user-attributes Name=email,Value=alex.lux@example.com \
+  --temporary-password "ChangeMe123!" \
+  --region us-west-2
+
+aws cognito-idp admin-set-user-password \
+  --user-pool-id "$USER_POOL_ID" \
+  --username alex.lux \
+  --password "YourSecurePassword123!" \
+  --permanent \
+  --region us-west-2
+```
+
+**Step 3: Update and Deploy Frontend**
+```bash
+cd ../../frontend
+./update-env.sh    # Updates .env.production with new Cognito domain
+npm run build
+./deploy.sh
+```
+
+### Troubleshooting: Site Works Then Stops
+
+If your site works initially but then stops working (DNS_PROBE_FINISHED_NXDOMAIN), this is usually caused by:
+
+**Common causes:**
+1. **DNS records deleted or changed** - Check Cloudflare dashboard
+2. **Cognito domain changed** - Frontend environment variables not updated
+3. **CloudFront distribution recreated** - DNS record points to old domain
+4. **Certificate validation issues** - ACM certificate not validated
+
+**Quick Fix:**
+```bash
+# 1. Deploy infrastructure
+cd infra/envs/dev
+source load-env.sh 2>/dev/null || true
+terraform apply -auto-approve
+
+# 2. Update and redeploy frontend
+cd ../../frontend
+./update-env.sh
+npm run build
+./deploy.sh
+```
+
+**Detailed Troubleshooting:**
+
+**Issue 1: DNS Record Missing**
+```bash
+# Check if DNS record exists in Terraform state
+terraform state list | grep cloudflare_dns_record
+
+# Recreate DNS record
+terraform apply -target=module.static_site.cloudflare_dns_record.site
+```
+
+**Issue 2: Cognito Domain Changed**
+```bash
+cd frontend
+./update-env.sh  # Updates .env.production with new Cognito domain
+npm run build
+./deploy.sh
+```
+
+**Issue 3: CloudFront Distribution Recreated**
+```bash
+# Get new CloudFront domain
+terraform output cloudfront_domain
+
+# Update DNS record (Terraform should do this automatically)
+terraform apply -target=module.static_site.cloudflare_dns_record.site
+```
+
+**Issue 4: Certificate Not Validated**
+```bash
+# Check certificate status
+aws acm list-certificates --region us-east-1 \
+  --query 'CertificateSummaryList[?DomainName==`tools.alexflux.com`]'
+
+# Wait 2-5 minutes for validation
+# Check DNS validation records in Cloudflare
+```
 
 ## Need Help?
 
 1. Check the [Troubleshooting](#troubleshooting) section
-2. Review Terraform logs: `terraform.log` or `TF_LOG=DEBUG terraform plan`
-3. Verify DNS in Cloudflare dashboard
-4. Check AWS CloudFront distribution status
-5. Run verification scripts: `./verify-deployment.sh` or `./check-dns.sh`
+2. See [REDEPLOY.md](./REDEPLOY.md) for complete redeployment steps
+3. Review Terraform logs: `terraform.log` or `TF_LOG=DEBUG terraform plan`
+4. Verify DNS in Cloudflare dashboard
+5. Check AWS CloudFront distribution status
+6. Run verification scripts: `./verify-deployment.sh` or `./check-dns.sh`

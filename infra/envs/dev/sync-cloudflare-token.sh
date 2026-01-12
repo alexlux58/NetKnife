@@ -1,6 +1,7 @@
 #!/bin/bash
-# Sync Cloudflare API token from openarena project to terraform.tfvars
-# This ensures the token is available for Terraform without manual setup
+# Sync Cloudflare API token to terraform.tfvars
+# Tries multiple sources: .env file, environment variable, or existing terraform.tfvars
+# Optionally can sync from openarena project if available
 
 set -e
 
@@ -12,21 +13,22 @@ TFVARS_EXAMPLE="$SCRIPT_DIR/terraform.tfvars.example"
 # Try to load token from multiple sources
 TOKEN=""
 
-# 1. Try local .env file
-if [ -f "$SCRIPT_DIR/.env" ]; then
+# 1. Try reading from existing terraform.tfvars (don't overwrite if already set)
+if [ -f "$TFVARS_FILE" ]; then
+    EXISTING_TOKEN=$(grep -E "^cloudflare_api_token\s*=" "$TFVARS_FILE" 2>/dev/null | sed 's/.*=\s*"\(.*\)".*/\1/' | head -1)
+    if [ -n "$EXISTING_TOKEN" ] && [ "$EXISTING_TOKEN" != "YOUR_CLOUDFLARE_API_TOKEN" ]; then
+        TOKEN="$EXISTING_TOKEN"
+        echo "✅ Token already set in terraform.tfvars"
+        exit 0
+    fi
+fi
+
+# 2. Try local .env file
+if [ -z "$TOKEN" ] && [ -f "$SCRIPT_DIR/.env" ]; then
     source "$SCRIPT_DIR/.env" 2>/dev/null || true
     if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
         TOKEN="$CLOUDFLARE_API_TOKEN"
         echo "✅ Found token in local .env"
-    fi
-fi
-
-# 2. Try openarena project .env file
-if [ -z "$TOKEN" ] && [ -f "$OPENARENA_DIR/.env" ]; then
-    source "$OPENARENA_DIR/.env" 2>/dev/null || true
-    if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-        TOKEN="$CLOUDFLARE_API_TOKEN"
-        echo "✅ Found token in openarena project"
     fi
 fi
 
@@ -36,23 +38,24 @@ if [ -z "$TOKEN" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
     echo "✅ Found token in environment"
 fi
 
-# 4. Try reading from existing terraform.tfvars
-if [ -z "$TOKEN" ] && [ -f "$TFVARS_FILE" ]; then
-    EXISTING_TOKEN=$(grep -E "^cloudflare_api_token\s*=" "$TFVARS_FILE" 2>/dev/null | sed 's/.*=\s*"\(.*\)".*/\1/' | head -1)
-    if [ -n "$EXISTING_TOKEN" ]; then
-        TOKEN="$EXISTING_TOKEN"
-        echo "✅ Found token in existing terraform.tfvars"
+# 4. Try openarena project .env file (optional, only if other sources failed)
+if [ -z "$TOKEN" ] && [ -f "$OPENARENA_DIR/.env" ]; then
+    source "$OPENARENA_DIR/.env" 2>/dev/null || true
+    if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+        TOKEN="$CLOUDFLARE_API_TOKEN"
+        echo "✅ Found token in openarena project (optional fallback)"
     fi
 fi
 
 if [ -z "$TOKEN" ]; then
-    echo "❌ Cloudflare API token not found"
+    echo "⚠️  Cloudflare API token not found"
     echo ""
     echo "Please provide the token in one of these ways:"
-    echo "  1. Create .env file: echo 'CLOUDFLARE_API_TOKEN=\"your-token\"' > $SCRIPT_DIR/.env"
-    echo "  2. Set environment: export CLOUDFLARE_API_TOKEN=\"your-token\""
-    echo "  3. Add to terraform.tfvars: cloudflare_api_token = \"your-token\""
-    echo "  4. Ensure openarena project has .env with CLOUDFLARE_API_TOKEN"
+    echo "  1. Add directly to terraform.tfvars: cloudflare_api_token = \"your-token\""
+    echo "  2. Create .env file: echo 'CLOUDFLARE_API_TOKEN=\"your-token\"' > $SCRIPT_DIR/.env"
+    echo "  3. Set environment: export CLOUDFLARE_API_TOKEN=\"your-token\""
+    echo ""
+    echo "The token is required if you're using a custom domain (tools.alexflux.com)"
     exit 1
 fi
 

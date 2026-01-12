@@ -89,17 +89,23 @@ if [ -z "$PASSWORD" ]; then
 fi
 
 echo "   Creating user: $USERNAME..."
+# Use a strong temporary password that meets Cognito requirements
+# Minimum 14 chars, uppercase, lowercase, number, symbol
+TEMP_PASSWORD="TempPass123!@#$"
 CREATE_OUTPUT=$(aws cognito-idp admin-create-user \
   --user-pool-id "$USER_POOL_ID" \
   --username "$USERNAME" \
   --user-attributes Name=email,Value="$EMAIL" \
-  --temporary-password "TempPass123!" \
+  --temporary-password "$TEMP_PASSWORD" \
   --region us-west-2 2>&1) || true
 
 if echo "$CREATE_OUTPUT" | grep -q "already exists\|UsernameExistsException"; then
     echo "   User already exists, will update password..."
 else
     echo "   User created successfully"
+    # Wait a moment for user to be fully created before setting password
+    echo "   Waiting 2 seconds for user to be fully created..."
+    sleep 2
 fi
 
 echo "   Setting permanent password..."
@@ -111,7 +117,8 @@ if aws cognito-idp admin-set-user-password \
   --region us-west-2 2>&1; then
     echo "✅ Password set successfully"
 else
-    echo "⚠️  Warning: Failed to set password (user may need to change it on first login)"
+    echo "⚠️  Warning: Failed to set password"
+    echo "   You can set it manually by running: ./set-password.sh $USERNAME"
 fi
 
 echo "✅ User ready: $USERNAME"

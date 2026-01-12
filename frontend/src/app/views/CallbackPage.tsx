@@ -32,7 +32,18 @@ export default function CallbackPage() {
         navigate('/', { replace: true })
       } catch (err) {
         console.error('Login callback failed:', err)
-        setError(err instanceof Error ? err.message : 'Login failed')
+        
+        // Provide more helpful error message for state errors
+        let errorMessage = 'Login failed'
+        if (err instanceof Error) {
+          if (err.message.includes('state') || err.message.includes('No matching state')) {
+            errorMessage = 'Authentication session expired. This can happen if you opened the login page in a new tab or your browser cleared session data. Please try logging in again from the main page.'
+          } else {
+            errorMessage = err.message
+          }
+        }
+        
+        setError(errorMessage)
       }
     }
 

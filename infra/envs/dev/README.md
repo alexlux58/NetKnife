@@ -8,7 +8,9 @@ Terraform configuration for deploying NetKnife infrastructure to AWS with CloudF
 - [Setup Instructions](#setup-instructions)
 - [Configuration](#configuration)
 - [Deployment](#deployment)
+- [Deployment Checklist](#deployment-checklist)
 - [DNS Configuration](#dns-configuration)
+- [Password Requirements](#password-requirements)
 - [Troubleshooting](#troubleshooting)
 - [Project Structure](#project-structure)
 - [Important Notes](#important-notes)
@@ -193,6 +195,114 @@ Run the verification script:
 ./verify-deployment.sh
 ```
 
+## Deployment Checklist
+
+### Pre-Deployment Checklist
+
+Before running `./redeploy.sh`, ensure:
+
+- [ ] **AWS CLI configured** - Run `aws sts get-caller-identity` to verify
+- [ ] **Terraform installed** - Run `terraform version` (needs >= 1.6)
+- [ ] **Node.js installed** - Run `node --version` and `npm --version` (needs 18+)
+- [ ] **terraform.tfvars configured** - Copy from `terraform.tfvars.example` and fill in values
+- [ ] **Cloudflare API token** - Either:
+  - Added to `terraform.tfvars` as `cloudflare_api_token = "..."`, OR
+  - Run `./sync-cloudflare-token.sh` to auto-sync from openarena project
+- [ ] **Required Cloudflare variables** (if using custom domain):
+  - `cloudflare_zone_id` - Your Cloudflare zone ID
+  - `cloudflare_zone_name` - Your zone name (e.g., "alexflux.com")
+  - `cloudflare_subdomain` - Subdomain name (e.g., "tools")
+
+### Deployment Options
+
+**Option 1: Complete Automated Deployment (Recommended)**
+
+```bash
+cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
+./redeploy.sh
+```
+
+This script will:
+1. ✅ Initialize Terraform
+2. ✅ Sync Cloudflare token (if needed)
+3. ✅ Deploy infrastructure (5-10 minutes)
+4. ✅ Get Terraform outputs
+5. ✅ Create Cognito admin user
+6. ✅ Update frontend environment variables
+7. ✅ Build frontend
+8. ✅ Deploy frontend to S3
+9. ✅ Invalidate CloudFront cache
+
+**Option 2: Step-by-Step Manual Deployment**
+
+```bash
+cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
+
+# 1. Initialize Terraform
+./init.sh
+
+# 2. Sync Cloudflare token (if using custom domain)
+./sync-cloudflare-token.sh
+
+# 3. Deploy infrastructure
+terraform apply -auto-approve
+
+# 4. Update frontend environment
+cd ../../frontend
+./update-env.sh
+
+# 5. Build frontend
+npm run build
+
+# 6. Deploy frontend
+./deploy.sh
+```
+
+### Post-Deployment Verification
+
+After deployment completes:
+
+- [ ] **Check Terraform outputs** - Run `terraform output` (all should have values)
+- [ ] **Check DNS record** - Verify `tools` CNAME exists in Cloudflare dashboard
+- [ ] **Check CloudFront status** - Should be "Deployed" (takes 2-5 minutes)
+- [ ] **Test site access** - Navigate to `https://tools.alexflux.com`
+- [ ] **Test Cognito login** - Sign in with your credentials
+- [ ] **Check S3 bucket** - Verify files are uploaded: `aws s3 ls s3://netknife-site-026600053230/`
+
+### Verification Commands
+
+```bash
+# Check infrastructure
+cd infra/envs/dev
+terraform output
+
+# Check DNS (wait 5-60 min for propagation)
+dig tools.alexflux.com CNAME
+
+# Check CloudFront
+CLOUDFRONT_ID=$(terraform output -raw cloudfront_id)
+aws cloudfront get-distribution --id "$CLOUDFRONT_ID" --query 'Distribution.Status'
+
+# Check S3
+BUCKET=$(terraform output -raw bucket_name)
+aws s3 ls "s3://$BUCKET/"
+
+# Check Cognito
+USER_POOL_ID=$(terraform output -raw user_pool_id)
+aws cognito-idp list-users --user-pool-id "$USER_POOL_ID" --region us-west-2
+```
+
+### Expected Deployment Time
+
+- Terraform apply: **5-10 minutes**
+- Certificate validation: **2-5 minutes** (if using custom domain)
+- DNS propagation: **5-60 minutes** (if using custom domain)
+- Frontend build: **1-2 minutes**
+- Frontend deployment: **1-2 minutes**
+- CloudFront deployment: **2-5 minutes**
+
+**Total: ~15-20 minutes** (plus DNS propagation if using custom domain)
+
 ## DNS Configuration
 
 ### DNS Configuration Fix - Matching OpenArena Pattern
@@ -285,6 +395,96 @@ If you see `DNS_PROBE_FINISHED_NXDOMAIN` when accessing `https://tools.alexflux.
    terraform apply
    ```
 
+### DNS Record Not Created - Fix Required
+
+If the Cloudflare DNS record for your custom domain was not created during deployment:
+
+**Root Cause:**
+The DNS record creation requires three variables in `terraform.tfvars`:
+1. `cloudflare_zone_id` ✅
+2. `cloudflare_zone_name` ✅
+3. `cloudflare_subdomain` ✅
+
+The condition in the module checks:
+```hcl
+cloudflare_enabled = var.cloudflare_zone_id != "" && var.cloudflare_zone_name != "" && var.cloudflare_subdomain != ""
+```
+
+If any of these are missing, the DNS record won't be created.
+
+**Solution:**
+
+**Option 1: Create DNS Record via Terraform (Recommended)**
+```bash
+cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
+terraform apply -target=module.static_site.cloudflare_dns_record.site -auto-approve
+```
+
+**Option 2: Create DNS Record Manually in Cloudflare**
+1. Go to https://dash.cloudflare.com
+2. Select your zone (e.g., `alexflux.com`)
+3. Go to DNS → Records
+4. Click "Add record"
+5. Set:
+   - **Type**: CNAME
+   - **Name**: `tools` (or your subdomain)
+   - **Target**: Get from `terraform output cloudfront_domain`
+   - **Proxy status**: DNS only (gray cloud)
+   - **TTL**: Auto
+6. Save
+
+**Verification:**
+```bash
+# Check Terraform state
+terraform state list | grep cloudflare_dns_record.site
+# Should show: module.static_site.cloudflare_dns_record.site[0]
+
+# Wait 5-60 minutes for DNS propagation, then test:
+dig tools.alexflux.com CNAME
+# Should return: <your-cloudfront-domain>
+```
+
+## Password Requirements
+
+Your Cognito user pool has strict password requirements:
+
+- **Minimum length**: 14 characters
+- **Require uppercase**: Yes (at least one A-Z)
+- **Require lowercase**: Yes (at least one a-z)
+- **Require numbers**: Yes (at least one 0-9)
+- **Require symbols**: Yes (at least one special character like !@#$%^&*)
+
+### Examples of Valid Passwords
+
+✅ `MySecurePass123!` (16 chars)
+✅ `T@ng3rine2024!` (14 chars)
+✅ `NetKnife2024!@#$` (16 chars)
+✅ `MyP@ssw0rdIsStr0ng!` (20 chars)
+
+### Examples of Invalid Passwords
+
+❌ `T@ng3rine` (9 chars - too short)
+❌ `TempPass123!` (12 chars - too short)
+❌ `mypassword1234!` (no uppercase)
+❌ `MYPASSWORD1234!` (no lowercase)
+❌ `MyPassword123` (no symbol)
+
+### Setting Your Password
+
+Use the set-password script with a password that meets all requirements:
+
+```bash
+cd /Users/alex.lux/Desktop/AWS/netknife/infra/envs/dev
+./set-password.sh alex.lux "YourSecurePassword123!"
+```
+
+Or set it directly:
+```bash
+./set-password.sh alex.lux "MySecurePass123!"
+```
+
+**Note:** The password must be at least 14 characters and include uppercase, lowercase, numbers, and symbols.
+
 ## Troubleshooting
 
 ### Issue: Terraform Commands Hang
@@ -348,6 +548,45 @@ brew install ca-certificates
 ### Issue: DNS Not Resolving
 
 See [DNS Troubleshooting](#dns-troubleshooting) section above.
+
+### Issue: Password Setting Fails
+
+**Cause**: Password doesn't meet Cognito requirements or timing issue during user creation.
+
+**Solution**:
+1. Ensure password meets all requirements (see [Password Requirements](#password-requirements))
+2. Use the set-password script which handles timing issues:
+   ```bash
+   ./set-password.sh alex.lux "YourSecurePassword123!"
+   ```
+3. If user doesn't exist, the script will create it first, then set the password
+
+### Issue: "No matching state found in storage" (OAuth Error)
+
+**Cause**: OAuth state parameter lost between redirects. This can happen if:
+- You opened the login page in a new tab/window
+- Your browser cleared sessionStorage
+- You navigated away during authentication
+
+**Solution**:
+1. Clear browser cache and cookies
+2. Try logging in again from the main page (not a new tab)
+3. Don't navigate away during the authentication flow
+4. If the issue persists, check browser console for detailed error messages
+
+### Issue: Frontend Build Fails
+
+**Solution**: 
+- Check Node.js version: `node --version` (should be 18+)
+- Clear cache: `rm -rf node_modules package-lock.json && npm install`
+- Check for errors: `npm run build` (without redirect)
+
+### Issue: S3 Sync Fails
+
+**Solution**:
+- Verify AWS credentials: `aws sts get-caller-identity`
+- Check bucket name: `terraform output bucket_name`
+- Verify bucket exists: `aws s3 ls s3://<bucket-name>`
 
 ### Issue: Cognito Sign-In Broken (DNS_PROBE_FINISHED_NXDOMAIN)
 
@@ -521,12 +760,16 @@ The Cloudflare API token must be in `terraform.tfvars` (not an environment varia
 ./sync-cloudflare-token.sh
 ```
 
-This script automatically:
-1. Finds the token from your openarena project's `.env` file
-2. Syncs it to `terraform.tfvars` as `cloudflare_api_token = "..."`
+This script automatically finds the token from:
+1. Existing `terraform.tfvars` (if already set, skips update)
+2. Local `.env` file
+3. Environment variable `CLOUDFLARE_API_TOKEN`
+4. Openarena project (optional fallback, if available)
+
+Then syncs it to `terraform.tfvars` as `cloudflare_api_token = "..."`
 
 **Manual Setup:**
-Add to `terraform.tfvars`:
+Simply add to `terraform.tfvars`:
 ```hcl
 cloudflare_api_token = "your-token-here"
 ```

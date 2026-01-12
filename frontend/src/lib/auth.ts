@@ -77,10 +77,18 @@ const userManager = new UserManager({
   scope: 'openid email profile',
   
   // Store tokens in sessionStorage (cleared when tab closes)
-  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+  // IMPORTANT: State is stored with a prefix to avoid conflicts
+  userStore: new WebStorageStateStore({ 
+    store: window.sessionStorage,
+    prefix: 'oidc.' // Prefix for state storage keys
+  }),
   
   // Don't automatically refresh tokens (we'll handle this manually if needed)
   automaticSilentRenew: false,
+  
+  // Additional settings to help with state management
+  loadUserInfo: false, // Don't load user info automatically
+  filterProtocolClaims: true, // Filter protocol claims from tokens
   
   // Cognito-specific: include metadata for logout
   metadata: {
@@ -133,10 +141,40 @@ export async function completeLogin(): Promise<User | null> {
   }
 
   try {
+    // Get the state from URL parameters to help debug
+    const urlParams = new URLSearchParams(window.location.search)
+    const stateParam = urlParams.get('state')
+    const codeParam = urlParams.get('code')
+    
+    console.log('Callback received:', { 
+      hasState: !!stateParam, 
+      hasCode: !!codeParam,
+      redirectUri: REDIRECT_URI 
+    })
+    
+    // Check if state exists in storage before calling callback
+    const stateKey = `oidc.${CLIENT_ID}:${REDIRECT_URI}:state`
+    const storedState = sessionStorage.getItem(stateKey)
+    console.log('State check:', { 
+      stateKey, 
+      hasStoredState: !!storedState,
+      urlState: stateParam 
+    })
+    
     const user = await userManager.signinRedirectCallback()
     return user
   } catch (error) {
     console.error('Login callback failed:', error)
+    
+    // If it's a state mismatch error, provide more helpful message
+    if (error instanceof Error && error.message.includes('state')) {
+      console.error('State mismatch - this can happen if:')
+      console.error('1. You opened the login page in a new tab/window')
+      console.error('2. Your browser cleared sessionStorage')
+      console.error('3. You navigated away during authentication')
+      console.error('Solution: Try logging in again from the main page')
+    }
+    
     throw error
   }
 }

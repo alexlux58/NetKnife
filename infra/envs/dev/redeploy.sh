@@ -15,7 +15,18 @@ echo ""
 # Step 1: Initialize Terraform
 echo "Step 1: Initializing Terraform..."
 cd "$SCRIPT_DIR"
-./init.sh
+if [ -f "init.sh" ]; then
+    ./init.sh
+else
+    echo "   Running terraform init..."
+    terraform init -upgrade -reconfigure
+fi
+
+if [ ! -d ".terraform" ]; then
+    echo "❌ Error: Terraform initialization failed"
+    exit 1
+fi
+
 echo "✅ Terraform initialized"
 echo ""
 
@@ -27,6 +38,12 @@ if [ ! -f "terraform.tfvars" ]; then
     exit 1
 fi
 
+# Step 2.5: Sync Cloudflare token if needed
+if [ -f "sync-cloudflare-token.sh" ]; then
+    echo "Syncing Cloudflare API token..."
+    ./sync-cloudflare-token.sh 2>/dev/null || true
+fi
+
 # Step 3: Deploy Infrastructure
 echo "Step 2: Deploying infrastructure..."
 echo "   This will take 5-10 minutes..."
@@ -36,10 +53,16 @@ echo ""
 
 # Step 4: Get outputs
 echo "Step 3: Getting Terraform outputs..."
-USER_POOL_ID=$(terraform output -raw user_pool_id)
-BUCKET_NAME=$(terraform output -raw bucket_name)
-CLOUDFRONT_ID=$(terraform output -raw cloudfront_id)
-SITE_URL=$(terraform output -raw site_url)
+USER_POOL_ID=$(terraform output -raw user_pool_id 2>/dev/null || echo "")
+BUCKET_NAME=$(terraform output -raw bucket_name 2>/dev/null || echo "")
+CLOUDFRONT_ID=$(terraform output -raw cloudfront_id 2>/dev/null || echo "")
+SITE_URL=$(terraform output -raw site_url 2>/dev/null || echo "")
+
+if [ -z "$BUCKET_NAME" ] || [ -z "$CLOUDFRONT_ID" ]; then
+    echo "❌ Error: Failed to get required Terraform outputs"
+    echo "   Run: terraform output"
+    exit 1
+fi
 
 echo "   User Pool ID: $USER_POOL_ID"
 echo "   Bucket: $BUCKET_NAME"
@@ -96,6 +119,11 @@ echo ""
 
 # Step 6: Update frontend environment
 echo "Step 5: Updating frontend environment variables..."
+if [ ! -d "$PROJECT_ROOT/frontend" ]; then
+    echo "❌ Error: Frontend directory not found at $PROJECT_ROOT/frontend"
+    exit 1
+fi
+
 cd "$PROJECT_ROOT/frontend"
 if [ -f "update-env.sh" ]; then
     ./update-env.sh
@@ -110,8 +138,23 @@ echo "Step 6: Building frontend..."
 if [ ! -d "node_modules" ]; then
     echo "   Installing dependencies..."
     npm install
+    if [ $? -ne 0 ]; then
+        echo "❌ Error: npm install failed"
+        exit 1
+    fi
 fi
+
 npm run build
+if [ $? -ne 0 ]; then
+    echo "❌ Error: npm run build failed"
+    exit 1
+fi
+
+if [ ! -d "dist" ]; then
+    echo "❌ Error: Build failed - dist/ directory not found"
+    exit 1
+fi
+
 echo "✅ Frontend built"
 echo ""
 
@@ -119,14 +162,25 @@ echo ""
 echo "Step 7: Deploying frontend..."
 if [ -f "deploy.sh" ]; then
     ./deploy.sh
+    if [ $? -ne 0 ]; then
+        echo "❌ Error: deploy.sh failed"
+        exit 1
+    fi
 else
     echo "   Uploading to S3..."
     aws s3 sync dist/ "s3://$BUCKET_NAME/" --delete
+    if [ $? -ne 0 ]; then
+        echo "❌ Error: S3 sync failed"
+        exit 1
+    fi
     
     echo "   Invalidating CloudFront cache..."
     aws cloudfront create-invalidation \
       --distribution-id "$CLOUDFRONT_ID" \
       --paths "/*" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "⚠️  Warning: CloudFront invalidation failed (but files are uploaded)"
+    fi
 fi
 echo "✅ Frontend deployed"
 echo ""

@@ -19,7 +19,7 @@ export default function LoginPage() {
   const devMode = isDevMode()
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-terminal-bg">
+    <div className="min-h-screen min-h-[100dvh] flex items-center justify-center p-4 sm:p-6 bg-terminal-bg">
       {/* Decorative background grid */}
       <div 
         className="absolute inset-0 opacity-5"

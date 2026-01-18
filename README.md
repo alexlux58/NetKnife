@@ -1,10 +1,14 @@
 # NetKnife 🔪
 
-**Network & Security Swiss Army Knife** - A serverless web application providing network engineers with essential tools, accessible from any browser without installing local software.
+**Network & Security Swiss Army Knife** — A serverless web application for network and security work in the browser.
 
 ![AWS Serverless](https://img.shields.io/badge/AWS-Serverless-orange)
 ![React](https://img.shields.io/badge/React-18-blue)
 ![Terraform](https://img.shields.io/badge/Terraform-1.6+-purple)
+
+**Contents:** [Features](#features) · [Architecture](#architecture) · [Security](#security) · [Deployment](#deployment-guide) · [Custom Domain](#custom-domain-setup-optional) · [Cost](#cost-estimation) · [Development](#development) · [Project Structure](#project-structure) · [Report Builder](#report-builder--chat-storage) · [Adding Tools](#adding-new-tools) · [OSINT](#osint-features) · [API Keys](#api-keys-configuration) · [Production Readiness](#production-readiness) · [Monetization](#monetization) · [Infra / Dev](#infra--dev-environment) · [Troubleshooting](#troubleshooting)
+
+---
 
 ## Features
 
@@ -58,11 +62,33 @@
 
 **Threat Intelligence**
 - **IP Reputation (AbuseIPDB)** - Abuse confidence scores and report data
+- **IP Reputation (IPQualityScore)** - Fraud score, VPN/proxy/Tor detection (requires API key)
 - **Shodan** - Internet-connected device search (requires API key)
 - **VirusTotal** - File/URL/domain/IP analysis (requires API key)
 - **SecurityTrails** - Historical DNS and WHOIS data (requires API key)
 - **Censys** - Internet-wide scan data (requires API key)
 - **GreyNoise** - IP threat intelligence (requires API key)
+
+**OSINT & Email Intelligence**
+- **Email Reputation (EmailRep)** - Email reputation, suspicious activity, credentials leaked
+- **Email Breach Check (BreachDirectory)** - Check if email appears in data breaches
+- **Email Verification (IPQualityScore)** - Validate email, detect disposable/spamtraps (requires API key)
+- **Email Finder (Hunter)** - Verify email and find associated accounts (requires API key)
+- **OSINT Dashboard** - Consolidated threat intelligence from multiple sources
+
+**Phone & URL Intelligence**
+- **Phone Validator** - Phone number validation and carrier detection
+- **Phone Validation (IPQualityScore)** - Phone validation and risk assessment (requires API key)
+- **URL Scanner (IPQualityScore)** - Malicious URL scanner for phishing/malware (requires API key)
+
+**AI Security Advisor**
+- **Security Advisor** - AI-powered chatbot providing expert security guidance and tool recommendations (requires OpenAI API key)
+- **Chat Storage** - Save and load Security Advisor conversations
+
+**Report Builder**
+- **Report Builder** - Collect data from any tool and generate professional PDF reports
+- **Add to Report** - One-click button available in all tools to add results to reports
+- **PDF Export** - Download comprehensive reports as PDF documents
 
 **System Information**
 - **RDAP Lookup** - Modern WHOIS replacement for IPs and domains
@@ -210,7 +236,7 @@ EOF
 npm run build
 ```
 
-### Step 6: Deploy Frontend
+### Step 5: Deploy Frontend
 
 **Option 1: Automated Deployment (Recommended)**
 
@@ -388,6 +414,54 @@ netknife/
 └── README.md
 ```
 
+## Report Builder & Chat Storage
+
+### Where to Find Everything
+
+- **Report Builder** (`/tools/report-builder`): Sidebar → **Utilities** → Report Builder. View items, save, load, delete, download PDF, or AI-enhanced PDF. Use the **Reports** link in the top bar from anywhere.
+- **Add to Report**: In any tool, after results appear, use the **Add to Report** button to add that result to your current report.
+- **Save Chat** (Security Advisor): In **Threat Intelligence** → Security Advisor, click **Save Chat** when you have messages; load saved chats from the list.
+
+### Features
+
+- **Collect data** from any tool with one click; **save** reports with title, description, and category (Pentest, Breach, Report, General); **load** and **delete** saved reports; **filter** by category in the dashboard.
+- **PDF**: **Download PDF** (standard) or **AI PDF** (includes AI analysis via Security Advisor: Executive Summary, Key Findings, Risk Assessment, Recommendations).
+- **Chats**: Save and load Security Advisor conversations. All data is user-scoped (Cognito) and has a 1-year TTL in DynamoDB.
+
+### Step-by-Step: First Report
+
+1. **Add items:** Run any tool (e.g. Email Reputation, IP-API), then click **Add to Report** on the results.
+2. **View report:** Go to **Report Builder** (Utilities or top bar **Reports**). You’ll see all items with tool name, input, and data.
+3. **Save:** Click **Save Report**, choose title/description/category, then **Save**.
+4. **PDF:** Click **Download PDF** or **AI PDF** (AI requires Security Advisor to be configured).
+5. **Load:** In Saved Reports, click **Load** on a report to continue editing.
+
+### Adding "Add to Report" to Tools
+
+Import and use the component; pass a `category` that matches the tool’s purpose (e.g. `"DNS & Domain"`, `"Threat Intelligence"`, `"Email Security"`, `"Certificates & TLS"`, `"Network Intelligence"`, `"Encoding & Crypto"`, `"Reference & Templates"`).
+
+```tsx
+import AddToReportButton from '../../components/AddToReportButton'
+
+// After displaying results:
+{result && (
+  <div className="flex items-center justify-end mb-2">
+    <AddToReportButton
+      toolId="your-tool-id"
+      input={userInput}
+      data={result}
+      category="Your Category"
+    />
+  </div>
+)}
+```
+
+### Report Structure & Storage
+
+- **DynamoDB** table: `netknife-{env}-reports`; user-scoped by Cognito `sub`; 1-year TTL.
+- **Lambda** `reports`: save, get, list, delete for reports and chats.
+- **Frontend:** `ReportContext`, `AddToReportButton`, `ReportBuilderTool`; PDF via jsPDF + html2canvas; AI PDF calls Security Advisor.
+
 ## Adding New Tools
 
 ### Offline Tool
@@ -402,7 +476,132 @@ netknife/
 2. Add Terraform resources in `infra/modules/api/main.tf`
 3. Create frontend in `frontend/src/tools/remote/YourTool.tsx`
 4. Register in `frontend/src/tools/registry.tsx`
-5. Deploy infrastructure and frontend
+5. Add "Add to Report" button (optional but recommended)
+6. Deploy infrastructure and frontend
+
+## OSINT Features
+
+### OSINT Dashboard
+
+The **OSINT Dashboard** (`/tools/osint-dashboard`) consolidates results from multiple sources to provide comprehensive threat intelligence.
+
+**Features:**
+- **Multi-source analysis:** Automatically detects input type (email, IP, or domain)
+- **Parallel queries:** Runs all relevant checks simultaneously for speed
+- **Risk scoring:** Calculates overall risk score (0-100) based on all findings
+- **Risk levels:** Categorizes as Low, Medium, High, or Critical
+- **Actionable recommendations:** Provides specific security recommendations
+- **Tabbed interface:** Organized view of all results
+- **Error handling:** Gracefully handles missing API keys or failed queries
+
+**Email Analysis:**
+- EmailRep.io (reputation, suspicious activity)
+- BreachDirectory (breach detection)
+- Hunter.io (verification, if API key configured)
+- IPQualityScore Email (validation, spam detection, if API key configured)
+
+**IP Analysis:**
+- IP-API.com (geolocation, ISP)
+- AbuseIPDB (reputation, if API key configured)
+- IPQualityScore (fraud score, VPN/proxy detection, if API key configured)
+- GreyNoise (threat intelligence, if API key configured)
+
+**Domain Analysis:**
+- DNS lookup (A records)
+- RDAP (WHOIS replacement)
+- SecurityTrails (historical data, if API key configured)
+
+### Security Advisor Chatbot
+
+The **Security Advisor** (`/tools/security-advisor`) is an AI-powered chatbot that provides expert security guidance and recommends NetKnife tools for investigating security incidents.
+
+**Features:**
+- **Context-aware advice:** Understands security situations and provides tailored guidance
+- **Tool recommendations:** Suggests specific NetKnife tools with step-by-step instructions
+- **Dual audience:** Provides both technical details (for engineers) and executive summaries
+- **Conversation context:** Maintains conversation history for follow-up questions
+- **Quick questions:** Pre-populated common security scenarios
+
+**AI Model:** GPT-4o-mini
+- **Cost:** ~$0.15/$0.60 per 1M tokens (input/output)
+- **Quality:** Excellent performance for security guidance
+- **Estimated cost:** ~$0.0003-0.0006 per conversation
+
+**Configuration:**
+1. Get OpenAI API key from https://platform.openai.com/api-keys
+2. Add to `terraform.tfvars`: `openai_api_key = "sk-..."`
+3. Deploy: `terraform apply`
+
+**Example Usage:**
+- Ask: "I think I got breached"
+- Advisor recommends: Email breach checks, password checks, OSINT Dashboard
+- Provides step-by-step guidance and both technical and executive summaries
+
+### IPQualityScore Tools
+
+All IPQualityScore tools use the same API key and share the free tier limit (1,000 requests/month total).
+
+**IP Reputation** (`/tools/ipqualityscore`)
+- Fraud score (0-100)
+- VPN/Proxy/Tor detection
+- Bot detection
+- Recent abuse detection
+- Free tier: 100 requests/day
+
+**Email Verification** (`/tools/ipqs-email`)
+- Email syntax, domain, and MX validation
+- Disposable email detection
+- Spamtrap/honeypot detection
+- Recent abuse detection
+- Free tier: 1,000 requests/month
+
+**Phone Validation** (`/tools/ipqs-phone`)
+- Phone number format validation
+- Line type detection (mobile, landline, VOIP)
+- Risky number detection
+- Carrier information
+- Free tier: 1,000 requests/month
+
+**URL Scanner** (`/tools/ipqs-url`)
+- Phishing detection
+- Malware detection
+- Suspicious content detection
+- Domain and server information
+- Free tier: 1,000 requests/month
+
+## API Keys Configuration
+
+### Required API Keys
+
+Add these to `infra/envs/dev/terraform.tfvars`:
+
+```hcl
+# IPQualityScore (for IP reputation, email, phone, URL tools)
+ipqualityscore_api_key = "your-key-here"
+
+# Hunter.io (for email verification and finder)
+hunter_api_key = "your-key-here"
+
+# OpenAI (for Security Advisor chatbot)
+openai_api_key = "sk-..."
+openai_model = "gpt-4o-mini"  # Optional, defaults to gpt-4o-mini
+```
+
+### Optional API Keys (Increase Rate Limits)
+
+```hcl
+# EmailRep.io (optional, increases rate limits)
+emailrep_api_key = "your-key-here"
+
+# NumLookup (optional, increases rate limits)
+numlookup_api_key = "your-key-here"
+```
+
+### Tools That Work Without API Keys
+
+- **IP-API.com** - Full functionality, 45 req/min
+- **BreachDirectory** - Full functionality, no limits
+- **EmailRep.io** - Works without key (lower rate limits)
 
 ## Troubleshooting
 
@@ -540,6 +739,68 @@ npm run build
 ./deploy.sh
 ```
 
+#### Tools Not Showing After Deployment
+
+If you've run `terraform apply` and `./deploy.sh` but don't see all tools:
+
+**1. CloudFront Cache Invalidation**
+CloudFront cache invalidation can take **5-15 minutes** to fully propagate.
+
+**Check invalidation status:**
+```bash
+cd infra/envs/dev
+CLOUDFRONT_ID=$(terraform output -raw cloudfront_id)
+aws cloudfront list-invalidations --distribution-id "$CLOUDFRONT_ID" --max-items 1
+```
+
+**Force immediate refresh:**
+- Hard refresh browser: `Cmd+Shift+R` (Mac) or `Ctrl+Shift+R` (Windows/Linux)
+- Or open in incognito/private window
+
+**2. Rebuild Frontend**
+Make sure you rebuilt after adding new tools:
+```bash
+cd frontend
+npm run build
+./deploy.sh
+```
+
+**3. Verify Build Includes New Tools**
+```bash
+cd frontend
+grep -r "ipqs-email\|ipqs-phone\|ipqs-url\|security-advisor" dist/assets/*.js | head -5
+```
+
+**4. Verify Registry Count**
+```bash
+cd frontend
+grep -c "id: '" src/tools/registry.tsx
+```
+Should show 56 tools total.
+
+**5. Manual Cache Clear**
+```bash
+cd infra/envs/dev
+CLOUDFRONT_ID=$(terraform output -raw cloudfront_id)
+aws cloudfront create-invalidation \
+    --distribution-id "$CLOUDFRONT_ID" \
+    --paths "/*" \
+    --paths "/index.html" \
+    --paths "/assets/*"
+```
+
+**Expected Tool Count:**
+- **Total tools:** 56
+- **New IPQS tools:** 3 (ipqs-email, ipqs-phone, ipqs-url)
+- **Security Advisor:** 1 (security-advisor)
+
+#### Report Builder and Chats
+
+- **Add to Report / Save Chat not visible:** Button appears only after a successful result. Rebuild frontend (`npm run build`), hard refresh, and ensure you’re logged in.
+- **Save Report disabled:** You need at least one item; add via **Add to Report** in other tools first.
+- **401 Unauthorized on save/load/list:** JWT or backend misconfiguration. Ensure backend is deployed and you’re logged in; check CloudWatch for the `reports` Lambda.
+- **Where data is stored:** DynamoDB `netknife-{env}-reports`; user-scoped by Cognito ID; 1-year TTL.
+
 #### DynamoDB Cache Issues
 
 ```bash
@@ -647,6 +908,24 @@ aws lambda invoke --function-name netknife-dev-dns \
 
 echo "=== Done ==="
 ```
+
+## Production Readiness
+
+Priorities before launch: **Favicon** (`public/favicon.svg`), **dev bypass** only when `import.meta.env.DEV` (see `lib/auth.ts`), **API URL** guard in `lib/api.ts`, **source maps** off in prod (`vite.config.ts`). **High:** 402 + Upgrade modal (`UpgradeModal.tsx`, `netknife:show-upgrade`), 404 for unknown paths (`NotFoundPage`), ToS/Privacy routes, security headers on CloudFront, user-facing error copy (`body?.error` or `body?.message`), Headers Lambda 500 `details` only for known safe messages. **Medium:** Loading/empty states, a11y on Callback/ProtectedRoute, ESLint in devDependencies and CI. **Infra:** WAF is not supported for HTTP API; use REST API or Lambda+usage plans; keep CORS to prod origins only.
+
+---
+
+## Monetization
+
+**Model:** Freemium (Free / Pro ~$12–19/mo / Team ~$49–79/mo / Enterprise). **Meter:** remote tool calls, Security Advisor messages, AI PDFs, saved reports/chats, report items per report. **Gates:** Free = LOCAL always, remote until cap then upgrade CTA; Pro+ = AI PDF, higher limits; Team+ = shared reports, optional SSO. **Tech:** DynamoDB `users` (planId, stripeCustomerId, periodEnd) and `usage` (pk=USER#&lt;sub&gt;, sk=MONTH#YYYY-MM, counters); Stripe products/prices, Checkout, webhook to update planId; Lambda authorizer or billing layer: `getPlanAndUsage`, `incrementUsage`, `checkLimit`; return 402 with `{ code, upgradeUrl }` when over limit; frontend Upgrade modal on 402. **Phases:** (1) DynamoDB + Stripe Checkout + `GET /billing/usage`, `/pricing`; (2) Stripe webhook → planId/periodEnd; (3) enforce limits in remote Lambdas, Security Advisor, Reports, AI PDF; 402 + UpgradeModal; (4) self‑signup Free, Team seats, overage, BYOK, ToS/Privacy. **Example limits:** Free 50 remote/mo, 10 Advisor/mo, 0 AI PDF, 3 reports, 1 chat; Pro 500, 100, 15, 50, 20.
+
+---
+
+## Infra / Dev Environment
+
+**Quick start:** `cd infra/envs/dev`, `./init.sh`, `cp terraform.tfvars.example terraform.tfvars`, edit vars, `terraform apply -auto-approve`. **Scripts:** `init.sh`, `apply.sh`, `redeploy.sh`, `deploy-complete.sh`, `update-env.sh` (frontend), `set-password.sh`, `verify-deployment.sh`, `check-dns.sh`, `sync-cloudflare-token.sh`. **Custom domain:** set `custom_domain`, `cloudflare_zone_id`, `cloudflare_zone_name`, `cloudflare_subdomain`; DNS record name is the subdomain (e.g. `tools`) not the FQDN. **Cognito:** 14+ chars, upper, lower, number, symbol; after `terraform apply`, run `./update-env.sh` in `frontend/` and rebuild so Cognito domain/client/issuer stay in sync. **Full details:** [infra/envs/dev/README.md](infra/envs/dev/README.md) (init, DNS, password, troubleshooting, redeploy, Cloudflare token).
+
+---
 
 ## License
 

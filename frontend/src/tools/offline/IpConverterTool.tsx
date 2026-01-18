@@ -15,6 +15,7 @@
 
 import { useState, useEffect } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 interface Ipv4Representations {
   dotted: string
@@ -287,6 +288,15 @@ export default function IpConverterTool() {
       {/* IPv4 Results */}
       {ipv4Result && (
         <div className="space-y-4">
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="ip-converter"
+              input={input}
+              data={ipv4Result}
+              category="Network Intelligence"
+            />
+          </div>
           <h2 className="text-lg font-semibold">IPv4 Representations</h2>
           
           <div className="grid gap-4 md:grid-cols-2">
@@ -332,6 +342,15 @@ export default function IpConverterTool() {
       {/* IPv6 Results */}
       {ipv6Result && (
         <div className="space-y-4">
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="ip-converter"
+              input={input}
+              data={ipv6Result}
+              category="Network Intelligence"
+            />
+          </div>
           <h2 className="text-lg font-semibold">IPv6 Representations</h2>
           
           <div className="grid gap-4 md:grid-cols-2">

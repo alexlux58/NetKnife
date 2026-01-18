@@ -20,6 +20,7 @@
 
 import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 import { copyToClipboard } from '../../lib/utils'
 
 // Character sets for password generation
@@ -199,6 +200,16 @@ export default function PasswordTool() {
 
         {/* Output section */}
         <div className="space-y-4">
+          {passwords.length > 0 && (
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="password"
+                input={`${count} passwords, ${length} chars`}
+                data={{ passwords, entropy, strength: strength.label }}
+                category="Utilities"
+              />
+            </div>
+          )}
           <OutputCard title="Generated Passwords" value={output} />
           
           {/* Quick copy buttons */}

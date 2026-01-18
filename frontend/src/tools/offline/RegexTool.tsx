@@ -18,6 +18,7 @@
 
 import { useState, useMemo } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 // Common regex patterns for network/security logs
 const PRESETS = [
@@ -208,6 +209,16 @@ export default function RegexTool() {
         </div>
 
         {/* Output section */}
+        {testResult.valid && (
+          <div className="flex items-center justify-end mb-2">
+            <AddToReportButton
+              toolId="regex"
+              input={pattern}
+              data={JSON.parse(output)}
+              category="Utilities"
+            />
+          </div>
+        )}
         <OutputCard title="Result & Commands" value={output} />
       </div>
     </div>

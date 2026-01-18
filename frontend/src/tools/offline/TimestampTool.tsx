@@ -18,6 +18,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
+import AddToReportButton from '../../components/AddToReportButton'
 
 interface TimeResult {
   unix: number
@@ -188,6 +189,15 @@ export default function TimestampTool() {
       {/* Results */}
       {result && (
         <div className="space-y-3">
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="timestamp"
+              input={input}
+              data={result}
+              category="Utilities"
+            />
+          </div>
           <div className="card p-4">
             <h4 className="text-sm font-medium text-purple-400 mb-3">Converted Values</h4>
             <div className="space-y-3">

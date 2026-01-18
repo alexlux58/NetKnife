@@ -59,6 +59,7 @@
   /* Dark theme by default */
   html {
     color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
   }
   
   body {
@@ -66,6 +67,14 @@
     background-color: var(--color-bg-primary);
     color: var(--color-text-primary);
     line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Better touch targets on mobile */
+  @media (pointer: coarse) {
+    .btn, .input, button:not(.no-touch-resize), a {
+      touch-action: manipulation;
+    }
   }
   
   /* Monospace for code/terminal elements */
@@ -125,21 +134,23 @@
     @apply bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg;
   }
   
-  /* Input fields */
+  /* Input fields - comfortable on touch */
   .input {
-    @apply w-full px-3 py-2 bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-md text-[var(--color-text-primary)];
+    @apply w-full px-3 py-2.5 sm:py-2 bg-[var(--color-bg-primary)] border border-[var(--color-border)] rounded-md text-[var(--color-text-primary)] text-base;
     @apply focus:outline-none focus:border-[var(--color-accent-blue)] focus:ring-1 focus:ring-[var(--color-accent-blue)];
     @apply placeholder:text-[var(--color-text-muted)];
   }
+  
+  /* Avoid zoom on focus for inputs in iOS when font-size >= 16px - text-base helps */
   
   /* Textarea */
   .textarea {
     @apply input resize-y min-h-[100px];
   }
   
-  /* Button base */
+  /* Button base - min-h for touch targets on mobile */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors;
+    @apply inline-flex items-center justify-center px-4 py-2.5 sm:py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] sm:min-h-0;
     @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--color-bg-primary)];
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }

@@ -20,6 +20,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 
 interface Certificate {
@@ -225,6 +226,15 @@ export default function TlsTool() {
         <div className="space-y-4">
           {result && (
             <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="tls"
+                  input={`${host}:${port}`}
+                  data={result}
+                  category="Certificates & TLS"
+                />
+              </div>
               {/* Connection summary */}
               <div className="card p-4">
                 <h4 className="font-medium mb-3">Connection</h4>

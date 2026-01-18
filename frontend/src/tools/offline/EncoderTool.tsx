@@ -17,6 +17,7 @@
  */
 
 import { useState } from 'react'
+import AddToReportButton from '../../components/AddToReportButton'
 
 type Format = 'base64' | 'base64url' | 'hex' | 'url' | 'html' | 'unicode'
 
@@ -213,6 +214,19 @@ export default function EncoderTool() {
       )}
 
       {/* Output */}
+      {output && (
+        <div className="space-y-4">
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="encoder"
+              input={input}
+              data={{ format, input, output }}
+              category="Utilities"
+            />
+          </div>
+        </div>
+      )}
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-sm font-medium">Output</label>

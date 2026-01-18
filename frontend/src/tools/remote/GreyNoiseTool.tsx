@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 
@@ -96,7 +97,17 @@ export default function GreyNoiseTool() {
 
         <div className="space-y-4">
           {result && (
-            <div className="card p-6">
+            <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="greynoise"
+                  input={ip}
+                  data={result}
+                  category="Threat Intelligence"
+                />
+              </div>
+              <div className="card p-6">
               <div className="text-center mb-6">
                 <div className={`inline-block text-2xl font-bold px-6 py-3 rounded-lg uppercase ${getClassificationColor(result.classification)}`}>
                   {result.classification}
@@ -151,7 +162,8 @@ export default function GreyNoiseTool() {
                   {result.message}
                 </div>
               )}
-            </div>
+              </div>
+            </>
           )}
 
           <JsonViewer title="Raw Response" json={result} error={error} />

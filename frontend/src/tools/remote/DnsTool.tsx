@@ -18,6 +18,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV']
@@ -135,6 +136,15 @@ export default function DnsTool() {
         <div className="space-y-4">
           {result && (
             <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="dns"
+                  input={`${name} (${type})`}
+                  data={result}
+                  category="DNS & Domain"
+                />
+              </div>
               {/* Summary */}
               <div className="card p-4">
                 <div className="flex items-center justify-between mb-3">

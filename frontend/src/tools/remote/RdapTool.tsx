@@ -19,6 +19,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 
 interface RdapResult {
@@ -138,6 +139,15 @@ export default function RdapTool() {
         <div className="space-y-4">
           {result && (
             <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="rdap"
+                  input={query}
+                  data={result}
+                  category="DNS & Domain"
+                />
+              </div>
               {/* Summary card */}
               <div className="card p-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">

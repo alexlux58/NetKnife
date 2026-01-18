@@ -22,6 +22,7 @@
 
 import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
@@ -34,6 +35,7 @@ export default function PeeringDbTool() {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [output, setOutput] = useState('')
+  const [resultData, setResultData] = useState<any>(null)
   const [error, setError] = useState('')
 
   async function handleQuery() {
@@ -53,18 +55,23 @@ export default function PeeringDbTool() {
         // This is a "not found" result from PeeringDB, not an error
         // Display it as output with a helpful message
         const message = result.data?.meta?.error || `Status ${result.status} from PeeringDB`
-        setOutput(formatJson({
+        const formatted = {
           ...result,
           message: `PeeringDB returned: ${message}`,
-        }))
+        }
+        setResultData(formatted)
+        setOutput(formatJson(formatted))
       } else if (result.data?.data && Array.isArray(result.data.data) && result.data.data.length === 0) {
         // Empty result set
-        setOutput(formatJson({
+        const formatted = {
           ...result,
           message: 'No results found in PeeringDB',
-        }))
+        }
+        setResultData(formatted)
+        setOutput(formatJson(formatted))
       } else {
         // Success - show the data
+        setResultData(result)
         setOutput(formatJson(result))
       }
     } catch (e) {
@@ -192,7 +199,19 @@ export default function PeeringDbTool() {
         </div>
 
         {/* Output section */}
-        <OutputCard title="PeeringDB Result" value={output} />
+        {output && resultData && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="peeringdb"
+                input={`${resource}: ${asn || name}`}
+                data={resultData}
+                category="Network Intelligence"
+              />
+            </div>
+            <OutputCard title="PeeringDB Result" value={output} />
+          </div>
+        )}
       </div>
     </div>
   )

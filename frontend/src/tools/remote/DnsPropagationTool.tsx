@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 
@@ -131,6 +132,17 @@ export default function DnsPropagationTool() {
           )}
 
           <JsonViewer title="Raw Response" json={result} error={error} />
+          
+          {result && (
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="dns-propagation"
+                input={`${name} (${type})`}
+                data={result}
+                category="DNS & Domain"
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

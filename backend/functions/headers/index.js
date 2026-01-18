@@ -383,9 +383,21 @@ exports.handler = async (event) => {
   } catch (error) {
     console.error("Headers scan error:", error);
 
+    // Use a safe, non-leaking message for 500. Known safe messages are OK.
+    const safe = [
+      "Blocked destination:",
+      "Too many redirects",
+      "Invalid protocol",
+      "Invalid port",
+      "Malformed URL",
+      "Invalid URL",
+    ];
+    const msg = error.message || "";
+    const safeDetail = safe.some((s) => msg.startsWith(s)) ? msg : "An unexpected error occurred.";
+
     return createResponse(500, {
       error: "Headers scan failed",
-      details: error.message || "Unknown error",
+      details: safeDetail,
     });
   }
 };

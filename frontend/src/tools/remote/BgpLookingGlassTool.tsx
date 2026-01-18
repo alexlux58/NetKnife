@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 
@@ -80,7 +81,17 @@ export default function BgpLookingGlassTool() {
 
         <div className="space-y-4">
           {result && (
-            <div className="card p-6 space-y-4">
+            <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="bgp-looking-glass"
+                  input={query}
+                  data={result}
+                  category="Network Intelligence"
+                />
+              </div>
+              <div className="card p-6 space-y-4">
               <div>
                 <div className="text-sm text-gray-500">Prefix</div>
                 <div className="text-xl font-mono text-blue-400">{result.prefix || result.query}</div>
@@ -115,7 +126,8 @@ export default function BgpLookingGlassTool() {
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            </>
           )}
 
           <JsonViewer title="Full Response" json={result} error={error} />

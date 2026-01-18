@@ -16,6 +16,7 @@
 import { useState } from 'react'
 import yaml from 'js-yaml'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 type ConversionDirection = 'yaml-to-json' | 'json-to-yaml'
 
@@ -246,6 +247,16 @@ spec:
             </div>
           )}
           
+          {output && (
+            <div className="flex items-center justify-end mb-2">
+              <AddToReportButton
+                toolId="yaml-json"
+                input={input}
+                data={{ direction, input, output }}
+                category="Utilities"
+              />
+            </div>
+          )}
           <OutputCard title={`${outputLabel} Output`} canCopy>
             {output ? (
               <pre className="font-mono text-sm whitespace-pre-wrap text-green-400 max-h-[400px] overflow-y-auto">

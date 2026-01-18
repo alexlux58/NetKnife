@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 
@@ -101,6 +102,15 @@ export default function CensysTool() {
         <div className="space-y-4">
           {result && (
             <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="censys"
+                  input={ip}
+                  data={result}
+                  category="Threat Intelligence"
+                />
+              </div>
               <div className="card p-6">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>

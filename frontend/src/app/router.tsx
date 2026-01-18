@@ -31,6 +31,7 @@ import Shell from './ui/Shell'
 import LoginPage from './views/LoginPage'
 import CallbackPage from './views/CallbackPage'
 import ProtectedRoute from './views/ProtectedRoute'
+import NotFoundPage from './views/NotFoundPage'
 import { tools } from '../tools/registry'
 
 /**
@@ -107,23 +108,26 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      // Redirect root to default tool
       {
         index: true,
         element: <Navigate to={defaultToolPath} replace />,
       },
-      // Generate routes for each tool
       ...tools.map((tool) => ({
         path: tool.path.replace(/^\//, ''),
         element: <ToolLoader id={tool.id} />,
       })),
+      // 404 for unknown paths (e.g. /tools/nonexistent) – rendered inside Shell
+      {
+        path: '*',
+        element: <NotFoundPage />,
+      },
     ],
   },
 
-  // Catch-all: redirect to home
+  // Top-level catch-all (e.g. /random) – 404 without Shell
   {
     path: '*',
-    element: <Navigate to="/" replace />,
+    element: <NotFoundPage />,
   },
 ])
 

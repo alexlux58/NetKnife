@@ -18,6 +18,7 @@
 
 import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiClient } from '../../lib/api'
 
 /**
@@ -180,6 +181,17 @@ export default function HibpTool() {
 
       {/* Output */}
       <OutputCard title="Check Result" value={output} />
+      
+      {result && (
+        <div className="flex items-center justify-end">
+          <AddToReportButton
+            toolId="hibp"
+            input="Password check (redacted)"
+            data={{ found: result.found, count: result.count, hashPrefix: result.hash.substring(0, 5) + '...' }}
+            category="Threat Intelligence"
+          />
+        </div>
+      )}
 
       {/* How it works */}
       <div className="card p-4 text-sm">

@@ -102,3 +102,39 @@ censys_api_key = ""
 # Note: GreyNoise may require a paid plan - check current pricing
 # Leave empty to disable GreyNoise integration
 greynoise_api_key = ""
+
+# EmailRep.io API Key (for email reputation checks)
+# Get at: https://emailrep.io/
+# Free tier: 10,000 queries/month
+# Optional: Leave empty to use without API key (lower rate limits)
+emailrep_api_key = ""
+
+# NumLookup API Key (for phone number validation)
+# Get at: https://numlookupapi.com/
+# Free tier available
+# Optional: Leave empty to use without API key (lower rate limits)
+numlookup_api_key = ""
+
+# IPQualityScore API Key (for IP reputation and fraud detection)
+# Get at: https://www.ipqualityscore.com/
+# Free tier: 100 requests/day
+# Required: Leave empty to disable IPQualityScore integration
+ipqualityscore_api_key = ""
+
+# Hunter.io API Key (for email verification and finder)
+# Get at: https://hunter.io/api-documentation
+# Free tier: 25 requests/month
+# Required: Leave empty to disable Hunter.io integration
+hunter_api_key = ""
+
+# OpenAI API Key (for Security Advisor AI chatbot)
+# Get at: https://platform.openai.com/api-keys
+# Pricing: GPT-4o-mini is ~$0.15/$0.60 per 1M tokens (input/output)
+# Recommended: GPT-4o-mini (cost-effective, high quality)
+# Required: Leave empty to disable Security Advisor chatbot
+openai_api_key = ""
+
+# OpenAI Model (optional, defaults to gpt-4o-mini)
+# Options: gpt-4o-mini (recommended, cost-effective), gpt-4o (higher quality, more expensive)
+# GPT-4o-mini is ~100x cheaper than legacy GPT-4 and provides excellent quality
+openai_model = "gpt-4o-mini"

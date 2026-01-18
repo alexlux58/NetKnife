@@ -14,6 +14,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiClient } from '../../lib/api'
 
 const schema = z.object({
@@ -45,13 +46,20 @@ export default function ReverseDnsTool() {
     defaultValues: { ip: '' },
   })
 
+  const [resultData, setResultData] = useState<any>(null)
+  const [inputIp, setInputIp] = useState('')
+
   async function onSubmit(data: FormData) {
     setLoading(true)
+    setInputIp(data.ip)
     try {
       const result = await apiClient.post('/reverse-dns', { ip: data.ip })
+      setResultData(result)
       setOutput(JSON.stringify(result, null, 2))
     } catch (e) {
-      setOutput(JSON.stringify({ error: e instanceof Error ? e.message : 'Request failed' }, null, 2))
+      const errorResult = { error: e instanceof Error ? e.message : 'Request failed' }
+      setResultData(errorResult)
+      setOutput(JSON.stringify(errorResult, null, 2))
     } finally {
       setLoading(false)
     }
@@ -102,7 +110,19 @@ export default function ReverseDnsTool() {
       </form>
 
       {/* Output */}
-      <OutputCard title="PTR Record Result" value={output} />
+      {output && resultData && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="reverse-dns"
+              input={inputIp}
+              data={resultData}
+              category="DNS & Domain"
+            />
+          </div>
+          <OutputCard title="PTR Record Result" value={output} />
+        </div>
+      )}
 
       {/* Reference */}
       <div className="card p-4 text-sm">

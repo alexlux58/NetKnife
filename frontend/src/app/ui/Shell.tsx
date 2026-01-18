@@ -22,31 +22,39 @@
  * ==============================================================================
  */
 
+import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { ReportProvider } from '../../lib/reportContext'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
+import UpgradeModal from '../../components/UpgradeModal'
 
 export default function Shell() {
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
 
   return (
-    <div className="min-h-screen bg-terminal-bg text-terminal-text">
-      <div className="flex">
-        {/* Sidebar - hidden on mobile, visible on md+ */}
-        <Sidebar />
+    <ReportProvider>
+      <div className="min-h-screen min-h-[100dvh] bg-terminal-bg text-terminal-text">
+        <div className="flex">
+          <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        {/* Main content area */}
-        <div className="flex-1 min-w-0 md:ml-72">
-          {/* Top bar */}
-          <Topbar pathname={location.pathname} />
+          <div className="flex-1 min-w-0 md:ml-72">
+            <Topbar pathname={location.pathname} onMenuClick={() => setSidebarOpen(true)} />
 
-          {/* Page content */}
-          <main className="p-4 md:p-6 max-w-6xl">
-            <Outlet />
-          </main>
+            <main className="p-4 sm:p-5 md:p-6 max-w-6xl">
+              <Outlet />
+            </main>
+          </div>
         </div>
       </div>
-    </div>
+      <UpgradeModal />
+    </ReportProvider>
   )
 }
 

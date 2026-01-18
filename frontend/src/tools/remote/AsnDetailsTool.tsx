@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 
@@ -109,7 +110,17 @@ export default function AsnDetailsTool() {
 
         <div className="space-y-4">
           {result && (
-            <div className="card p-6 space-y-4">
+            <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="asn-details"
+                  input={asnInput}
+                  data={result}
+                  category="Network Intelligence"
+                />
+              </div>
+              <div className="card p-6 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="text-2xl font-bold text-blue-400">AS{result.asn}</div>
                 <span className="px-2 py-1 bg-[#21262d] rounded text-sm">{result.country}</span>
@@ -143,7 +154,8 @@ export default function AsnDetailsTool() {
                   {result.website}
                 </a>
               )}
-            </div>
+              </div>
+            </>
           )}
 
           <JsonViewer title="Full Details" json={result} error={error} />

@@ -16,6 +16,7 @@
 
 import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 /**
  * Parse IPv4 address to 32-bit number
@@ -269,6 +270,16 @@ export default function CidrRangeTool() {
             </div>
           )}
         </OutputCard>
+        {results.length > 0 && (
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="cidr-range"
+              input={`${ips.split(/[,\n]/).filter(Boolean).length} IPs, ${cidrs.split(/[,\n]/).filter(Boolean).length} CIDRs`}
+              data={{ results, matchCount, noMatchCount, errorCount }}
+              category="Network Intelligence"
+            />
+          </div>
+        )}
       </div>
 
       {/* Common AWS CIDRs Reference */}

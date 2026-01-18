@@ -19,6 +19,7 @@
 
 import { useState, useMemo } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 /**
  * Converts IP string to 32-bit integer
@@ -335,7 +336,19 @@ export default function SubnetTool() {
         </div>
 
         {/* Output section */}
-        <OutputCard title="Calculation Result" value={output} />
+        {output && result && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="subnet"
+                input={input}
+                data={result}
+                category="Network Intelligence"
+              />
+            </div>
+            <OutputCard title="Calculation Result" value={output} />
+          </div>
+        )}
       </div>
 
       {/* Reference Cards */}

@@ -16,6 +16,7 @@
 
 import { useState, useMemo } from 'react'
 import { diffLines, diffWords } from 'diff'
+import AddToReportButton from '../../components/AddToReportButton'
 
 type DiffMode = 'lines' | 'words'
 type ViewMode = 'unified' | 'split'
@@ -350,7 +351,16 @@ export default function DiffTool() {
 
       {/* Diff Output */}
       {differences.length > 0 && (
-        <div className="card overflow-hidden">
+        <>
+          <div className="flex items-center justify-end mb-2">
+            <AddToReportButton
+              toolId="diff"
+              input={`Left: ${leftText.length} chars, Right: ${rightText.length} chars`}
+              data={{ differences, stats, leftText, rightText }}
+              category="Utilities"
+            />
+          </div>
+          <div className="card overflow-hidden">
           <div className="px-4 py-2 bg-[#161b22] border-b border-[#30363d] text-sm text-gray-400">
             Differences
           </div>
@@ -360,7 +370,8 @@ export default function DiffTool() {
               : renderUnifiedDiff()
             }
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Empty State */}

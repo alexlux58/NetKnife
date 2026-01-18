@@ -19,6 +19,7 @@
 
 import { useState, useMemo } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 /**
  * Parse and validate IPv6 address
@@ -441,6 +442,18 @@ export default function Ipv6AnalyzerTool() {
         </div>
 
         {/* Output section */}
+        {output && analysis && !('error' in analysis) && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="ipv6-analyzer"
+                input={input}
+                data={analysis}
+                category="Network Intelligence"
+              />
+            </div>
+          </div>
+        )}
         <OutputCard title="Analysis Result" value={output} />
       </div>
     </div>

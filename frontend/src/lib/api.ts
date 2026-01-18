@@ -33,7 +33,7 @@
 import { getAccessToken } from './auth'
 
 // API base URL from environment
-const API_URL = import.meta.env.VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 /**
  * Custom error class for API errors
@@ -106,6 +106,11 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 
   // Check for errors
   if (!response.ok) {
+    if (response.status === 402 && typeof window !== 'undefined') {
+      const body = (data && typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>
+      body.isUpgrade = true
+      window.dispatchEvent(new CustomEvent('netknife:show-upgrade', { detail: body }))
+    }
     throw new ApiError(response.status, data)
   }
 
@@ -117,8 +122,11 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
  * (Currently not used, but included for completeness)
  */
 export async function apiGet<T>(path: string): Promise<T> {
+  if (!API_URL) {
+    throw new ApiError(0, { error: 'API URL not configured. Set VITE_API_URL.' })
+  }
+
   const token = await getAccessToken()
-  
   if (!token) {
     throw new ApiError(401, { error: 'Not authenticated' })
   }
@@ -140,6 +148,11 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 402 && typeof window !== 'undefined') {
+      const body = (data && typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>
+      body.isUpgrade = true
+      window.dispatchEvent(new CustomEvent('netknife:show-upgrade', { detail: body }))
+    }
     throw new ApiError(response.status, data)
   }
 

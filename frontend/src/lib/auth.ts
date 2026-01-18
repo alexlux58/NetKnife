@@ -40,8 +40,11 @@ const ISSUER = import.meta.env.VITE_COGNITO_ISSUER
 const REDIRECT_URI = import.meta.env.VITE_OIDC_REDIRECT_URI
 const POST_LOGOUT_REDIRECT_URI = import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI
 
-// Dev bypass mode - skip auth when env vars not configured
-const DEV_BYPASS_AUTH = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true' || !CLIENT_ID
+// Dev bypass: only in Vite dev (import.meta.env.DEV) when Cognito not configured.
+// In production builds (import.meta.env.DEV === false) we never bypass, even if
+// VITE_DEV_BYPASS_AUTH is set. Do not set VITE_DEV_BYPASS_AUTH in production.
+const DEV_BYPASS_AUTH =
+  import.meta.env.DEV && (!CLIENT_ID || import.meta.env.VITE_DEV_BYPASS_AUTH === 'true')
 
 // Fake user for dev mode
 const DEV_USER = {

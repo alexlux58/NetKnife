@@ -106,6 +106,47 @@ variable "greynoise_api_key" {
   default     = ""
 }
 
+variable "emailrep_api_key" {
+  type        = string
+  description = "API key for EmailRep.io (optional, increases rate limits)"
+  sensitive   = true
+  default     = ""
+}
+
+variable "numlookup_api_key" {
+  type        = string
+  description = "API key for NumLookup (optional, increases rate limits)"
+  sensitive   = true
+  default     = ""
+}
+
+variable "ipqualityscore_api_key" {
+  type        = string
+  description = "API key for IPQualityScore (required for free tier)"
+  sensitive   = true
+  default     = ""
+}
+
+variable "hunter_api_key" {
+  type        = string
+  description = "API key for Hunter.io (required)"
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_api_key" {
+  type        = string
+  description = "API key for OpenAI (for Security Advisor chatbot)"
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_model" {
+  type        = string
+  description = "OpenAI model to use (default: gpt-4o-mini for cost efficiency)"
+  default     = "gpt-4o-mini"
+}
+
 # Local variables for consistent naming
 locals {
   name = "${var.project}-${var.env}"
@@ -137,6 +178,43 @@ resource "aws_dynamodb_table" "cache" {
     Project     = var.project
     Environment = var.env
     Purpose     = "API response caching"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# DYNAMODB TABLE: REPORTS & CHATS
+# ------------------------------------------------------------------------------
+# Stores user reports and Security Advisor chat history.
+# Partition key: userId#type (e.g., "user123#chat" or "user123#report")
+# Sort key: report/chat ID
+# TTL: 1 year (auto-cleanup)
+
+resource "aws_dynamodb_table" "reports" {
+  name         = "${local.name}-reports"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"  # Partition key: userId#type
+  range_key    = "sk"  # Sort key: report/chat ID
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  # TTL configuration - automatically deletes expired items (1 year)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "User reports and chat storage"
   }
 }
 
@@ -185,6 +263,29 @@ resource "aws_iam_role_policy" "cache_access" {
         "dynamodb:DeleteItem"
       ]
       Resource = aws_dynamodb_table.cache.arn
+    }]
+  })
+}
+
+# DynamoDB reports access policy
+resource "aws_iam_role_policy" "reports_access" {
+  name = "${local.name}-reports-access"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query"
+      ]
+      Resource = [
+        aws_dynamodb_table.reports.arn,
+        "${aws_dynamodb_table.reports.arn}/index/*"
+      ]
     }]
   })
 }
@@ -1443,6 +1544,721 @@ resource "aws_lambda_permission" "greynoise" {
 }
 
 # ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: EmailRep.io
+# ------------------------------------------------------------------------------
+
+data "archive_file" "emailrep_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/emailrep"
+  output_path = "${path.module}/emailrep.zip"
+}
+
+resource "aws_lambda_function" "emailrep" {
+  function_name = "${local.name}-emailrep"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "EmailRep.io email reputation checker"
+
+  filename         = data.archive_file.emailrep_zip.output_path
+  source_code_hash = data.archive_file.emailrep_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      EMAILREP_API_KEY  = var.emailrep_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "emailrep" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.emailrep.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "emailrep" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /emailrep"
+  target    = "integrations/${aws_apigatewayv2_integration.emailrep.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "emailrep" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.emailrep.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: IP-API.com
+# ------------------------------------------------------------------------------
+
+data "archive_file" "ip_api_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/ip-api"
+  output_path = "${path.module}/ip-api.zip"
+}
+
+resource "aws_lambda_function" "ip_api" {
+  function_name = "${local.name}-ip-api"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "IP-API.com IP geolocation"
+
+  filename         = data.archive_file.ip_api_zip.output_path
+  source_code_hash = data.archive_file.ip_api_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "86400"
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "ip_api" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.ip_api.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "ip_api" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /ip-api"
+  target    = "integrations/${aws_apigatewayv2_integration.ip_api.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "ip_api" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ip_api.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: BreachDirectory
+# ------------------------------------------------------------------------------
+
+data "archive_file" "breachdirectory_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/breachdirectory"
+  output_path = "${path.module}/breachdirectory.zip"
+}
+
+resource "aws_lambda_function" "breachdirectory" {
+  function_name = "${local.name}-breachdirectory"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "BreachDirectory email breach checker"
+
+  filename         = data.archive_file.breachdirectory_zip.output_path
+  source_code_hash = data.archive_file.breachdirectory_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "86400"
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "breachdirectory" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.breachdirectory.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "breachdirectory" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /breachdirectory"
+  target    = "integrations/${aws_apigatewayv2_integration.breachdirectory.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "breachdirectory" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.breachdirectory.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Phone Validator
+# ------------------------------------------------------------------------------
+
+data "archive_file" "phone_validator_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/phone-validator"
+  output_path = "${path.module}/phone-validator.zip"
+}
+
+resource "aws_lambda_function" "phone_validator" {
+  function_name = "${local.name}-phone-validator"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Phone number validator (NumLookup)"
+
+  filename         = data.archive_file.phone_validator_zip.output_path
+  source_code_hash = data.archive_file.phone_validator_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "86400"
+      NUMLOOKUP_API_KEY = var.numlookup_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "phone_validator" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.phone_validator.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "phone_validator" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /phone-validator"
+  target    = "integrations/${aws_apigatewayv2_integration.phone_validator.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "phone_validator" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.phone_validator.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: IPQualityScore
+# ------------------------------------------------------------------------------
+
+data "archive_file" "ipqualityscore_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/ipqualityscore"
+  output_path = "${path.module}/ipqualityscore.zip"
+}
+
+resource "aws_lambda_function" "ipqualityscore" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-ipqualityscore"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "IPQualityScore IP reputation checker"
+
+  filename         = data.archive_file.ipqualityscore_zip.output_path
+  source_code_hash = data.archive_file.ipqualityscore_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      IPQS_API_KEY      = var.ipqualityscore_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "ipqualityscore" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.ipqualityscore[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "ipqualityscore" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /ipqualityscore"
+  target    = "integrations/${aws_apigatewayv2_integration.ipqualityscore[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "ipqualityscore" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ipqualityscore[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: IPQualityScore Email Verification
+# ------------------------------------------------------------------------------
+
+data "archive_file" "ipqs_email_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/ipqs-email"
+  output_path = "${path.module}/ipqs-email.zip"
+}
+
+resource "aws_lambda_function" "ipqs_email" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-ipqs-email"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "IPQualityScore email verification"
+
+  filename         = data.archive_file.ipqs_email_zip.output_path
+  source_code_hash = data.archive_file.ipqs_email_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      IPQS_API_KEY      = var.ipqualityscore_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "ipqs_email" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.ipqs_email[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "ipqs_email" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /ipqs-email"
+  target    = "integrations/${aws_apigatewayv2_integration.ipqs_email[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "ipqs_email" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ipqs_email[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: IPQualityScore Phone Validation
+# ------------------------------------------------------------------------------
+
+data "archive_file" "ipqs_phone_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/ipqs-phone"
+  output_path = "${path.module}/ipqs-phone.zip"
+}
+
+resource "aws_lambda_function" "ipqs_phone" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-ipqs-phone"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "IPQualityScore phone validation"
+
+  filename         = data.archive_file.ipqs_phone_zip.output_path
+  source_code_hash = data.archive_file.ipqs_phone_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      IPQS_API_KEY      = var.ipqualityscore_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "ipqs_phone" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.ipqs_phone[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "ipqs_phone" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /ipqs-phone"
+  target    = "integrations/${aws_apigatewayv2_integration.ipqs_phone[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "ipqs_phone" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ipqs_phone[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: IPQualityScore URL Scanner
+# ------------------------------------------------------------------------------
+
+data "archive_file" "ipqs_url_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/ipqs-url"
+  output_path = "${path.module}/ipqs-url.zip"
+}
+
+resource "aws_lambda_function" "ipqs_url" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-ipqs-url"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "IPQualityScore URL scanner"
+
+  filename         = data.archive_file.ipqs_url_zip.output_path
+  source_code_hash = data.archive_file.ipqs_url_zip.output_base64sha256
+
+  timeout     = 20  # URL scans can take longer
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "3600"
+      IPQS_API_KEY      = var.ipqualityscore_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "ipqs_url" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.ipqs_url[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "ipqs_url" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /ipqs-url"
+  target    = "integrations/${aws_apigatewayv2_integration.ipqs_url[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "ipqs_url" {
+  count = var.ipqualityscore_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ipqs_url[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Hunter.io
+# ------------------------------------------------------------------------------
+
+data "archive_file" "hunter_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/hunter"
+  output_path = "${path.module}/hunter.zip"
+}
+
+resource "aws_lambda_function" "hunter" {
+  count = var.hunter_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-hunter"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Hunter.io email verification and finder"
+
+  filename         = data.archive_file.hunter_zip.output_path
+  source_code_hash = data.archive_file.hunter_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS = "86400"
+      HUNTER_API_KEY    = var.hunter_api_key
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "hunter" {
+  count = var.hunter_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.hunter[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "hunter" {
+  count = var.hunter_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /hunter"
+  target    = "integrations/${aws_apigatewayv2_integration.hunter[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "hunter" {
+  count = var.hunter_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.hunter[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Security Advisor (AI Chatbot)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "security_advisor_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/security-advisor"
+  output_path = "${path.module}/security-advisor.zip"
+}
+
+resource "aws_lambda_function" "security_advisor" {
+  count = var.openai_api_key != "" ? 1 : 0
+
+  function_name = "${local.name}-security-advisor"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "AI-powered security advisor chatbot"
+
+  filename         = data.archive_file.security_advisor_zip.output_path
+  source_code_hash = data.archive_file.security_advisor_zip.output_base64sha256
+
+  timeout     = 30  # Increased for AI API calls
+  memory_size = 256
+
+  environment {
+    variables = {
+      CACHE_TABLE       = aws_dynamodb_table.cache.name
+      OPENAI_API_KEY    = var.openai_api_key
+      OPENAI_MODEL      = var.openai_model
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "security_advisor" {
+  count = var.openai_api_key != "" ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.security_advisor[0].arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "security_advisor" {
+  count = var.openai_api_key != "" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /security-advisor"
+  target    = "integrations/${aws_apigatewayv2_integration.security_advisor[0].id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "security_advisor" {
+  count = var.openai_api_key != "" ? 1 : 0
+
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.security_advisor[0].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Reports & Chat Storage
+# ------------------------------------------------------------------------------
+
+data "archive_file" "reports_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/reports"
+  output_path = "${path.module}/reports.zip"
+}
+
+resource "aws_lambda_function" "reports" {
+  function_name = "${local.name}-reports"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Reports and chat storage management"
+
+  filename         = data.archive_file.reports_zip.output_path
+  source_code_hash = data.archive_file.reports_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 128
+
+  environment {
+    variables = {
+      REPORTS_TABLE = aws_dynamodb_table.reports.name
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "reports" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.reports.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "reports" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /reports"
+  target    = "integrations/${aws_apigatewayv2_integration.reports.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "reports" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.reports.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
 # WAF WEB ACL (Rate Limiting)
 # ------------------------------------------------------------------------------
 # Protects the API from abuse with per-IP rate limiting.
@@ -1621,5 +2437,65 @@ output "lambda_censys_name" {
 output "lambda_greynoise_name" {
   value       = aws_lambda_function.greynoise.function_name
   description = "GreyNoise Lambda function name"
+}
+
+output "lambda_emailrep_name" {
+  value       = aws_lambda_function.emailrep.function_name
+  description = "EmailRep Lambda function name"
+}
+
+output "lambda_ip_api_name" {
+  value       = aws_lambda_function.ip_api.function_name
+  description = "IP-API Lambda function name"
+}
+
+output "lambda_breachdirectory_name" {
+  value       = aws_lambda_function.breachdirectory.function_name
+  description = "BreachDirectory Lambda function name"
+}
+
+output "lambda_phone_validator_name" {
+  value       = aws_lambda_function.phone_validator.function_name
+  description = "Phone Validator Lambda function name"
+}
+
+output "lambda_ipqualityscore_name" {
+  value       = var.ipqualityscore_api_key != "" ? nonsensitive(aws_lambda_function.ipqualityscore[0].function_name) : null
+  description = "IPQualityScore Lambda function name (null if API key not configured)"
+}
+
+output "lambda_ipqs_email_name" {
+  value       = var.ipqualityscore_api_key != "" ? nonsensitive(aws_lambda_function.ipqs_email[0].function_name) : null
+  description = "IPQualityScore Email Lambda function name (null if API key not configured)"
+}
+
+output "lambda_ipqs_phone_name" {
+  value       = var.ipqualityscore_api_key != "" ? nonsensitive(aws_lambda_function.ipqs_phone[0].function_name) : null
+  description = "IPQualityScore Phone Lambda function name (null if API key not configured)"
+}
+
+output "lambda_ipqs_url_name" {
+  value       = var.ipqualityscore_api_key != "" ? nonsensitive(aws_lambda_function.ipqs_url[0].function_name) : null
+  description = "IPQualityScore URL Lambda function name (null if API key not configured)"
+}
+
+output "lambda_hunter_name" {
+  value       = var.hunter_api_key != "" ? nonsensitive(aws_lambda_function.hunter[0].function_name) : null
+  description = "Hunter.io Lambda function name (null if API key not configured)"
+}
+
+output "lambda_security_advisor_name" {
+  value       = var.openai_api_key != "" ? nonsensitive(aws_lambda_function.security_advisor[0].function_name) : null
+  description = "Security Advisor Lambda function name (null if API key not configured)"
+}
+
+output "lambda_reports_name" {
+  value       = nonsensitive(aws_lambda_function.reports.function_name)
+  description = "Reports Lambda function name"
+}
+
+output "reports_table_name" {
+  value       = aws_dynamodb_table.reports.name
+  description = "Reports DynamoDB table name"
 }
 

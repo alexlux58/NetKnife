@@ -25,6 +25,7 @@
 
 import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
@@ -34,18 +35,25 @@ export default function HeadersTool() {
   const [loading, setLoading] = useState(false)
   const [output, setOutput] = useState('')
   const [error, setError] = useState('')
+  const [resultData, setResultData] = useState<any>(null)
 
   async function handleScan() {
     setLoading(true)
     setError('')
+    setResultData(null)
     
     try {
       const result = await apiPost('/headers', { url })
+      setResultData(result)
       setOutput(formatJson(result))
     } catch (e) {
       if (e instanceof ApiError) {
+        const errorData = { error: `Error ${e.status}: ${formatJson(e.body)}` }
+        setResultData(errorData)
         setError(`Error ${e.status}: ${formatJson(e.body)}`)
       } else {
+        const errorData = { error: String(e) }
+        setResultData(errorData)
         setError(String(e))
       }
       setOutput('')
@@ -135,7 +143,19 @@ export default function HeadersTool() {
         </div>
 
         {/* Output section */}
-        <OutputCard title="Headers Analysis" value={output} />
+        {output && resultData && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="headers"
+                input={url}
+                data={resultData}
+                category="Email Security"
+              />
+            </div>
+            <OutputCard title="Headers Analysis" value={output} />
+          </div>
+        )}
       </div>
     </div>
   )

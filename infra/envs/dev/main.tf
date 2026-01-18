@@ -204,6 +204,47 @@ variable "greynoise_api_key" {
   description = "API key for GreyNoise. Get from https://viz.greynoise.io/account/api-key"
 }
 
+variable "emailrep_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for EmailRep.io (optional, increases rate limits). Get from https://emailrep.io/"
+}
+
+variable "numlookup_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for NumLookup (optional, increases rate limits). Get from https://numlookupapi.com/"
+}
+
+variable "ipqualityscore_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for IPQualityScore (required for free tier). Get from https://www.ipqualityscore.com/"
+}
+
+variable "hunter_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for Hunter.io (required). Get from https://hunter.io/api-documentation"
+}
+
+variable "openai_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "API key for OpenAI (for Security Advisor chatbot). Get from https://platform.openai.com/api-keys"
+}
+
+variable "openai_model" {
+  type        = string
+  default     = "gpt-4o-mini"
+  description = "OpenAI model to use (gpt-4o-mini recommended for cost efficiency, ~100x cheaper than GPT-4)"
+}
+
 # ------------------------------------------------------------------------------
 # ACM CERTIFICATE MODULE (for custom domain)
 # ------------------------------------------------------------------------------
@@ -293,6 +334,12 @@ module "api" {
   securitytrails_api_key = var.securitytrails_api_key
   censys_api_key         = var.censys_api_key
   greynoise_api_key      = var.greynoise_api_key
+  emailrep_api_key       = var.emailrep_api_key
+  numlookup_api_key      = var.numlookup_api_key
+  ipqualityscore_api_key = var.ipqualityscore_api_key
+  hunter_api_key         = var.hunter_api_key
+  openai_api_key         = var.openai_api_key
+  openai_model           = var.openai_model
 }
 
 # ------------------------------------------------------------------------------
@@ -335,6 +382,18 @@ module "ops" {
     module.api.lambda_securitytrails_name,
     module.api.lambda_censys_name,
     module.api.lambda_greynoise_name,
+    # New OSINT tools
+    module.api.lambda_emailrep_name,
+    module.api.lambda_ip_api_name,
+    module.api.lambda_breachdirectory_name,
+    module.api.lambda_phone_validator_name,
+    module.api.lambda_ipqualityscore_name,
+    module.api.lambda_ipqs_email_name,
+    module.api.lambda_ipqs_phone_name,
+    module.api.lambda_ipqs_url_name,
+    module.api.lambda_hunter_name,
+    module.api.lambda_security_advisor_name,
+    module.api.lambda_reports_name,
   ]))
 
   # WAF logging

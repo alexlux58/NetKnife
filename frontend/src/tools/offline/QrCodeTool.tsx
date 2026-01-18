@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
+import AddToReportButton from '../../components/AddToReportButton'
 
 type QrType = 'text' | 'url' | 'wifi' | 'email' | 'sms' | 'vcard'
 type ErrorCorrectionLevel = 'L' | 'M' | 'Q' | 'H'
@@ -432,6 +433,16 @@ END:VCARD`
 
         {/* Output */}
         <div className="space-y-4">
+          {qrDataUrl && (
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="qr-code"
+                input={generateQrData()}
+                data={{ type: qrType, data: generateQrData(), size, errorCorrection }}
+                category="Utilities"
+              />
+            </div>
+          )}
           {/* QR Code Preview */}
           <div className="card p-6">
             <div className="flex items-center justify-between mb-4">

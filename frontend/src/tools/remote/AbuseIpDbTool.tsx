@@ -21,6 +21,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import OutputCard from '../../components/OutputCard'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiClient } from '../../lib/api'
 
 // ------------------------------------------------------------------------------
@@ -182,6 +183,15 @@ export default function AbuseIpDbTool() {
       {/* Results display */}
       {result && (
         <div className="space-y-4">
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="abuseipdb"
+              input={result.ip}
+              data={result}
+              category="Threat Intelligence"
+            />
+          </div>
           {/* Score card */}
           <div className={`card p-6 ${getScoreBg(result.abuseConfidenceScore)}`}>
             <div className="flex items-center justify-between">

@@ -18,6 +18,7 @@
 
 import { useState, useMemo } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 /**
  * Decodes a Base64URL string (JWT uses Base64URL, not standard Base64)
@@ -208,7 +209,17 @@ export default function JwtDecoderTool() {
 
       {/* Live preview */}
       {decoded && !('error' in decoded) && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <>
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="jwt-decoder"
+              input="JWT Token"
+              data={decoded}
+              category="Utilities"
+            />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
           {/* Header */}
           <div className="card p-4">
             <h4 className="text-sm font-medium text-blue-400 mb-2">Header</h4>
@@ -256,6 +267,7 @@ export default function JwtDecoderTool() {
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* Error display */}

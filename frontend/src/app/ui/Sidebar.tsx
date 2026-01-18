@@ -17,9 +17,11 @@
 import { useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { tools, getCategories, type ToolCategory } from '../../tools/registry'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { 
   ChevronDownIcon, 
   ChevronRightIcon,
+  Cross2Icon,
   MagnifyingGlassIcon,
   DesktopIcon,
   GlobeIcon,
@@ -47,9 +49,16 @@ const categoryIcons: Record<ToolCategory, React.ReactNode> = {
   'Time & Scheduling': <ClockIcon className="w-4 h-4" />,
   'Data & Text': <FileTextIcon className="w-4 h-4" />,
   'Generators': <LightningBoltIcon className="w-4 h-4" />,
+  'Utilities': <DesktopIcon className="w-4 h-4" />,
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean
+  onClose?: () => void
+}
+
+export default function Sidebar({ mobileOpen = false, onClose = () => {} }: SidebarProps) {
+  const isMobile = useMediaQuery('(max-width: 767px)')
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<Set<ToolCategory>>(
     new Set(getCategories()) // All expanded by default
@@ -90,11 +99,32 @@ export default function Sidebar() {
   const isSearching = searchQuery.length > 0
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-72 bg-[#161b22] border-r border-[#30363d] hidden md:flex md:flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-[#30363d]">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+    <>
+      {/* Backdrop - mobile only when open */}
+      {isMobile && mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          onClick={onClose}
+          onKeyDown={(e) => e.key === 'Escape' && onClose()}
+          aria-hidden
+        />
+      )}
+
+      <aside
+        aria-hidden={isMobile && !mobileOpen}
+        className={`
+          fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:max-w-none
+          bg-[#161b22] border-r border-[#30363d]
+          flex flex-col
+          transform transition-transform duration-200 ease-out
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0
+        `}
+      >
+        {/* Header */}
+        <div className="p-4 border-b border-[#30363d] flex-shrink-0 relative">
+          <div className="flex items-center gap-3 pr-10">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>
@@ -103,6 +133,15 @@ export default function Sidebar() {
             <h1 className="text-lg font-bold">NetKnife</h1>
             <p className="text-xs text-gray-400">{tools.length} Tools</p>
           </div>
+          {/* Close button - mobile only */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="md:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 -m-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#21262d] touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Close menu"
+          >
+            <Cross2Icon className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
@@ -200,5 +239,6 @@ export default function Sidebar() {
         </p>
       </div>
     </aside>
+    </>
   )
 }

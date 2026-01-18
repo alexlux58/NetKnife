@@ -17,6 +17,7 @@
 import { useState } from 'react'
 import { v1 as uuidv1, v4 as uuidv4, v5 as uuidv5 } from 'uuid'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 type UuidVersion = 'v1' | 'v4' | 'v5'
 type OutputFormat = 'standard' | 'uppercase' | 'no-hyphens' | 'braces' | 'urn'
@@ -252,6 +253,16 @@ export default function UuidTool() {
 
         {/* Output */}
         <div className="space-y-4">
+          {uuids.length > 0 && (
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="uuid"
+                input={`${version} - ${count} UUIDs`}
+                data={uuids}
+                category="Utilities"
+              />
+            </div>
+          )}
           <OutputCard 
             title={`Generated UUIDs (${uuids.length})`} 
             canCopy

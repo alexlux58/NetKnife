@@ -15,6 +15,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiClient } from '../../lib/api'
 
 const schema = z.object({
@@ -145,6 +146,15 @@ export default function EmailAuthTool() {
       {/* Visual Results */}
       {result && (
         <div className="space-y-4">
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="email-auth"
+              input={result.domain}
+              data={result}
+              category="Email Security"
+            />
+          </div>
           {/* Score card */}
           <div className="card p-6 text-center">
             <div className={`text-6xl font-bold ${gradeColor(result.grade)}`}>

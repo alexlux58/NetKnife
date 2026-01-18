@@ -18,6 +18,7 @@
 
 import { useState, useMemo } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 import { templates, renderTemplate, type CommandTemplate } from './templates'
 
 /**
@@ -208,6 +209,18 @@ export default function CommandTemplatesTool() {
         </div>
 
         {/* Right panel: Output */}
+        {rendered && selected && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <AddToReportButton
+                toolId="command-templates"
+                input={selected.title}
+                data={JSON.parse(rendered)}
+                category="Utilities"
+              />
+            </div>
+          </div>
+        )}
         <OutputCard title="Rendered Commands" value={rendered} />
       </div>
     </div>

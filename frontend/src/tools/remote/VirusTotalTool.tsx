@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 
@@ -104,7 +105,20 @@ export default function VirusTotalTool() {
         </div>
 
         <div className="space-y-4">
-          {result && stats && (
+          {result && (
+            <>
+              {/* Add to Report Button */}
+              {stats && (
+                <div className="flex items-center justify-end">
+                  <AddToReportButton
+                    toolId="virustotal"
+                    input={value}
+                    data={result}
+                    category="Threat Intelligence"
+                  />
+                </div>
+              )}
+              {stats && (
             <div className={`card p-6 border-l-4 ${
               threatPercent > 10 ? 'border-red-500' : threatPercent > 0 ? 'border-yellow-500' : 'border-emerald-500'
             }`}>
@@ -166,6 +180,8 @@ export default function VirusTotalTool() {
           )}
 
           <JsonViewer title="Full Response" json={result} error={error} />
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -17,6 +17,7 @@
 
 import { useState, useMemo } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 
 const PRESETS = [
@@ -315,6 +316,16 @@ export default function CronBuilderTool() {
           </div>
 
           {/* Next Executions */}
+          {isValid && nextExecutions.length > 0 && (
+            <div className="flex items-center justify-end mb-2">
+              <AddToReportButton
+                toolId="cron-builder"
+                input={cronExpression}
+                data={{ cron: cronExpression, description, nextExecutions: nextExecutions.map(d => d.toISOString()) }}
+                category="Utilities"
+              />
+            </div>
+          )}
           <OutputCard title="Next 10 Executions" canCopy>
             {isValid && nextExecutions.length > 0 ? (
               <div className="space-y-2">

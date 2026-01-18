@@ -44,6 +44,7 @@ export type ToolCategory =
   | 'Time & Scheduling'
   | 'Data & Text'
   | 'Generators'
+  | 'Utilities'
 
 export interface Tool {
   id: string
@@ -106,6 +107,10 @@ export const categoryInfo: Record<ToolCategory, { icon: string; description: str
   'Generators': { 
     icon: 'Wand', 
     description: 'Generate passwords, codes, and IDs' 
+  },
+  'Utilities': { 
+    icon: 'Gear', 
+    description: 'Report building and utility tools' 
   },
 }
 
@@ -284,6 +289,120 @@ export const tools: Tool[] = [
     path: '/tools/hibp',
     component: React.lazy(() => import('./remote/HibpTool')),
     description: 'Check passwords against breach database',
+  },
+  {
+    id: 'emailrep',
+    name: 'Email Reputation (EmailRep)',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/emailrep',
+    component: React.lazy(() => import('./remote/EmailRepTool')),
+    description: 'Check email reputation and suspicious activity',
+  },
+  {
+    id: 'breachdirectory',
+    name: 'Email Breach Check',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/breachdirectory',
+    component: React.lazy(() => import('./remote/BreachDirectoryTool')),
+    description: 'Check if email appears in data breaches',
+  },
+  {
+    id: 'ip-api',
+    name: 'IP Geolocation',
+    kind: 'remote',
+    category: 'Network Intelligence',
+    path: '/tools/ip-api',
+    component: React.lazy(() => import('./remote/IpApiTool')),
+    description: 'IP geolocation and ISP information',
+  },
+  {
+    id: 'ipqualityscore',
+    name: 'IP Reputation (IPQS)',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/ipqualityscore',
+    component: React.lazy(() => import('./remote/IpQualityScoreTool')),
+    description: 'IP fraud score and threat detection',
+    requiresApiKey: true,
+  },
+  {
+    id: 'ipqs-email',
+    name: 'Email Verification (IPQS)',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/ipqs-email',
+    component: React.lazy(() => import('./remote/IpqsEmailTool')),
+    description: 'Email validation and spam detection',
+    requiresApiKey: true,
+  },
+  {
+    id: 'ipqs-phone',
+    name: 'Phone Validation (IPQS)',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/ipqs-phone',
+    component: React.lazy(() => import('./remote/IpqsPhoneTool')),
+    description: 'Phone number validation and risk assessment',
+    requiresApiKey: true,
+  },
+  {
+    id: 'ipqs-url',
+    name: 'URL Scanner (IPQS)',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/ipqs-url',
+    component: React.lazy(() => import('./remote/IpqsUrlTool')),
+    description: 'Malicious URL scanner and reputation',
+    requiresApiKey: true,
+  },
+  {
+    id: 'phone-validator',
+    name: 'Phone Validator',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/phone-validator',
+    component: React.lazy(() => import('./remote/PhoneValidatorTool')),
+    description: 'Phone number validation and carrier detection',
+  },
+  {
+    id: 'hunter',
+    name: 'Email Finder (Hunter)',
+    kind: 'remote',
+    category: 'Email Security',
+    path: '/tools/hunter',
+    component: React.lazy(() => import('./remote/HunterTool')),
+    description: 'Email verification and finder',
+    requiresApiKey: true,
+  },
+  {
+    id: 'osint-dashboard',
+    name: 'OSINT Dashboard',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/osint-dashboard',
+    component: React.lazy(() => import('./remote/OsintDashboardTool')),
+    description: 'Consolidated threat intelligence from multiple sources',
+  },
+  {
+    id: 'security-advisor',
+    name: 'Security Advisor',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/security-advisor',
+    component: React.lazy(() => import('./remote/SecurityAdvisorTool')),
+    description: 'AI-powered security guidance and tool recommendations',
+    requiresApiKey: true,
+  },
+  {
+    id: 'report-builder',
+    name: 'Report Builder',
+    kind: 'remote',
+    category: 'Utilities',
+    path: '/tools/report-builder',
+    component: React.lazy(() => import('./remote/ReportBuilderTool')),
+    description: 'Collect tool results and generate PDF reports',
   },
   {
     id: 'virustotal',
@@ -503,6 +622,73 @@ export const tools: Tool[] = [
     component: React.lazy(() => import('./offline/QrCodeTool')),
     description: 'Generate QR codes for WiFi, URLs',
   },
+
+  // ============================================================================
+  // PENTESTING & SECURITY TOOLS (Offline)
+  // ============================================================================
+  {
+    id: 'pgp',
+    name: 'PGP Encryption',
+    kind: 'offline',
+    category: 'Encoding & Crypto',
+    path: '/tools/pgp',
+    component: React.lazy(() => import('./offline/PgpTool')),
+    description: 'Encrypt, decrypt, sign, and verify PGP messages',
+  },
+  {
+    id: 'certificate-generator',
+    name: 'Certificate & CSR Generator',
+    kind: 'offline',
+    category: 'Certificates & TLS',
+    path: '/tools/certificate-generator',
+    component: React.lazy(() => import('./offline/CertificateGeneratorTool')),
+    description: 'Generate CSR and self-signed certificates',
+  },
+  {
+    id: 'snmp',
+    name: 'SNMP Command Builder',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/snmp',
+    component: React.lazy(() => import('./offline/SnmpTool')),
+    description: 'Build SNMP v2c/v3 commands with common OIDs',
+  },
+  {
+    id: 'ldap',
+    name: 'LDAP Query Builder',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/ldap',
+    component: React.lazy(() => import('./offline/LdapTool')),
+    description: 'Build ldapsearch commands for AD and LDAP',
+  },
+  {
+    id: 'smtp',
+    name: 'SMTP Diagnostics',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/smtp',
+    component: React.lazy(() => import('./offline/SmtpTool')),
+    description: 'Build SMTP diagnostic commands',
+  },
+  {
+    id: 'google-dorks',
+    name: 'Google Dorks Generator',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/google-dorks',
+    component: React.lazy(() => import('./offline/GoogleDorksTool')),
+    description: 'Generate Google search queries for security research',
+  },
+  {
+    id: 'prompt-templates',
+    name: 'Prompt Templates',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/prompt-templates',
+    component: React.lazy(() => import('./offline/PromptTemplatesTool')),
+    description: 'Security and network engineering prompt templates',
+  },
 ]
 
 /**
@@ -536,5 +722,6 @@ export function getCategories(): ToolCategory[] {
     'Time & Scheduling',
     'Data & Text',
     'Generators',
+    'Utilities',
   ]
 }

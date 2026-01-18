@@ -16,6 +16,7 @@
 
 import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 /**
  * Common MAC OUI prefixes and their vendors
@@ -511,6 +512,16 @@ export default function MacVendorTool() {
         </div>
 
         {/* Results */}
+        {results.length > 0 && (
+          <div className="flex items-center justify-end mb-2">
+            <AddToReportButton
+              toolId="mac-vendor"
+              input={macInput}
+              data={results}
+              category="Network Intelligence"
+            />
+          </div>
+        )}
         <OutputCard title="Lookup Results" canCopy={results.length > 0}>
           {results.length === 0 ? (
             <p className="text-gray-500">Enter MAC addresses and click lookup</p>

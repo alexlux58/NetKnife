@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
+import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 
@@ -97,7 +98,20 @@ export default function SslLabsTool() {
         </div>
 
         <div className="space-y-4">
-          {result && result.status === 'ready' && result.grade && (
+          {result && (
+            <>
+              {/* Add to Report Button */}
+              {result.status === 'ready' && result.grade && (
+                <div className="flex items-center justify-end">
+                  <AddToReportButton
+                    toolId="ssl-labs"
+                    input={host}
+                    data={result}
+                    category="Certificates & TLS"
+                  />
+                </div>
+              )}
+              {result.status === 'ready' && result.grade && (
             <div className="card p-6 text-center">
               <div className="text-sm text-gray-500 mb-2">SSL Grade</div>
               <div className={`inline-block text-6xl font-bold px-6 py-3 rounded-lg ${gradeColors[result.grade] || 'text-gray-400'}`}>
@@ -187,6 +201,8 @@ export default function SslLabsTool() {
           )}
 
           <JsonViewer title="Full Response" json={result} error={error} />
+            </>
+          )}
         </div>
       </div>
     </div>

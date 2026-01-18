@@ -55,17 +55,17 @@ export default function OutputCard({ title, value, onCopy, canCopy = false, chil
 
   return (
     <div className="card">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#30363d]">
-        <h3 className="font-medium">{title}</h3>
+      {/* Header - stacks on very small screens */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 sm:px-4 py-3 border-b border-[#30363d]">
+        <h3 className="font-medium text-sm sm:text-base truncate">{title}</h3>
         
         {/* Copy buttons - only show if canCopy or value exists */}
         {(canCopy || displayValue) && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={() => handleCopy(false)}
               disabled={!displayValue}
-              className={`btn-primary text-xs py-1 px-2 ${
+              className={`btn-primary text-xs !py-2 !px-3 min-h-[40px] sm:min-h-[32px] ${
                 copyState === 'copied' ? 'bg-green-600' : ''
               }`}
             >
@@ -74,18 +74,18 @@ export default function OutputCard({ title, value, onCopy, canCopy = false, chil
             <button
               onClick={() => handleCopy(true)}
               disabled={!displayValue}
-              className={`btn-secondary text-xs py-1 px-2 ${
+              className={`btn-secondary text-xs !py-2 !px-3 min-h-[40px] sm:min-h-[32px] ${
                 copyState === 'redacted' ? 'bg-green-600 text-white' : ''
               }`}
             >
-              {copyState === 'redacted' ? 'Copied!' : 'Copy (redacted)'}
+              {copyState === 'redacted' ? 'Copied!' : 'Redacted'}
             </button>
           </div>
         )}
       </div>
 
-      {/* Content */}
-      <div className="p-4 text-sm overflow-auto min-h-[150px] max-h-[500px] scrollbar-thin">
+      {/* Content - smaller max-height on mobile to leave room for URL bar etc */}
+      <div className="p-3 sm:p-4 text-sm overflow-auto min-h-[120px] max-h-[50vh] sm:max-h-[500px] scrollbar-thin">
         {children ? (
           children
         ) : displayValue ? (

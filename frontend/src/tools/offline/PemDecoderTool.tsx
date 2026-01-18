@@ -16,6 +16,7 @@
 
 import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
+import AddToReportButton from '../../components/AddToReportButton'
 
 interface CertificateInfo {
   subject: Record<string, string>
@@ -325,6 +326,15 @@ PA/g4g==
         <div className="space-y-4">
           {certInfo ? (
             <>
+              {/* Add to Report Button */}
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="pem-decoder"
+                  input="Certificate"
+                  data={certInfo}
+                  category="Certificates & TLS"
+                />
+              </div>
               {/* Expiry Status */}
               <div className={`card p-4 border-l-4 ${
                 expiryStatus?.color.includes('red') ? 'border-red-500 bg-red-500/10' :

@@ -15,11 +15,9 @@ export default defineConfig({
   
   // Build configuration
   build: {
-    // Output to dist folder
     outDir: 'dist',
-    
-    // Generate sourcemaps for debugging
-    sourcemap: true,
+    // Disable source maps in production to avoid exposing source (security product)
+    sourcemap: false,
     
     // Chunk splitting for better caching
     rollupOptions: {

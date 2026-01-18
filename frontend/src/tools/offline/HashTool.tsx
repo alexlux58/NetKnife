@@ -18,6 +18,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import AddToReportButton from '../../components/AddToReportButton'
 
 type Algorithm = 'MD5' | 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512'
 
@@ -277,6 +278,15 @@ export default function HashTool() {
       {/* Results */}
       {results.length > 0 && (
         <div className="space-y-3">
+          {/* Add to Report Button */}
+          <div className="flex items-center justify-end">
+            <AddToReportButton
+              toolId="hash"
+              input={input}
+              data={results}
+              category="Utilities"
+            />
+          </div>
           {results.map((result) => (
             <div key={result.algorithm} className="card p-4">
               <div className="flex items-center justify-between mb-2">

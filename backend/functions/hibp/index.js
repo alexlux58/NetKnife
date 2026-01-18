@@ -90,20 +90,32 @@ function isValidHashPrefix(prefix) {
 // ------------------------------------------------------------------------------
 
 async function queryHIBP(hashPrefix) {
-  const response = await fetch(`${HIBP_API}${hashPrefix}`, {
-    headers: {
-      "User-Agent": "NetKnife-PasswordChecker",
-      "Add-Padding": "true", // Adds padding to prevent timing attacks
-    },
-    timeout: 10000,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
   
-  if (!response.ok) {
-    throw new Error(`HIBP API error: ${response.status}`);
+  try {
+    const response = await fetch(`${HIBP_API}${hashPrefix}`, {
+      headers: {
+        "User-Agent": "NetKnife-PasswordChecker",
+        "Add-Padding": "true", // Adds padding to prevent timing attacks
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HIBP API error: ${response.status}`);
+    }
+    
+    const text = await response.text();
+    return text;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
+    throw e;
   }
-  
-  const text = await response.text();
-  return text;
 }
 
 // ------------------------------------------------------------------------------

@@ -1,0 +1,9 @@
+{
+  "name": "netknife-billing",
+  "version": "1.0.0",
+  "description": "NetKnife billing Lambda (Stripe, usage)",
+  "main": "index.js",
+  "dependencies": {
+    "stripe": "^14.21.0"
+  }
+}

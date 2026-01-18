@@ -6,7 +6,7 @@
 ![React](https://img.shields.io/badge/React-18-blue)
 ![Terraform](https://img.shields.io/badge/Terraform-1.6+-purple)
 
-**Contents:** [Features](#features) · [Architecture](#architecture) · [Security](#security) · [Deployment](#deployment-guide) · [Custom Domain](#custom-domain-setup-optional) · [Cost](#cost-estimation) · [Development](#development) · [Project Structure](#project-structure) · [Report Builder](#report-builder--chat-storage) · [Adding Tools](#adding-new-tools) · [OSINT](#osint-features) · [API Keys](#api-keys-configuration) · [Production Readiness](#production-readiness) · [Monetization](#monetization) · [Infra / Dev](#infra--dev-environment) · [Troubleshooting](#troubleshooting)
+**Contents:** [Features](#features) · [Architecture](#architecture) · [Security](#security) · [Deployment](#deployment-guide) · [Custom Domain](#custom-domain-setup-optional) · [Cost](#cost-estimation) · [Development](#development) · [Project Structure](#project-structure) · [Report Builder](#report-builder--chat-storage) · [Adding Tools](#adding-new-tools) · [OSINT](#osint-features) · [API Keys](#api-keys-configuration) · [Production Readiness](#production-readiness) · [Monetization](#monetization) · [Infra / Dev](#infra--dev-environment) · [Improvements & Roadmap](#improvements--roadmap) · [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -25,6 +25,7 @@
 - **PEM Decoder** - Parse X.509 certificates locally
 
 **Development Helpers**
+- **Notes** - Notion-like block editor (headings, lists, code, quotes); add to reports
 - **Regex Helper** - Build and test grep/egrep patterns with live preview
 - **JWT Decoder** - Decode and inspect JSON Web Tokens
 - **Encoder/Decoder** - Base64, Base64URL, Hex, URL, HTML, Unicode encoding
@@ -61,6 +62,8 @@
 - **Password Breach** - Check passwords against HIBP database (k-anonymity)
 
 **Threat Intelligence**
+- **CVE Lookup** - NVD (NIST) + OSV; optional AI "should I be worried?" (free APIs; NVD key optional)
+- **CVSS Explainer** - Parse CVSS 2.0/3.x vectors, explain metrics, base score (offline)
 - **IP Reputation (AbuseIPDB)** - Abuse confidence scores and report data
 - **IP Reputation (IPQualityScore)** - Fraud score, VPN/proxy/Tor detection (requires API key)
 - **Shodan** - Internet-connected device search (requires API key)
@@ -85,10 +88,11 @@
 - **Security Advisor** - AI-powered chatbot providing expert security guidance and tool recommendations (requires OpenAI API key)
 - **Chat Storage** - Save and load Security Advisor conversations
 
-**Report Builder**
-- **Report Builder** - Collect data from any tool and generate professional PDF reports
-- **Add to Report** - One-click button available in all tools to add results to reports
-- **PDF Export** - Download comprehensive reports as PDF documents
+**Report Builder & Notes**
+- **Report Builder** - Collect data from any tool and Notion-like notes; generate PDF reports
+- **Notes** - Block editor (headings, lists, code, quotes); add to reports (offline)
+- **Add to Report** - One-click button in tools to add results to reports
+- **PDF Export** - Download reports as PDF (notes rendered as formatted text)
 
 **System Information**
 - **RDAP Lookup** - Modern WHOIS replacement for IPs and domains
@@ -917,13 +921,73 @@ Priorities before launch: **Favicon** (`public/favicon.svg`), **dev bypass** onl
 
 ## Monetization
 
-**Model:** Freemium (Free / Pro ~$12–19/mo / Team ~$49–79/mo / Enterprise). **Meter:** remote tool calls, Security Advisor messages, AI PDFs, saved reports/chats, report items per report. **Gates:** Free = LOCAL always, remote until cap then upgrade CTA; Pro+ = AI PDF, higher limits; Team+ = shared reports, optional SSO. **Tech:** DynamoDB `users` (planId, stripeCustomerId, periodEnd) and `usage` (pk=USER#&lt;sub&gt;, sk=MONTH#YYYY-MM, counters); Stripe products/prices, Checkout, webhook to update planId; Lambda authorizer or billing layer: `getPlanAndUsage`, `incrementUsage`, `checkLimit`; return 402 with `{ code, upgradeUrl }` when over limit; frontend Upgrade modal on 402. **Phases:** (1) DynamoDB + Stripe Checkout + `GET /billing/usage`, `/pricing`; (2) Stripe webhook → planId/periodEnd; (3) enforce limits in remote Lambdas, Security Advisor, Reports, AI PDF; 402 + UpgradeModal; (4) self‑signup Free, Team seats, overage, BYOK, ToS/Privacy. **Example limits:** Free 50 remote/mo, 10 Advisor/mo, 0 AI PDF, 3 reports, 1 chat; Pro 500, 100, 15, 50, 20.
+**Model:** Browser-only tools are **free**. API/remote tools, Security Advisor, and higher report limits require **API Access — $5/mo**. One-time **donations** supported. User `alex.lux` is grandfathered (no limits).
+
+**Free:** All offline (LOCAL) tools; 0 API/remote calls; 0 Security Advisor; 3 saved reports/month.
+
+**API Access ($5/mo):** 500 API/remote calls; 100 Security Advisor messages; 50 saved reports.
+
+**Donations:** One-time via Stripe (min $1, max $1000); no subscription. See Pricing page.
+
+**Tech:** DynamoDB `billing` (planId, stripeCustomerId, periodEnd) and `usage` (pk=userId, sk=MONTH#YYYY-MM, remoteCalls, advisorMessages, reportSaves); Stripe Checkout (subscription + one-time), Customer Portal, webhook; billing layer: `getAuth`, `checkLimit`, `incrementUsage`; 402 with `{ code, upgradeUrl, message }` when over limit; frontend Upgrade modal on 402. **Pricing page:** `/pricing` — usage, Subscribe, Manage, Donate.
 
 ---
 
 ## Infra / Dev Environment
 
 **Quick start:** `cd infra/envs/dev`, `./init.sh`, `cp terraform.tfvars.example terraform.tfvars`, edit vars, `terraform apply -auto-approve`. **Scripts:** `init.sh`, `apply.sh`, `redeploy.sh`, `deploy-complete.sh`, `update-env.sh` (frontend), `set-password.sh`, `verify-deployment.sh`, `check-dns.sh`, `sync-cloudflare-token.sh`. **Custom domain:** set `custom_domain`, `cloudflare_zone_id`, `cloudflare_zone_name`, `cloudflare_subdomain`; DNS record name is the subdomain (e.g. `tools`) not the FQDN. **Cognito:** 14+ chars, upper, lower, number, symbol; after `terraform apply`, run `./update-env.sh` in `frontend/` and rebuild so Cognito domain/client/issuer stay in sync. **Full details:** [infra/envs/dev/README.md](infra/envs/dev/README.md) (init, DNS, password, troubleshooting, redeploy, Cloudflare token).
+
+---
+
+## Improvements & Roadmap
+
+Suggested improvements and future work. **B** = quick win, **M** = medium, **L** = larger.
+
+### Billing & Monetization
+
+- **Extend billing to all remote Lambdas [L]:** `dns`, `security-advisor`, `cve-lookup`, `reports`, `rdap`, and `headers` use the billing layer. Remaining: tls, traceroute, reverse-dns, dns-propagation, asn-details, bgp-looking-glass, peeringdb, ip-api, breachdirectory, emailrep, hibp, email-auth, abuseipdb, shodan, virustotal, greynoise, censys, security-trails, ipqualityscore, ipqs-*, hunter, phone-validator, ssl-labs. Pattern: add `layers = [billing]`, `BILLING_TABLE`, `USAGE_TABLE`; in handler: `getAuth`, `checkLimit(..., 'remote')` → 402 if over limit; `incrementUsage` before each 200.
+- **Usage in Topbar [B]:** e.g. “X/500 API calls” when `plan === 'pro'”.
+- **Approaching-limit warning [M]:** When usage ≥ 90% of limit, show a notice.
+
+### Auth & Tokens
+
+- **Silent token refresh [B] — DONE:** `getAccessToken()` uses `signinSilent()` when the access token is expired and a refresh token exists.
+- **Idle logout [M]:** Optional session timeout or “Session expired” after N minutes inactive.
+
+### Documentation
+
+- **Per-Lambda READMEs [B]:** Short `README.md` in each `backend/functions/<name>/` with purpose, env vars, request/response, and build steps.
+- **ToS & Privacy [M]:** `/terms` and `/privacy`; link from Login and Pricing.
+
+### New Tools & Features
+
+- **Kali-style / recon [M–L]:** Port Scanner (Node TCP connect), Dir Buster (`fetch` + wordlist), Subdomain Check (DoH), Hash Identifier (offline, infer hash type), nmap (binary in layer/image, `-sT -sV -Pn`), Tech Detector (`fetch` + fingerprints).
+- **Report Builder:** Export as JSON [B]; report templates (Pentest, Incident) [M]. Notes: image paste, tables, “/” block selector [M].
+- **Search & UX:** Tool deep link with query (e.g. `/tools?q=cve`) [B]; ErrorBoundary for tools [B]; Cmd+K tool search [M].
+
+### Infra & Ops
+
+- **Cache attribute consistency [M]:** Some Lambdas use `Item.value`, others `Item.data`; standardize (e.g. `value`) and a shared helper.
+- **Staging / prod [M]:** `tfvars.staging` and separate Stripe/Cognito where needed.
+
+### Security & Hardening
+
+- **SSRF:** Headers already block private IPs; TLS/DNS use explicit upstreams. Apply the same to any new “fetch URL” tool.
+- **WAF:** Not supported for HTTP API; consider REST or Lambda usage plans for extra limits.
+- **Secrets:** Keep avoiding logging or returning API keys, tokens, PII; “Copy (redacted)” is good.
+
+### Frontend & Polish
+
+- **`apiPost` and `VITE_API_URL` [B]:** Guard when `!API_URL` in dev.
+- **Loading/empty states:** Ensure every remote tool has clear loading and “no data” states.
+- **`requiresApiKey` [M]:** Use it to show “Configure API key” and optionally disable Run when the key is known to be unset.
+- **Theme [M]:** Optional light theme or system preference.
+
+### Testing & CI
+
+- **ESLint** in devDependencies and CI.
+- **Lambda unit tests:** Billing layer, `checkLimit`/`incrementUsage`, CVE/CVSS parsers.
+- **E2E (e.g. Playwright):** Login → tool → add to report → PDF.
 
 ---
 

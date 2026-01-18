@@ -52,14 +52,37 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', Monaco, Consolas, monospace;
 }
 
+/* Light theme overrides (data-theme="light" on html) */
+[data-theme="light"] {
+  --color-bg-primary: #f6f8fa;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #eaeef2;
+  --color-text-primary: #1f2328;
+  --color-text-secondary: #656d76;
+  --color-text-muted: #8c959f;
+  --color-border: #d0d7de;
+  --color-border-muted: #eaeef2;
+  --color-accent-blue: #0969da;
+  --color-accent-green: #1a7f37;
+  --color-accent-red: #cf222e;
+  --color-accent-yellow: #9a6700;
+  --color-accent-purple: #8250df;
+  --color-success: #1a7f37;
+  --color-warning: #9a6700;
+  --color-error: #cf222e;
+}
+
 /* ============================================================================
    BASE STYLES
    ============================================================================ */
 @layer base {
-  /* Dark theme by default */
+  /* Dark theme by default; light when data-theme="light" */
   html {
     color-scheme: dark;
     -webkit-text-size-adjust: 100%;
+  }
+  [data-theme="light"] {
+    color-scheme: light;
   }
   
   body {

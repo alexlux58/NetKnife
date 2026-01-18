@@ -5,15 +5,15 @@
  * 
  * The login page displays:
  * - NetKnife branding
- * - Sign in button
- * - Notice about no self-service account creation
- * 
- * When the user clicks "Sign in", they are redirected to the Cognito Hosted UI
- * where they enter their username and password.
+ * - Sign in and Create account
+ * - Notice about account access
+ *
+ * Sign in and Create account redirect to the Cognito Hosted UI (sign-up visible
+ * when allowed by the user pool; otherwise contact administrator).
  * ==============================================================================
  */
 
-import { login, isDevMode } from '../../lib/auth'
+import { login, signup, isDevMode } from '../../lib/auth'
 
 export default function LoginPage() {
   const devMode = isDevMode()
@@ -95,11 +95,20 @@ export default function LoginPage() {
             Sign in
           </button>
 
+          {/* Create account */}
+          <p className="text-center mt-4">
+            <button
+              type="button"
+              onClick={() => signup()}
+              className="text-sm text-blue-400 hover:text-blue-300 hover:underline"
+            >
+              Create account
+            </button>
+          </p>
+
           {/* Notice */}
           <p className="text-xs text-gray-500 text-center mt-6">
-            Private tools. No self-service account creation.
-            <br />
-            Contact administrator for access.
+            Private tools. If sign-up is not available, contact the administrator for access.
           </p>
         </div>
 

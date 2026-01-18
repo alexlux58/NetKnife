@@ -21,6 +21,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './app/router'
+import { ThemeProvider } from './lib/ThemeContext'
 import './index.css'
 
 // Get the root element
@@ -33,7 +34,9 @@ if (!rootElement) {
 // Create React root and render app
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
   </React.StrictMode>,
 )
 

@@ -32,7 +32,11 @@ import LoginPage from './views/LoginPage'
 import CallbackPage from './views/CallbackPage'
 import ProtectedRoute from './views/ProtectedRoute'
 import NotFoundPage from './views/NotFoundPage'
+import PricingPage from './views/PricingPage'
+import SettingsPage from './views/SettingsPage'
+import { Link } from 'react-router-dom'
 import { tools } from '../tools/registry'
+import { useBilling } from '../lib/BillingContext'
 
 /**
  * Loading fallback component
@@ -51,16 +55,35 @@ function LoadingFallback() {
 
 /**
  * Tool loader component
- * Handles lazy loading of tool components based on tool ID
+ * Handles lazy loading of tool components based on tool ID.
+ * Remote tools require Pro; free users see an upgrade CTA.
  */
 function ToolLoader({ id }: { id: string }) {
+  const { canUseRemote } = useBilling()
   const tool = tools.find((t) => t.id === id)
-  
+
   if (!tool) {
     return (
       <div className="p-8 text-center">
         <h2 className="text-xl font-semibold text-red-400">Tool not found</h2>
         <p className="text-gray-400 mt-2">The requested tool does not exist.</p>
+      </div>
+    )
+  }
+
+  if (tool.kind === 'remote' && !canUseRemote) {
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold">{tool.name}</h1>
+          {tool.description && <p className="text-gray-400 mt-1">{tool.description}</p>}
+        </div>
+        <div className="card p-8 text-center">
+          <p className="text-gray-400 mb-4">This tool uses AWS/remote APIs. Subscribe to API Access ($5/mo) to use it.</p>
+          <Link to="/pricing" className="btn-primary">
+            View plans &amp; subscribe
+          </Link>
+        </div>
       </div>
     )
   }
@@ -112,6 +135,8 @@ export const router = createBrowserRouter([
         index: true,
         element: <Navigate to={defaultToolPath} replace />,
       },
+      { path: 'pricing', element: <PricingPage /> },
+      { path: 'settings', element: <SettingsPage /> },
       ...tools.map((tool) => ({
         path: tool.path.replace(/^\//, ''),
         element: <ToolLoader id={tool.id} />,

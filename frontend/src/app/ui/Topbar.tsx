@@ -54,7 +54,15 @@ export default function Topbar({ pathname, onMenuClick }: TopbarProps) {
 
         {/* Actions */}
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-          {/* Reports Dashboard - quick access from anywhere */}
+          <Link to="/settings" className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap">
+            Account
+          </Link>
+          <Link
+            to="/pricing"
+            className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
+          >
+            Pricing
+          </Link>
           <Link
             to="/tools/report-builder"
             className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"

@@ -15,9 +15,10 @@
  */
 
 import { useMemo, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import { tools, getCategories, type ToolCategory } from '../../tools/registry'
 import { useMediaQuery } from '../../lib/useMediaQuery'
+import { useBilling } from '../../lib/BillingContext'
 import { 
   ChevronDownIcon, 
   ChevronRightIcon,
@@ -59,6 +60,7 @@ interface SidebarProps {
 
 export default function Sidebar({ mobileOpen = false, onClose = () => {} }: SidebarProps) {
   const isMobile = useMediaQuery('(max-width: 767px)')
+  const { canUseRemote } = useBilling()
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<Set<ToolCategory>>(
     new Set(getCategories()) // All expanded by default
@@ -184,28 +186,48 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }: Side
               {/* Tools in category */}
               {isExpanded && (
                 <div className="ml-4 mt-1 space-y-0.5 border-l border-[#30363d] pl-3">
-                  {categoryTools.map((tool) => (
-                    <NavLink
-                      key={tool.id}
-                      to={tool.path}
-                      className={({ isActive }) =>
-                        `flex items-center justify-between gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
-                          isActive
-                            ? 'bg-blue-500/20 text-blue-300 border-l-2 border-blue-400 -ml-[13px] pl-[11px]'
-                            : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
-                        }`
-                      }
-                    >
-                      <span className="truncate">{tool.name}</span>
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                        tool.kind === 'remote' 
-                          ? 'bg-amber-500/20 text-amber-400' 
-                          : 'bg-emerald-500/20 text-emerald-400'
-                      }`}>
-                        {tool.kind === 'remote' ? 'AWS' : 'LOCAL'}
-                      </span>
-                    </NavLink>
-                  ))}
+                  {categoryTools.map((tool) => {
+                    const locked = tool.kind === 'remote' && !canUseRemote
+                    if (locked) {
+                      return (
+                        <Link
+                          key={tool.id}
+                          to="/pricing"
+                          onClick={onClose}
+                          className="flex items-center justify-between gap-2 px-2 py-1.5 rounded text-sm transition-colors text-gray-500 hover:text-amber-400 hover:bg-[#21262d]/50"
+                        >
+                          <span className="truncate">{tool.name}</span>
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 flex items-center gap-1">
+                            <LockClosedIcon className="w-3 h-3" />
+                            Upgrade
+                          </span>
+                        </Link>
+                      )
+                    }
+                    return (
+                      <NavLink
+                        key={tool.id}
+                        to={tool.path}
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          `flex items-center justify-between gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
+                            isActive
+                              ? 'bg-blue-500/20 text-blue-300 border-l-2 border-blue-400 -ml-[13px] pl-[11px]'
+                              : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
+                          }`
+                        }
+                      >
+                        <span className="truncate">{tool.name}</span>
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                          tool.kind === 'remote'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-emerald-500/20 text-emerald-400'
+                        }`}>
+                          {tool.kind === 'remote' ? 'AWS' : 'LOCAL'}
+                        </span>
+                      </NavLink>
+                    )
+                  })}
                 </div>
               )}
             </div>

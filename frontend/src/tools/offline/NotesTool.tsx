@@ -130,7 +130,7 @@ export default function NotesTool() {
                     setBlocks((prev) => {
                       const n = [...prev]
                       const cur = n[i]
-                      const text = cur && cur.type !== 'divider' ? (cur as { text?: string }).text : ''
+                      const text = (cur && cur.type !== 'divider' ? (cur as { text?: string }).text : '') ?? ''
                       n[i] = t === 'heading' ? { type: 'heading', level: 1, text } : t === 'code' ? { type: 'code', text, language: '' } : { type: t, text } as NoteBlock
                       return n
                     })

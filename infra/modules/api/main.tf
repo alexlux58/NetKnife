@@ -219,6 +219,28 @@ resource "aws_dynamodb_table" "reports" {
 }
 
 # ------------------------------------------------------------------------------
+# DYNAMODB TABLE: USER PROFILES
+# ------------------------------------------------------------------------------
+# User settings: theme, avatarUrl, bio, displayName. pk = Cognito sub.
+
+resource "aws_dynamodb_table" "profiles" {
+  name         = "${local.name}-profiles"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "User profile and settings"
+  }
+}
+
+# ------------------------------------------------------------------------------
 # IAM ROLE FOR LAMBDA FUNCTIONS
 # ------------------------------------------------------------------------------
 # Shared execution role for all Lambda functions.
@@ -286,6 +308,24 @@ resource "aws_iam_role_policy" "reports_access" {
         aws_dynamodb_table.reports.arn,
         "${aws_dynamodb_table.reports.arn}/index/*"
       ]
+    }]
+  })
+}
+
+# DynamoDB profiles access (profile Lambda)
+resource "aws_iam_role_policy" "profiles_access" {
+  name = "${local.name}-profiles-access"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem"
+      ]
+      Resource = aws_dynamodb_table.profiles.arn
     }]
   })
 }
@@ -2254,6 +2294,65 @@ resource "aws_lambda_permission" "reports" {
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.reports.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: User Profile (theme, avatar, bio, displayName)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "profile_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/profile"
+  output_path = "${path.module}/profile.zip"
+}
+
+resource "aws_lambda_function" "profile" {
+  function_name = "${local.name}-profile"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "User profile and settings (theme, avatar, bio)"
+
+  filename         = data.archive_file.profile_zip.output_path
+  source_code_hash = data.archive_file.profile_zip.output_base64sha256
+
+  timeout     = 10
+  memory_size = 128
+
+  environment {
+    variables = {
+      PROFILE_TABLE = aws_dynamodb_table.profiles.name
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "profile" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.profile.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "profile" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /profile"
+  target    = "integrations/${aws_apigatewayv2_integration.profile.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "profile" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.profile.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }

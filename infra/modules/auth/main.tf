@@ -2,10 +2,11 @@
 # NETKNIFE - COGNITO AUTHENTICATION MODULE
 # ==============================================================================
 # This module creates AWS Cognito User Pool for authentication.
-# Configured for single-user, admin-created accounts only (no self-signup).
+# Self-signup enabled: users can create accounts; free = local tools, Pro ($5/mo) = remote/AWS tools.
 #
 # Security Features:
-# - No self-service signup (admin creates users)
+# - Self-signup enabled (Create account on login page)
+# - Email verification for new sign-ups
 # - Strong password requirements (14+ chars, mixed case, numbers, symbols)
 # - OAuth 2.0 / OIDC authorization code flow
 # - Token-based authentication for API access
@@ -70,12 +71,11 @@ resource "random_id" "domain_suffix" {
 resource "aws_cognito_user_pool" "main" {
   name = "${var.project}-${var.env}-users"
 
-  # CRITICAL: Disable self-service signup
-  # Only administrators can create user accounts
+  # Self-signup enabled: users can create accounts via Hosted UI "Create account"
+  # Admin can still create users; invite template used for admin-created only
   admin_create_user_config {
-    allow_admin_create_user_only = true
+    allow_admin_create_user_only = false
 
-    # Invite message template (sent when admin creates a user)
     invite_message_template {
       email_subject = "Your NetKnife account"
       email_message = "Your NetKnife username is {username}. Temporary password: {####}"
@@ -109,8 +109,8 @@ resource "aws_cognito_user_pool" "main" {
   # MFA configuration (optional - can enable later)
   mfa_configuration = "OFF"
 
-  # Email verification (disabled since admin creates accounts)
-  auto_verified_attributes = []
+  # Email verification for self-signup (Cognito sends code to verify email)
+  auto_verified_attributes = ["email"]
 
   # Schema - standard attributes only
   schema {

@@ -19,7 +19,8 @@
  * - Prevents tokens from persisting after user closes browser
  * 
  * FLOW OVERVIEW:
- * - login() → Redirect to Cognito
+ * - login() → Redirect to Cognito Hosted UI (sign-in)
+ * - signup() → Redirect to Cognito Hosted UI (sign-up; uses same /oauth2/authorize, hint for sign-up tab when supported)
  * - completeLogin() → Handle callback, exchange code for tokens
  * - logout() → Clear tokens, redirect to Cognito logout
  * - getUser() → Get current authenticated user
@@ -124,6 +125,32 @@ export async function login(): Promise<void> {
     await userManager.signinRedirect()
   } catch (error) {
     console.error('Login redirect failed:', error)
+    throw error
+  }
+}
+
+/**
+ * Initiates sign-up by redirecting to Cognito Hosted UI.
+ * The Hosted UI at /oauth2/authorize shows both Sign in and Sign up when
+ * self-signup is enabled. If sign-up is disabled (admin-create-only), the
+ * user will see the sign-in form and can contact an administrator.
+ *
+ * In dev bypass mode, behaves like login (simulates auth).
+ */
+export async function signup(): Promise<void> {
+  if (DEV_BYPASS_AUTH) {
+    console.warn('🔓 DEV MODE: Auth bypassed, simulating signup as login')
+    sessionStorage.setItem('dev_authenticated', 'true')
+    window.location.href = '/callback'
+    return
+  }
+
+  try {
+    await userManager.signinRedirect({
+      extraQueryParams: { screen_hint: 'sign_up' },
+    })
+  } catch (error) {
+    console.error('Signup redirect failed:', error)
     throw error
   }
 }

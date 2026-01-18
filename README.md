@@ -8,6 +8,8 @@
 
 **Contents:** [Features](#features) · [Architecture](#architecture) · [Security](#security) · [Deployment](#deployment-guide) · [Custom Domain](#custom-domain-setup-optional) · [Cost](#cost-estimation) · [Development](#development) · [Project Structure](#project-structure) · [Report Builder](#report-builder--chat-storage) · [Adding Tools](#adding-new-tools) · [OSINT](#osint-features) · [API Keys](#api-keys-configuration) · [Production Readiness](#production-readiness) · [Monetization](#monetization) · [Infra / Dev](#infra--dev-environment) · [Improvements & Roadmap](#improvements--roadmap) · [Troubleshooting](#troubleshooting)
 
+![NetKnife](https://github.com/user-attachments/assets/1aff1895-df19-4827-ba33-c56c5c275c3e)
+
 ---
 
 ## Features

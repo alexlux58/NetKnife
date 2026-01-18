@@ -4,12 +4,11 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getProfile, updateProfile, type UserProfile } from '../../lib/profile'
+import { getProfile, updateProfile } from '../../lib/profile'
 import { useTheme } from '../../lib/ThemeContext'
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
-  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -18,10 +17,9 @@ export default function SettingsPage() {
   useEffect(() => {
     getProfile()
       .then((p) => {
-        setProfile(p)
         setForm({ displayName: p.displayName || '', avatarUrl: p.avatarUrl || '', bio: p.bio || '' })
       })
-      .catch(() => setProfile({ theme: 'dark', avatarUrl: null, bio: null, displayName: null }))
+      .catch(() => setForm({ displayName: '', avatarUrl: '', bio: '' }))
       .finally(() => setLoading(false))
   }, [])
 
@@ -29,12 +27,11 @@ export default function SettingsPage() {
     setSaving(true)
     setMessage(null)
     try {
-      const p = await updateProfile({
+      await updateProfile({
         displayName: form.displayName.trim() || null,
         avatarUrl: form.avatarUrl.trim() || null,
         bio: form.bio.trim() || null,
       })
-      setProfile(p)
       setMessage('Saved.')
       setTimeout(() => setMessage(null), 3000)
     } catch (e) {

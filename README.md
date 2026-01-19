@@ -932,6 +932,8 @@ Priorities before launch: **Favicon** (`public/favicon.svg`), **dev bypass** onl
 
 **Donations:** One-time via Stripe (min $1, max $1000); no subscription. See Pricing page.
 
+**Stripe setup (step-by-step, test mode):** [docs/STRIPE-SETUP.md](docs/STRIPE-SETUP.md).
+
 **Tech:** DynamoDB `billing` (planId, stripeCustomerId, periodEnd) and `usage` (pk=userId, sk=MONTH#YYYY-MM, remoteCalls, advisorMessages, reportSaves); Stripe Checkout (subscription + one-time), Customer Portal, webhook; billing layer: `getAuth`, `checkLimit`, `incrementUsage`; 402 with `{ code, upgradeUrl, message }` when over limit; frontend Upgrade modal on 402. **Pricing page:** `/pricing` — usage, Subscribe, Manage, Donate.
 
 ---

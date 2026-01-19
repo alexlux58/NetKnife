@@ -212,6 +212,7 @@ export default function BoardPage() {
                   <button
                     onClick={() => { setSelectedChannel(c.id); setSelectedThread(null); }}
                     className={`w-full text-left px-2 py-1 rounded ${selectedChannel === c.id ? 'bg-blue-600/30 text-blue-300' : 'hover:bg-gray-700'}`}
+                    title={c.description || undefined}
                   >
                     # {c.name}
                   </button>
@@ -296,8 +297,11 @@ export default function BoardPage() {
         {/* Center: threads or thread view */}
         <div className="card p-4 md:col-span-2">
           {!selectedChannel && <p className="text-gray-500 text-sm">Select a channel</p>}
-          {selectedChannel && !selectedThread && (
+          {selectedChannel && !selectedThread && (() => {
+            const ch = channels.find((c) => c.id === selectedChannel)
+            return (
             <>
+              {ch?.description && <p className="text-gray-400 text-sm mb-3">{ch.description}</p>}
               <div className="flex justify-between items-center mb-4">
                 <h2 className="font-semibold">Threads</h2>
                 <button onClick={() => setShowNewThread((x) => !x)} className="text-sm text-blue-400 hover:underline">+ New thread</button>
@@ -324,7 +328,7 @@ export default function BoardPage() {
                 {threads.length === 0 && <li className="text-gray-500 text-sm">No threads yet</li>}
               </ul>
             </>
-          )}
+          ); })()}
           {selectedChannel && selectedThread && (
             <>
               <div className="flex justify-between items-start mb-4">

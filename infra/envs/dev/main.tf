@@ -284,6 +284,12 @@ variable "billing_exempt_usernames" {
   description = "Comma-separated Cognito usernames exempt from billing (e.g. admin, test accounts)"
 }
 
+variable "admin_usernames" {
+  type        = string
+  default     = "alex.lux, god of lux"
+  description = "Comma-separated usernames (or display names) who can access Alarms, Activity, and create board channels. Include both Cognito username and display name if they differ."
+}
+
 # ------------------------------------------------------------------------------
 # ACM CERTIFICATE MODULE (for custom domain)
 # ------------------------------------------------------------------------------
@@ -370,11 +376,12 @@ module "api" {
   allowed_origins = [local.site_url]
 
   # Stripe (billing Lambda). SITE_URL for redirects.
-  site_url             = local.site_url
-  stripe_secret_key    = var.stripe_secret_key
-  stripe_webhook_secret = var.stripe_webhook_secret
-  stripe_pro_price_id       = var.stripe_pro_price_id
-  billing_exempt_usernames  = var.billing_exempt_usernames
+  site_url                = local.site_url
+  stripe_secret_key       = var.stripe_secret_key
+  stripe_webhook_secret   = var.stripe_webhook_secret
+  stripe_pro_price_id     = var.stripe_pro_price_id
+  billing_exempt_usernames = var.billing_exempt_usernames
+  admin_usernames         = var.admin_usernames
 
   # Optional API key integrations (leave empty to disable)
   abuseipdb_api_key      = var.abuseipdb_api_key

@@ -148,21 +148,36 @@ openai_model = "gpt-4o-mini"
 nvd_api_key = ""
 
 # ============================================================================
+# ADMIN USERNAMES (Alarms, Activity, board channel creation)
+# ============================================================================
+# Comma-separated. Include both Cognito username and display name if they differ.
+# Override in terraform.tfvars if Alarms or Activity show 403.
+# admin_usernames = "alex.lux, god of lux"
+
+# ============================================================================
 # STRIPE BILLING (Optional)
 # ============================================================================
+# Full step-by-step: see docs/STRIPE-SETUP.md
 # Leave empty to disable. Run: cd backend/functions/billing && npm install --omit=dev
 # before terraform apply so the Stripe SDK is bundled.
+#
+# --- TEST MODE (no real charges) ---
+# Use sk_test_... and create Products/Prices in Stripe with "Test mode" toggled ON.
+# Checkout uses test cards (e.g. 4242 4242 4242 4242). No real charges.
+# Switch to sk_live_... and live Prices only when you are ready for production.
 
-# Stripe secret key (sk_test_... or sk_live_...)
-# Get from: https://dashboard.stripe.com/apikeys
+# Stripe secret key: sk_test_... (test, no charges) or sk_live_... (production)
+# https://dashboard.stripe.com/apikeys — use "Secret key" and ensure Test/Live mode matches.
 stripe_secret_key = ""
 
-# Webhook signing secret (whsec_...)
+# Webhook signing secret (whsec_...). Required for subscriptions to upgrade the user after payment.
 # 1. Stripe Dashboard → Developers → Webhooks → Add endpoint
 # 2. URL: https://<api-id>.execute-api.<region>.amazonaws.com/billing/webhook
+#    (Get <api-id> from: terraform output api_url, or from your API Gateway URL.)
 # 3. Events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted
-# 4. Copy the signing secret
+# 4. Create → Reveal "Signing secret" (whsec_...)
 stripe_webhook_secret = ""
 
-# API Access $5/mo Price ID (price_... or si_...). In Stripe: Product "NetKnife API Access" → Price $5/month recurring.
+# API Access $5/mo — must be a PRICE id (price_...), NOT a subscription or product id (si_/prod_).
+# In Stripe: Product "NetKnife API Access" → Add price $5/month recurring → copy the Price ID (price_...).
 stripe_pro_price_id = ""

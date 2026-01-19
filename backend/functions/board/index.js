@@ -89,10 +89,34 @@ function convId(a, b) {
   return [a, b].sort().join('|');
 }
 
+const WELCOME_CHANNEL_ID = 'ch-welcome';
+const WELCOME_DESCRIPTION = 'Introduce yourself, ask questions, and get to know the community. This is the place for new members and general discussion.';
+
+async function seedWelcomeChannel() {
+  if (!CHANNELS) return;
+  try {
+    await ddb.send(new PutCommand({
+      TableName: CHANNELS,
+      Item: {
+        pk: 'CHAN',
+        sk: WELCOME_CHANNEL_ID,
+        name: 'Welcome',
+        description: WELCOME_DESCRIPTION,
+        createdBy: 'system',
+        createdAt: new Date().toISOString(),
+      },
+      ConditionExpression: 'attribute_not_exists(sk)',
+    }));
+  } catch (e) {
+    if (e?.name !== 'ConditionalCheckFailedException' && e?.code !== 'ConditionalCheckFailedException') console.warn('seedWelcomeChannel:', e?.message);
+  }
+}
+
 // --- channels-list
 async function channelsList() {
   if (!CHANNELS) return json(200, { channels: [] });
   try {
+    await seedWelcomeChannel();
     const r = await ddb.send(new QueryCommand({ TableName: CHANNELS, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': 'CHAN' } }));
     const channels = (r.Items || []).map((i) => ({ id: i.sk, name: i.name, description: i.description || '', createdAt: i.createdAt }));
     return json(200, { channels });
@@ -315,10 +339,24 @@ async function activityList() {
       ScanIndexForward: false,
       Limit: 100,
     }));
-    const items = (r.Items || []).map((i) => ({ action: i.action, userId: i.userId, username: i.username, target: i.target, details: i.details, createdAt: i.createdAt }));
+    const items = (r.Items || [])
+      .filter((i) => i != null)
+      .map((i) => ({
+        action: i?.action ?? '',
+        userId: i?.userId ?? '',
+        username: i?.username ?? '',
+        target: i?.target ?? '',
+        details: i?.details ?? '',
+        createdAt: i?.createdAt ?? '',
+      }));
     return json(200, { items });
   } catch (e) {
-    console.error('activityList:', e);
+    console.error('activityList:', e?.message || e);
+    // Table missing or no permission: return empty so admin sees "No activity yet" instead of 5xx
+    const code = e?.name || e?.code || '';
+    if (code === 'ResourceNotFoundException' || code === 'AccessDeniedException') {
+      return json(200, { items: [] });
+    }
     return json(503, { error: 'Activity log temporarily unavailable.' });
   }
 }
@@ -353,7 +391,15 @@ exports.handler = async (event) => {
       case 'dm-convos': return dmConvos(userId);
       case 'dm-messages': return dmMessages(userId, body);
       case 'dm-send': return dmSend(userId, username, body);
-      case 'activity-list': return isAdmin(event) ? activityList() : json(403, { error: 'Only admins can view the activity dashboard.' });
+      case 'activity-list': {
+        if (!isAdmin(event)) return json(403, { error: 'Only admins can view the activity dashboard.' });
+        try {
+          return await activityList();
+        } catch (e) {
+          console.error('activity-list handler:', e?.message || e);
+          return json(200, { items: [] });
+        }
+      }
       default: return json(400, { error: `Unknown action: ${action || '(missing)'}` });
     }
   } catch (err) {

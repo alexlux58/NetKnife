@@ -1,0 +1,157 @@
+# ==============================================================================
+# NETKNIFE - SECURITY CHECKS
+# ==============================================================================
+# Runs on push/PR to main: secrets, dependency vulns, IaC misconfigs.
+#
+# Required GitHub Secrets (Settings → Secrets → Actions):
+#   - GITGUARDIAN_API_KEY  (optional) From https://dashboard.gitguardian.com
+#   - SNYK_TOKEN           (optional) From https://app.snyk.io/account
+#
+# Without them: GitGuardian and Snyk jobs are skipped; npm audit + Checkov
+# still run.
+# ==============================================================================
+
+name: Security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. GitGuardian (ggshield) – secrets in code and history
+  # ---------------------------------------------------------------------------
+  secrets:
+    name: Secrets (GitGuardian)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run GitGuardian ggshield
+        uses: GitGuardian/ggshield-action@v1.26.0
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        continue-on-error: true
+        # Fails when GITGUARDIAN_API_KEY is unset; add the secret to enable
+
+  # ---------------------------------------------------------------------------
+  # 2. npm audit – dependency vulnerabilities (no API key)
+  # ---------------------------------------------------------------------------
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Audit frontend
+        run: |
+          cd frontend && npm ci && npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Audit backend (billing)
+        run: |
+          cd backend/functions/billing && npm ci && npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Audit backend (cognito-triggers)
+        run: |
+          cd backend/functions/cognito-triggers && npm ci && npm audit --audit-level=high
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # 3. Snyk – dependencies + optional IaC (needs SNYK_TOKEN)
+  # ---------------------------------------------------------------------------
+  snyk-deps:
+    name: Snyk (dependencies)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Snyk – frontend
+        run: |
+          cd frontend && npm ci && npx snyk@latest test --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: Snyk – backend billing
+        run: |
+          cd backend/functions/billing && npm ci && npx snyk@latest test --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: Snyk – backend cognito-triggers
+        run: |
+          cd backend/functions/cognito-triggers && npm ci && npx snyk@latest test --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # 4. Snyk IaC – Terraform misconfigurations (needs SNYK_TOKEN)
+  # ---------------------------------------------------------------------------
+  snyk-iac:
+    name: Snyk (Terraform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Snyk IaC scan
+        uses: snyk/actions/iac@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          directory: infra/
+          args: --severity-threshold=high
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # 5. Checkov – Terraform/IaC (no API key)
+  # ---------------------------------------------------------------------------
+  checkov:
+    name: Checkov (IaC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkov – Terraform
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/
+          output_format: cli
+          soft_fail: true
+          framework: terraform
+
+  # ---------------------------------------------------------------------------
+  # 6. Trivy – config & filesystem (no API key)
+  # ---------------------------------------------------------------------------
+  trivy:
+    name: Trivy (config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+          ignore-unfixed: true
+        continue-on-error: true

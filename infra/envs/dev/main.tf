@@ -125,6 +125,12 @@ variable "alert_email" {
   description = "Email address for monitoring alerts"
 }
 
+variable "signup_notification_email" {
+  type        = string
+  default     = ""
+  description = "Email to notify on each new sign-up. Leave empty to disable. Can match alert_email."
+}
+
 variable "monthly_budget_usd" {
   type        = number
   default     = 25
@@ -245,6 +251,32 @@ variable "openai_model" {
   description = "OpenAI model to use (gpt-4o-mini recommended for cost efficiency, ~100x cheaper than GPT-4)"
 }
 
+variable "stripe_secret_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Stripe secret key (sk_test_... or sk_live_...). Leave empty to disable billing."
+}
+
+variable "stripe_webhook_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Stripe webhook signing secret (whsec_...). Required if stripe_secret_key is set."
+}
+
+variable "stripe_pro_price_id" {
+  type        = string
+  default     = ""
+  description = "Stripe Price ID for $5/mo API Access (price_...). Required if stripe_secret_key is set."
+}
+
+variable "billing_exempt_usernames" {
+  type        = string
+  default     = "alex.lux"
+  description = "Comma-separated Cognito usernames exempt from billing (e.g. admin, test accounts)"
+}
+
 # ------------------------------------------------------------------------------
 # ACM CERTIFICATE MODULE (for custom domain)
 # ------------------------------------------------------------------------------
@@ -308,6 +340,9 @@ module "auth" {
   # OAuth callback/redirect URLs
   callback_urls = ["${local.site_url}/callback"]
   logout_urls   = ["${local.site_url}/", "${local.site_url}/login"]
+
+  # Notify this email on each new sign-up. Defaults to alert_email. Set to "none" to disable.
+  signup_notification_email = (var.signup_notification_email == "none" || var.signup_notification_email == "disabled") ? "" : (var.signup_notification_email != "" ? var.signup_notification_email : var.alert_email)
 }
 
 # ------------------------------------------------------------------------------
@@ -326,6 +361,13 @@ module "api" {
 
   # CORS: only allow requests from our site
   allowed_origins = [local.site_url]
+
+  # Stripe (billing Lambda). SITE_URL for redirects.
+  site_url             = local.site_url
+  stripe_secret_key    = var.stripe_secret_key
+  stripe_webhook_secret = var.stripe_webhook_secret
+  stripe_pro_price_id       = var.stripe_pro_price_id
+  billing_exempt_usernames  = var.billing_exempt_usernames
 
   # Optional API key integrations (leave empty to disable)
   abuseipdb_api_key      = var.abuseipdb_api_key
@@ -361,6 +403,8 @@ module "ops" {
   # some are conditionally created based on sensitive API keys
   # compact() removes nulls (for disabled integrations)
   lambda_function_names = nonsensitive(compact([
+    # Auth (Cognito triggers)
+    module.auth.cognito_triggers_lambda_name,
     # Core functions (always enabled)
     module.api.lambda_dns_name,
     module.api.lambda_rdap_name,
@@ -394,6 +438,7 @@ module "ops" {
     module.api.lambda_hunter_name,
     module.api.lambda_security_advisor_name,
     module.api.lambda_reports_name,
+    module.api.lambda_board_name,
   ]))
 
   # WAF logging
@@ -471,6 +516,16 @@ output "cognito_domain_url" {
 output "cognito_issuer" {
   value       = module.auth.issuer
   description = "Cognito OIDC issuer URL"
+}
+
+output "auth_config_table_name" {
+  value       = module.auth.auth_config_table_name
+  description = "DynamoDB auth config table (failsafe: put signups_enabled=false to disable sign-ups)"
+}
+
+output "signups_table_name" {
+  value       = module.auth.signups_table_name
+  description = "DynamoDB signups table (email, phone per user; pk = Cognito sub)"
 }
 
 output "cache_table_name" {

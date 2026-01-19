@@ -63,13 +63,26 @@ async function getProfile(userId) {
   };
 }
 
+const DATA_URL_AVATAR = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+const MAX_AVATAR_DATAURL = 300000;  // ~225KB base64
+const MAX_AVATAR_URL = 2048;
+
+function isValidAvatarUrl(v) {
+  if (v === null || v === '') return true;
+  if (typeof v !== 'string') return false;
+  if (DATA_URL_AVATAR.test(v)) return v.length <= MAX_AVATAR_DATAURL;
+  if (v.startsWith('http://') || v.startsWith('https://')) return v.length <= MAX_AVATAR_URL;
+  return v.length <= MAX_AVATAR_URL;
+}
+
 async function updateProfile(userId, patch) {
   const filtered = {};
   for (const k of ALLOWED_KEYS) {
     if (patch[k] !== undefined) {
       if (k === 'theme' && !['light', 'dark', 'system'].includes(patch[k])) continue;
       if (typeof patch[k] === 'string' && k === 'bio' && patch[k].length > 500) continue;
-      if (typeof patch[k] === 'string' && (k === 'avatarUrl' || k === 'displayName') && patch[k].length > 512) continue;
+      if (k === 'displayName' && typeof patch[k] === 'string' && patch[k].length > 512) continue;
+      if (k === 'avatarUrl' && !isValidAvatarUrl(patch[k])) continue;
       filtered[k] = patch[k] === null || patch[k] === '' ? null : patch[k];
     }
   }

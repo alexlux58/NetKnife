@@ -1,0 +1,9 @@
+{
+  "name": "netknife-alarms",
+  "version": "1.0.0",
+  "description": "CloudWatch alarms dashboard API for NetKnife",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.700.0"
+  }
+}

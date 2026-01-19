@@ -142,6 +142,37 @@ Format your response as JSON with:
   "next_steps": ["Action 1", "Action 2", ...]
 }`;
 
+// System prompt for help/navigation mode (floating assistant)
+const HELP_SYSTEM_PROMPT = `You are a friendly in-app assistant for NetKnife, a network and security Swiss Army knife with 57+ tools.
+
+Your role: help users navigate NetKnife and answer questions about the app.
+
+NAVIGATION:
+- Sidebar (left): all tools by category (Network Calculators, DNS & Domain, Certificates & TLS, Network Intelligence, Threat Intelligence, Email Security, etc.). Click a tool to open it.
+- Top bar: Account (profile: avatar, name, bio) → /settings | Pricing (plans, usage, donate) → /pricing | Board (message board) → /board | Reports → /tools/report-builder | Sign out.
+
+MAIN ROUTES:
+- /pricing — Plans (Free, API Access $5/mo), usage, donations
+- /settings — Profile (avatar, display name, bio), theme, subscription link
+- /board — Message board: channels, threads, comments, likes, bookmarks, DMs. Request new channels: admin@alexflux.com
+- /tools/report-builder — Collect tool outputs and build PDF reports
+- /tools/security-advisor — AI security incident guidance and tool recommendations
+
+TOOLS (path = /tools/ID). Key tools:
+- subnet, cidr-range, ip-converter, ipv6-analyzer (Network)
+- dns, reverse-dns, rdap, dns-propagation (DNS & Domain)
+- tls, pem-decoder, ssl-labs (TLS)
+- peeringdb, bgp-looking-glass, asn-details, traceroute, ip-api (Network Intelligence)
+- abuseipdb, hibp, emailrep, breachdirectory, ipqualityscore, ipqs-email, ipqs-phone, ipqs-url, phone-validator, hunter, osint-dashboard, security-advisor, virustotal, shodan, greynoise, censys, security-trails (Threat / Email)
+- report-builder (Reports)
+Plus 40+ more in the Sidebar (headers, email-auth, diff, regex, jwt-decoder, etc.). Path format: /tools/<id>.
+
+RULES:
+1. Be concise. For "where is X" or "how do I get to X", give a short answer AND add a suggested_links entry so the user can jump there.
+2. When suggesting a tool or page, always add {"label": "Open <Name>", "path": "/tools/xxx"} or {"label": "Pricing", "path": "/pricing"} to suggested_links.
+3. For security investigations, suggest the Security Advisor: /tools/security-advisor.
+4. Respond with JSON only: {"response": "your answer here", "suggested_links": [{"label": "..", "path": ".."}]}. suggested_links can be [] when no specific page fits.`;
+
 // ------------------------------------------------------------------------------
 // CACHE HELPERS
 // ------------------------------------------------------------------------------
@@ -247,9 +278,12 @@ exports.handler = async (event) => {
       });
     }
 
+    const isHelp = body.mode === "help";
+    const systemPrompt = isHelp ? HELP_SYSTEM_PROMPT : SYSTEM_PROMPT;
+
     // Build conversation context
     const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       ...conversationHistory.map(msg => ({
         role: msg.role || "user",
         content: msg.content || msg.message || ""
@@ -265,7 +299,7 @@ exports.handler = async (event) => {
       .digest("hex")
       .substring(0, 16);
     
-    const cacheKey = `advisor:${messageHash}`;
+    const cacheKey = isHelp ? `help:${messageHash}` : `advisor:${messageHash}`;
     const cached = await cacheGet(cacheKey);
     if (cached) {
       return json(200, { ...cached, cached: true });
@@ -274,12 +308,30 @@ exports.handler = async (event) => {
     // Call OpenAI API
     const aiResponse = await callOpenAI(messages);
     
-    // Parse JSON response
+    // Help mode: { response, suggested_links }
+    if (isHelp) {
+      let parsed = {};
+      try {
+        parsed = JSON.parse(aiResponse);
+      } catch (e) {
+        parsed = { response: aiResponse, suggested_links: [] };
+      }
+      const helpResult = {
+        response: parsed.response || parsed.advice || aiResponse,
+        suggested_links: Array.isArray(parsed.suggested_links)
+          ? parsed.suggested_links.filter((l) => l && (l.path || l.label))
+          : [],
+        cached: false,
+      };
+      await cachePut(cacheKey, helpResult, 1800); // 30 min
+      return json(200, helpResult);
+    }
+
+    // Security advisor mode: existing JSON shape
     let parsedResponse;
     try {
       parsedResponse = JSON.parse(aiResponse);
     } catch (e) {
-      // If not valid JSON, wrap it
       parsedResponse = {
         advice: aiResponse,
         recommended_tools: [],
@@ -298,7 +350,6 @@ exports.handler = async (event) => {
       raw_response: parsedResponse,
     };
 
-    // Cache result (short TTL since security advice may change)
     await cachePut(cacheKey, result, 3600); // 1 hour
 
     return json(200, { ...result, cached: false });

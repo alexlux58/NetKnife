@@ -21,6 +21,10 @@ site_bucket_name = "netknife-site-YOUR_ACCOUNT_ID"
 # YOU MUST CONFIRM SNS SUBSCRIPTION after deployment!
 alert_email = "your-email@example.com"
 
+# Email to notify on each new sign-up (optional; defaults to alert_email if unset)
+# Leave empty to disable sign-up notifications
+# signup_notification_email = "your-email@example.com"
+
 # ============================================================================
 # AWS CONFIGURATION
 # ============================================================================
@@ -138,3 +142,23 @@ openai_api_key = ""
 # Options: gpt-4o-mini (recommended, cost-effective), gpt-4o (higher quality, more expensive)
 # GPT-4o-mini is ~100x cheaper than legacy GPT-4 and provides excellent quality
 openai_model = "gpt-4o-mini"
+
+# ============================================================================
+# STRIPE BILLING (Optional)
+# ============================================================================
+# Leave empty to disable. Run: cd backend/functions/billing && npm install --omit=dev
+# before terraform apply so the Stripe SDK is bundled.
+
+# Stripe secret key (sk_test_... or sk_live_...)
+# Get from: https://dashboard.stripe.com/apikeys
+stripe_secret_key = ""
+
+# Webhook signing secret (whsec_...)
+# 1. Stripe Dashboard → Developers → Webhooks → Add endpoint
+# 2. URL: https://<api-id>.execute-api.<region>.amazonaws.com/billing/webhook
+# 3. Events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted
+# 4. Copy the signing secret
+stripe_webhook_secret = ""
+
+# API Access $5/mo Price ID (price_... or si_...). In Stripe: Product "NetKnife API Access" → Price $5/month recurring.
+stripe_pro_price_id = ""

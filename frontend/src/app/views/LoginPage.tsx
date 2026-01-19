@@ -13,7 +13,8 @@
  * ==============================================================================
  */
 
-import { login, signup, isDevMode } from '../../lib/auth'
+import { Link } from 'react-router-dom'
+import { login, isDevMode } from '../../lib/auth'
 
 export default function LoginPage() {
   const devMode = isDevMode()
@@ -95,15 +96,12 @@ export default function LoginPage() {
             Sign in
           </button>
 
-          {/* Create account */}
-          <p className="text-center mt-4">
-            <button
-              type="button"
-              onClick={() => signup()}
-              className="text-sm text-blue-400 hover:text-blue-300 hover:underline"
-            >
+          {/* Create account - use /signup so we collect email and phone (Hosted UI often omits them) */}
+          <p className="text-center mt-4 text-gray-400">
+            Don't have an account?{' '}
+            <Link to="/signup" className="text-blue-400 hover:text-blue-300 font-medium hover:underline">
               Create account
-            </button>
+            </Link>
           </p>
 
           {/* Notice */}

@@ -1,0 +1,10 @@
+{
+  "name": "netknife-board",
+  "version": "1.0.0",
+  "description": "NetKnife message board Lambda (channels, threads, comments, likes, bookmarks, DMs)",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0"
+  }
+}

@@ -5,14 +5,17 @@
  * 
  * The top bar displays:
  * - Current path/breadcrumb
- * - Sign out button
+ * - User avatar and display name (from profile)
+ * - Account, Pricing, Reports, Sign out
  * 
  * It's sticky at the top of the content area.
  * ==============================================================================
  */
 
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { logout, isDevMode } from '../../lib/auth'
+import { getProfile } from '../../lib/profile'
 
 interface TopbarProps {
   pathname: string
@@ -21,6 +24,15 @@ interface TopbarProps {
 
 export default function Topbar({ pathname, onMenuClick }: TopbarProps) {
   const devMode = isDevMode()
+  const [profile, setProfile] = useState<{ displayName?: string | null; avatarUrl?: string | null } | null>(null)
+
+  useEffect(() => {
+    getProfile()
+      .then((p) => setProfile(p))
+      .catch(() => setProfile(null))
+  }, [])
+
+  const label = profile?.displayName?.trim() || 'Account'
 
   return (
     <header
@@ -52,16 +64,44 @@ export default function Topbar({ pathname, onMenuClick }: TopbarProps) {
           </div>
         </div>
 
-        {/* Actions */}
+        {/* User (avatar + name) and actions */}
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-          <Link to="/settings" className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap">
-            Account
+          <Link
+            to="/settings"
+            className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap min-w-0"
+          >
+            {profile?.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt=""
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <span className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0 text-gray-400 text-xs" aria-hidden>
+                ?
+              </span>
+            )}
+            <span className="hidden sm:inline truncate max-w-[120px]">{label}</span>
           </Link>
+          <a
+            href="https://speed.cloudflare.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
+          >
+            Speed test
+          </a>
           <Link
             to="/pricing"
             className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
           >
             Pricing
+          </Link>
+          <Link
+            to="/board"
+            className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
+          >
+            Board
           </Link>
           <Link
             to="/tools/report-builder"

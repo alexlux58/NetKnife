@@ -268,6 +268,15 @@ export const tools: Tool[] = [
     component: React.lazy(() => import('./remote/TracerouteTool')),
     description: 'Trace route from AWS vantage point',
   },
+  {
+    id: 'cloudflare-speedtest',
+    name: 'Cloudflare Speed Test',
+    kind: 'offline',
+    category: 'Network Intelligence',
+    path: '/tools/cloudflare-speedtest',
+    component: React.lazy(() => import('./offline/CloudflareSpeedTestTool')),
+    description: 'Download, upload, latency, jitter; add results to reports',
+  },
 
   // ============================================================================
   // THREAT INTELLIGENCE (Remote)
@@ -291,22 +300,13 @@ export const tools: Tool[] = [
     description: 'Check passwords against breach database',
   },
   {
-    id: 'emailrep',
-    name: 'Email Reputation (EmailRep)',
-    kind: 'remote',
+    id: 'cvss-explainer',
+    name: 'CVSS Explainer',
+    kind: 'offline',
     category: 'Threat Intelligence',
-    path: '/tools/emailrep',
-    component: React.lazy(() => import('./remote/EmailRepTool')),
-    description: 'Check email reputation and suspicious activity',
-  },
-  {
-    id: 'breachdirectory',
-    name: 'Email Breach Check',
-    kind: 'remote',
-    category: 'Threat Intelligence',
-    path: '/tools/breachdirectory',
-    component: React.lazy(() => import('./remote/BreachDirectoryTool')),
-    description: 'Check if email appears in data breaches',
+    path: '/tools/cvss-explainer',
+    component: React.lazy(() => import('./offline/CvssExplainerTool')),
+    description: 'Parse CVSS 2.0/3.x vectors, explain metrics, compute base score',
   },
   {
     id: 'ip-api',
@@ -325,16 +325,6 @@ export const tools: Tool[] = [
     path: '/tools/ipqualityscore',
     component: React.lazy(() => import('./remote/IpQualityScoreTool')),
     description: 'IP fraud score and threat detection',
-    requiresApiKey: true,
-  },
-  {
-    id: 'ipqs-email',
-    name: 'Email Verification (IPQS)',
-    kind: 'remote',
-    category: 'Threat Intelligence',
-    path: '/tools/ipqs-email',
-    component: React.lazy(() => import('./remote/IpqsEmailTool')),
-    description: 'Email validation and spam detection',
     requiresApiKey: true,
   },
   {
@@ -365,16 +355,6 @@ export const tools: Tool[] = [
     path: '/tools/phone-validator',
     component: React.lazy(() => import('./remote/PhoneValidatorTool')),
     description: 'Phone number validation and carrier detection',
-  },
-  {
-    id: 'hunter',
-    name: 'Email Finder (Hunter)',
-    kind: 'remote',
-    category: 'Email Security',
-    path: '/tools/hunter',
-    component: React.lazy(() => import('./remote/HunterTool')),
-    description: 'Email verification and finder',
-    requiresApiKey: true,
   },
   {
     id: 'osint-dashboard',
@@ -448,6 +428,15 @@ export const tools: Tool[] = [
   // ============================================================================
   // EMAIL SECURITY (Remote)
   // ============================================================================
+  {
+    id: 'email-analysis',
+    name: 'Email Analysis',
+    kind: 'remote',
+    category: 'Email Security',
+    path: '/tools/email-analysis',
+    component: React.lazy(() => import('./remote/EmailAnalysisTool')),
+    description: 'Run one email through reputation, breach, verification, Hunter, and SPF/DKIM/DMARC',
+  },
   {
     id: 'email-auth',
     name: 'Email Auth Check',

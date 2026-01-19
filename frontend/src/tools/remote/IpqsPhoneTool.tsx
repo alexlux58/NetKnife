@@ -16,6 +16,7 @@ import RemoteDisclosure from '../../components/RemoteDisclosure'
 interface IPQSPhoneResult {
   success?: boolean
   valid: boolean
+  active?: boolean | null
   formatted?: string
   local_format?: string
   country_code?: string
@@ -110,13 +111,27 @@ export default function IpqsPhoneTool() {
                   {result.valid ? 'Yes' : 'No'}
                 </span>
               </div>
-              {result.formatted && (
+              {result.active != null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-400">Active (in service):</span>
+                  <span className={result.active ? 'text-green-400' : 'text-amber-400'}>
+                    {result.active ? 'Yes' : 'No'}
+                  </span>
+                </div>
+              )}
+              {result.message && (
+                <div className="pt-2 border-t border-[var(--color-border)]">
+                  <span className="text-sm text-gray-400">Reason: </span>
+                  <span className="text-sm text-[var(--color-text-secondary)]">{result.message}</span>
+                </div>
+              )}
+              {result.formatted && result.formatted !== 'N/A' && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-400">Formatted:</span>
                   <span className="text-sm font-mono">{result.formatted}</span>
                 </div>
               )}
-              {result.local_format && (
+              {result.local_format && result.local_format !== 'N/A' && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-400">Local Format:</span>
                   <span className="text-sm">{result.local_format}</span>

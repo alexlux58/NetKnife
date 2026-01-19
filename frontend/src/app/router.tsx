@@ -26,17 +26,35 @@
  */
 
 import { Suspense } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
 import Shell from './ui/Shell'
 import LoginPage from './views/LoginPage'
+import SignUpPage from './views/SignUpPage'
 import CallbackPage from './views/CallbackPage'
 import ProtectedRoute from './views/ProtectedRoute'
 import NotFoundPage from './views/NotFoundPage'
 import PricingPage from './views/PricingPage'
 import SettingsPage from './views/SettingsPage'
+import AlarmsPage from './views/AlarmsPage'
+import BoardPage from './views/BoardPage'
+import PrivacyPage from './views/PrivacyPage'
+import CookieConsent from '../components/CookieConsent'
 import { Link } from 'react-router-dom'
 import { tools } from '../tools/registry'
 import { useBilling } from '../lib/BillingContext'
+
+/**
+ * Root layout: renders the matched route (Outlet) and CookieConsent on every page.
+ * CookieConsent must be inside the Router so its <Link> components have router context.
+ */
+function AppLayout() {
+  return (
+    <>
+      <Outlet />
+      <CookieConsent />
+    </>
+  )
+}
 
 /**
  * Loading fallback component
@@ -112,47 +130,44 @@ const defaultToolPath = tools[0]?.path ?? '/tools/subnet'
  * Application router configuration
  */
 export const router = createBrowserRouter([
-  // Public routes
   {
-    path: '/login',
-    element: <LoginPage />,
-  },
-  {
-    path: '/callback',
-    element: <CallbackPage />,
-  },
-
-  // Protected routes (require authentication)
-  {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <Shell />
-      </ProtectedRoute>
-    ),
+    element: <AppLayout />,
     children: [
-      {
-        index: true,
-        element: <Navigate to={defaultToolPath} replace />,
-      },
-      { path: 'pricing', element: <PricingPage /> },
-      { path: 'settings', element: <SettingsPage /> },
-      ...tools.map((tool) => ({
-        path: tool.path.replace(/^\//, ''),
-        element: <ToolLoader id={tool.id} />,
-      })),
-      // 404 for unknown paths (e.g. /tools/nonexistent) – rendered inside Shell
-      {
-        path: '*',
-        element: <NotFoundPage />,
-      },
-    ],
-  },
+      // Public routes
+      { path: '/login', element: <LoginPage /> },
+      { path: '/signup', element: <SignUpPage /> },
+      { path: '/callback', element: <CallbackPage /> },
+      { path: '/privacy', element: <PrivacyPage /> },
 
-  // Top-level catch-all (e.g. /random) – 404 without Shell
-  {
-    path: '*',
-    element: <NotFoundPage />,
+      // Protected routes (require authentication)
+      {
+        path: '/',
+        element: (
+          <ProtectedRoute>
+            <Shell />
+          </ProtectedRoute>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Navigate to={defaultToolPath} replace />,
+          },
+          { path: 'pricing', element: <PricingPage /> },
+          { path: 'settings', element: <SettingsPage /> },
+          { path: 'alarms', element: <AlarmsPage /> },
+          { path: 'board', element: <BoardPage /> },
+          ...tools.map((tool) => ({
+            path: tool.path.replace(/^\//, ''),
+            element: <ToolLoader id={tool.id} />,
+          })),
+          // 404 for unknown paths (e.g. /tools/nonexistent) – rendered inside Shell
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
+
+      // Top-level catch-all (e.g. /random) – 404 without Shell
+      { path: '*', element: <NotFoundPage /> },
+    ],
   },
 ])
 

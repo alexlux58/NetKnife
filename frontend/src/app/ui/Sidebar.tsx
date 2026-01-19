@@ -161,6 +161,34 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }: Side
         </div>
       </div>
 
+      {/* Message board */}
+      <div className="px-4 pb-2 space-y-1">
+        <NavLink
+          to="/board"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+              isActive ? 'bg-blue-500/20 text-blue-300' : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
+            }`
+          }
+        >
+          <EnvelopeClosedIcon className="w-4 h-4" />
+          Message board
+        </NavLink>
+        <NavLink
+          to="/alarms"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+              isActive ? 'bg-blue-500/20 text-blue-300' : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
+            }`
+          }
+        >
+          <ExclamationTriangleIcon className="w-4 h-4" />
+          Alarms
+        </NavLink>
+      </div>
+
       {/* Categories */}
       <nav className="flex-1 overflow-y-auto px-2 pb-4 scrollbar-thin">
         {categorizedTools.map(([category, categoryTools]) => {

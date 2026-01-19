@@ -1,0 +1,56 @@
+# Dependabot – automated dependency update PRs
+# https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  # Frontend npm
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps(frontend)"
+
+  # Backend Lambdas with package.json
+  - package-ecosystem: "npm"
+    directory: "/backend/functions/billing"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps(billing)"
+
+  - package-ecosystem: "npm"
+    directory: "/backend/functions/cognito-triggers"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps(cognito-triggers)"
+
+  # Terraform
+  - package-ecosystem: "terraform"
+    directory: "/infra/envs/dev"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "infra"]
+    commit-message:
+      prefix: "deps(terraform)"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci"

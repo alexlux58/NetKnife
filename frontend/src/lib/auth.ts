@@ -131,9 +131,9 @@ export async function login(): Promise<void> {
 
 /**
  * Initiates sign-up by redirecting to Cognito Hosted UI.
- * The Hosted UI at /oauth2/authorize shows both Sign in and Sign up when
- * self-signup is enabled. If sign-up is disabled (admin-create-only), the
- * user will see the sign-in form and can contact an administrator.
+ * Uses the same /oauth2/authorize as login; the Hosted UI shows both
+ * "Sign in" and "Sign up" when self-signup is enabled. Do not pass
+ * extraQueryParams Cognito does not support (e.g. screen_hint) — they cause 400.
  *
  * In dev bypass mode, behaves like login (simulates auth).
  */
@@ -146,9 +146,7 @@ export async function signup(): Promise<void> {
   }
 
   try {
-    await userManager.signinRedirect({
-      extraQueryParams: { screen_hint: 'sign_up' },
-    })
+    await userManager.signinRedirect()
   } catch (error) {
     console.error('Signup redirect failed:', error)
     throw error
@@ -271,6 +269,16 @@ export async function getUser(): Promise<User | null> {
 }
 
 /**
+ * Gets the Cognito username (for billing/superuser checks).
+ * @returns Username string, or '' if not available.
+ */
+export async function getUsername(): Promise<string> {
+  const user = await getUser()
+  const p = (user?.profile || {}) as Record<string, unknown>
+  return String(p['cognito:username'] || p['preferred_username'] || '')
+}
+
+/**
  * Gets the access token for API requests
  * 
  * @returns Access token string if authenticated, null otherwise
@@ -297,5 +305,81 @@ export async function isAuthenticated(): Promise<boolean> {
  */
 export function isDevMode(): boolean {
   return DEV_BYPASS_AUTH
+}
+
+/**
+ * Derive Cognito region from ISSUER (e.g. https://cognito-idp.us-west-2.amazonaws.com/...)
+ * or VITE_REGION. Used for SignUp and other cognito-idp API calls.
+ */
+export function getCognitoRegion(): string {
+  const region = import.meta.env.VITE_REGION
+  if (region && typeof region === 'string') return region
+  const m = ISSUER && typeof ISSUER === 'string' ? ISSUER.match(/cognito-idp\.([^.]+)\.amazonaws\.com/) : null
+  return m ? m[1] : 'us-west-2'
+}
+
+export interface SignUpAttributes {
+  username: string
+  password: string
+  email: string
+  phone?: string
+}
+
+/**
+ * Sign up a new user via Cognito SignUp API with email and optional phone.
+ * Use this instead of redirecting to Hosted UI so we can collect email/phone
+ * (Hosted UI often omits optional attributes). After success, user must sign in.
+ * PreSignUp/PostConfirmation triggers run as usual; email/phone are stored and notified.
+ *
+ * @throws Error with message from Cognito (e.g. UsernameExistsException, InvalidPasswordException,
+ *         or "Sign-up is currently disabled" from PreSignUp failsafe)
+ */
+export async function signUpWithAttributes(params: SignUpAttributes): Promise<void> {
+  if (DEV_BYPASS_AUTH) {
+    console.warn('🔓 DEV MODE: SignUp bypassed')
+    throw new Error('Sign-up is disabled in dev mode. Use Sign in with dev bypass.')
+  }
+  if (!CLIENT_ID || !ISSUER) {
+    throw new Error('Cognito is not configured. Set VITE_COGNITO_CLIENT_ID and VITE_COGNITO_ISSUER.')
+  }
+
+  const attrs: { Name: string; Value: string }[] = []
+  if (params.email && String(params.email).trim()) {
+    attrs.push({ Name: 'email', Value: String(params.email).trim() })
+  }
+  if (params.phone && String(params.phone).trim()) {
+    attrs.push({ Name: 'phone_number', Value: String(params.phone).trim() })
+  }
+
+  const region = getCognitoRegion()
+  const url = `https://cognito-idp.${region}.amazonaws.com/`
+  const body = {
+    ClientId: CLIENT_ID,
+    Username: params.username,
+    Password: params.password,
+    UserAttributes: attrs,
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-amz-json-1.1',
+      'X-Amz-Target': 'AWSCognitoIdentityProviderService.SignUp',
+    },
+    body: JSON.stringify(body),
+  })
+
+  const text = await res.text()
+  let json: { __type?: string; message?: string } = {}
+  try {
+    json = JSON.parse(text)
+  } catch {
+    // ignore
+  }
+
+  if (!res.ok) {
+    const msg = json.message || json.__type || text || `SignUp failed (${res.status})`
+    throw new Error(msg)
+  }
 }
 

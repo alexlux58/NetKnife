@@ -99,11 +99,18 @@ function isValidURL(url) {
 }
 
 function normalizeURL(url) {
-  // Add protocol if missing
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    return `https://${url}`;
+  let u = url;
+  if (!u.startsWith('http://') && !u.startsWith('https://')) {
+    u = `https://${u}`;
   }
-  return url;
+  // Ensure a path; some APIs handle "https://example.com/" better than "https://example.com"
+  try {
+    const p = new URL(u);
+    if (p.pathname === '') {
+      u = u.replace(/^(https?:\/\/[^/?#]+)(\?.*)?$/, (_, base, q) => base + '/' + (q || ''));
+    }
+  } catch (_) {}
+  return u;
 }
 
 // ------------------------------------------------------------------------------

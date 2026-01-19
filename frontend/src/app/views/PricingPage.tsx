@@ -1,16 +1,18 @@
 /**
  * Pricing: Free (browser-only), API Access $5/mo, and one-time donations.
- * User alex.lux sees "Grandfathered" and has no paywall.
+ * alex.lux (superuser) and grandfathered users: full access, no paywall.
  */
 
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getUser } from '../../lib/auth'
+import { useBilling } from '../../lib/BillingContext'
 import { billingUsage, createCheckout, createDonation, customerPortal, type BillingUsage } from '../../lib/billing'
 
 const DONATION_PRESETS = [3, 5, 10, 20] // dollars
 
 export default function PricingPage() {
+  const { isSuperuser } = useBilling()
   const [searchParams, setSearchParams] = useSearchParams()
   const [usage, setUsage] = useState<BillingUsage | null>(null)
   const [loading, setLoading] = useState(true)
@@ -23,6 +25,12 @@ export default function PricingPage() {
   const [showDonatedThankYou, setShowDonatedThankYou] = useState(false)
   const donated = searchParams.get('donated') === '1'
 
+  const defaultUsage: BillingUsage = {
+    plan: 'free',
+    usage: { remoteCalls: 0, advisorMessages: 0, reportSaves: 0 },
+    limits: { remote: 0, advisor: 0, report_save: 3 },
+  }
+
   useEffect(() => {
     let done = false
     ;(async () => {
@@ -30,7 +38,18 @@ export default function PricingPage() {
         const u = await billingUsage()
         if (!done) setUsage(u)
       } catch (e: unknown) {
-        if (!done) setError((e as { body?: { error?: string } })?.body?.error || 'Failed to load usage')
+        if (!done) {
+          setUsage(defaultUsage)
+          const err = e as { body?: { error?: string }; status?: number }
+          if (err?.status === 404 || err?.status === 503) {
+            setError(null)
+          } else {
+            const msg = err?.body && typeof err.body === 'object' && err.body !== null && 'error' in err.body
+              ? String((err.body as { error?: string }).error)
+              : 'Failed to load usage.'
+            setError(msg)
+          }
+        }
       } finally {
         if (!done) setLoading(false)
       }
@@ -171,7 +190,7 @@ export default function PricingPage() {
             >
               {portalLoading ? 'Opening…' : 'Manage subscription'}
             </button>
-          ) : usage?.isGrandfathered ? (
+          ) : (usage?.isGrandfathered || isSuperuser) ? (
             <p className="text-sm text-gray-500">You already have full access.</p>
           ) : (
             <>

@@ -23,6 +23,14 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = ">= 2.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = ">= 3.0"
+    }
     random = {
       source  = "hashicorp/random"
       version = ">= 3.0"
@@ -52,6 +60,12 @@ variable "callback_urls" {
 variable "logout_urls" {
   type        = list(string)
   description = "Allowed logout redirect URLs (e.g., https://yoursite.com/)"
+}
+
+variable "signup_notification_email" {
+  type        = string
+  default     = ""
+  description = "Email to notify on each new sign-up. Leave empty to disable notifications."
 }
 
 # Get current AWS region
@@ -112,7 +126,10 @@ resource "aws_cognito_user_pool" "main" {
   # Email verification for self-signup (Cognito sends code to verify email)
   auto_verified_attributes = ["email"]
 
-  # Schema - standard attributes only
+  # Schema - standard attributes (required/min_length cannot be changed after creation).
+  # Cognito Hosted UI often does NOT show optional attributes (email, phone_number) at
+  # sign-up. Use the in-app /signup page to collect email and phone; it calls SignUp
+  # with UserAttributes so they are stored and included in signup notifications.
   schema {
     name                     = "email"
     attribute_data_type      = "String"
@@ -122,6 +139,23 @@ resource "aws_cognito_user_pool" "main" {
       min_length = 0
       max_length = 256
     }
+  }
+  schema {
+    name                     = "phone_number"
+    attribute_data_type      = "String"
+    mutable                  = true
+    required                 = false
+    string_attribute_constraints {
+      min_length = 0
+      max_length = 256
+    }
+  }
+
+  # PreSignUp: auto-confirm, auto-verify email/phone, and failsafe (signups_enabled in DynamoDB)
+  # PostConfirmation: SNS notification for each new sign-up
+  lambda_config {
+    pre_sign_up       = aws_lambda_function.cognito_triggers.arn
+    post_confirmation = aws_lambda_function.cognito_triggers.arn
   }
 
   tags = {
@@ -185,12 +219,182 @@ resource "aws_cognito_user_pool_client" "spa" {
     refresh_token = "days"
   }
 
-  # Read/write attributes
-  read_attributes  = ["email", "email_verified", "name", "preferred_username"]
-  write_attributes = ["email", "name", "preferred_username"]
+  # Read/write attributes (email, phone so Hosted UI collects and we can store them)
+  read_attributes  = ["email", "email_verified", "name", "preferred_username", "phone_number", "phone_number_verified"]
+  write_attributes = ["email", "name", "preferred_username", "phone_number"]
 
   # Prevent user existence errors (security best practice)
   prevent_user_existence_errors = "ENABLED"
+}
+
+# ------------------------------------------------------------------------------
+# AUTH CONFIG (DynamoDB) — failsafe and feature flags
+# ------------------------------------------------------------------------------
+# Item id=CONFIG, signups_enabled (bool). If signups_enabled=false, PreSignUp
+# rejects new self-signups. Omit or true = allow. Not managed by Terraform so
+# you can toggle without apply. Table created here; put-item via CLI or Console.
+
+resource "aws_dynamodb_table" "auth_config" {
+  name         = "${var.project}-${var.env}-auth-config"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Auth config signups failsafe"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# SIGNUPS (DynamoDB) — email, phone, username per user
+# ------------------------------------------------------------------------------
+# PostConfirmation writes here. pk = Cognito sub. Optional TTL for cleanup.
+
+resource "aws_dynamodb_table" "signups" {
+  name         = "${var.project}-${var.env}-signups"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Sign-up email and phone storage"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# SNS — sign-up notifications
+# ------------------------------------------------------------------------------
+# PostConfirmation publishes to this topic. Email subscription must be confirmed.
+
+resource "aws_sns_topic" "signup_notifications" {
+  count  = var.signup_notification_email != "" ? 1 : 0
+  name   = "${var.project}-${var.env}-signup-notifications"
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_sns_topic_subscription" "signup_notifications_email" {
+  count     = var.signup_notification_email != "" ? 1 : 0
+  topic_arn = aws_sns_topic.signup_notifications[0].arn
+  protocol  = "email"
+  endpoint  = var.signup_notification_email
+}
+
+# ------------------------------------------------------------------------------
+# COGNITO TRIGGERS LAMBDA (PreSignUp + PostConfirmation)
+# ------------------------------------------------------------------------------
+
+resource "null_resource" "cognito_triggers_npm" {
+  triggers = {
+    pkg = filemd5("${path.module}/../../../backend/functions/cognito-triggers/package.json")
+    idx = filemd5("${path.module}/../../../backend/functions/cognito-triggers/index.js")
+  }
+  provisioner "local-exec" {
+    command     = "npm install --omit=dev"
+    working_dir = "${path.module}/../../../backend/functions/cognito-triggers"
+  }
+}
+
+data "archive_file" "cognito_triggers_zip" {
+  depends_on  = [null_resource.cognito_triggers_npm]
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/cognito-triggers"
+  output_path = "${path.module}/cognito-triggers.zip"
+}
+
+resource "aws_iam_role" "cognito_triggers" {
+  name = "${var.project}-${var.env}-cognito-triggers-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "cognito_triggers_logs" {
+  role       = aws_iam_role.cognito_triggers.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "cognito_triggers_ddb_sns" {
+  name   = "${var.project}-${var.env}-cognito-triggers-ddb-sns"
+  role   = aws_iam_role.cognito_triggers.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        {
+          Effect   = "Allow"
+          Action   = ["dynamodb:GetItem"]
+          Resource = aws_dynamodb_table.auth_config.arn
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["dynamodb:PutItem"]
+          Resource = aws_dynamodb_table.signups.arn
+        }
+      ],
+      var.signup_notification_email != "" ? [{
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = aws_sns_topic.signup_notifications[0].arn
+      }] : []
+    )
+  })
+}
+
+resource "aws_lambda_function" "cognito_triggers" {
+  function_name = "${var.project}-${var.env}-cognito-triggers"
+  role          = aws_iam_role.cognito_triggers.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  filename      = data.archive_file.cognito_triggers_zip.output_path
+  source_code_hash = data.archive_file.cognito_triggers_zip.output_base64sha256
+
+  timeout     = 10
+  memory_size = 128
+
+  environment {
+    variables = {
+      CONFIG_TABLE_NAME   = aws_dynamodb_table.auth_config.name
+      SIGNUPS_TABLE_NAME  = aws_dynamodb_table.signups.name
+      SNS_TOPIC_ARN       = var.signup_notification_email != "" ? aws_sns_topic.signup_notifications[0].arn : ""
+    }
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_lambda_permission" "cognito_triggers" {
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cognito_triggers.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main.arn
 }
 
 # ------------------------------------------------------------------------------
@@ -225,5 +429,20 @@ output "domain_url" {
 output "issuer" {
   value       = "https://cognito-idp.${data.aws_region.current.id}.amazonaws.com/${aws_cognito_user_pool.main.id}"
   description = "OIDC issuer URL for JWT validation"
+}
+
+output "auth_config_table_name" {
+  value       = aws_dynamodb_table.auth_config.name
+  description = "DynamoDB table for auth config (failsafe: put id=CONFIG, signups_enabled=false to disable sign-ups)"
+}
+
+output "cognito_triggers_lambda_name" {
+  value       = aws_lambda_function.cognito_triggers.function_name
+  description = "Lambda used for PreSignUp and PostConfirmation triggers"
+}
+
+output "signups_table_name" {
+  value       = aws_dynamodb_table.signups.name
+  description = "DynamoDB table storing sign-up email and phone (pk = Cognito sub)"
 }
 

@@ -1,0 +1,24 @@
+# GitGuardian ggshield – paths to ignore to reduce false positives
+# https://docs.gitguardian.com/ggshield-docs/reference/gitguardian-yaml
+
+version: 2
+
+# Do not exit 0 when secrets are found (fail CI)
+exit_zero: false
+
+secret:
+  ignored_paths:
+    - "**/node_modules/**"
+    - "**/.terraform/**"
+    - "**/*.tfstate"
+    - "**/*.tfstate.*"
+    - "**/package-lock.json"
+    - "**/dist/**"
+    - "**/*.zip"
+    - "**/coverage/**"
+    - "**/*.min.js"
+    - "**/LuxLogo.avif"
+    - "PROJECT-IDEA.txt"
+  ignored_matches: []
+  # Minimum number of characters for a potential secret
+  min_secrets_length: 20

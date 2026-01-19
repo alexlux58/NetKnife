@@ -147,6 +147,43 @@ variable "openai_model" {
   default     = "gpt-4o-mini"
 }
 
+variable "admin_usernames" {
+  type        = string
+  description = "Comma-separated Cognito usernames who can create board channels"
+  default     = "alex.lux"
+}
+
+variable "stripe_secret_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Stripe secret key (sk_test_... or sk_live_...)"
+}
+
+variable "stripe_webhook_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Stripe webhook signing secret (whsec_...)"
+}
+
+variable "stripe_pro_price_id" {
+  type        = string
+  default     = ""
+  description = "Stripe Price ID for $5/mo API Access (price_...)"
+}
+
+variable "billing_exempt_usernames" {
+  type        = string
+  default     = "alex.lux"
+  description = "Comma-separated Cognito usernames exempt from billing (e.g. admin, test accounts)"
+}
+
+variable "site_url" {
+  type        = string
+  description = "Frontend URL for Stripe redirects (e.g. https://tools.alexflux.com)"
+}
+
 # Local variables for consistent naming
 locals {
   name = "${var.project}-${var.env}"
@@ -241,6 +278,189 @@ resource "aws_dynamodb_table" "profiles" {
 }
 
 # ------------------------------------------------------------------------------
+# DYNAMODB TABLES: MESSAGE BOARD (channels, threads, comments, likes, bookmarks, DMs)
+# ------------------------------------------------------------------------------
+
+resource "aws_dynamodb_table" "board_channels" {
+  name         = "${local.name}-board-channels"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board channels"
+  }
+}
+
+resource "aws_dynamodb_table" "board_threads" {
+  name         = "${local.name}-board-threads"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board threads"
+  }
+}
+
+resource "aws_dynamodb_table" "board_comments" {
+  name         = "${local.name}-board-comments"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board comments"
+  }
+}
+
+resource "aws_dynamodb_table" "board_likes" {
+  name         = "${local.name}-board-likes"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board likes"
+  }
+}
+
+resource "aws_dynamodb_table" "board_bookmarks" {
+  name         = "${local.name}-board-bookmarks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board bookmarks"
+  }
+}
+
+resource "aws_dynamodb_table" "board_dm_convos" {
+  name         = "${local.name}-board-dm-convos"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board DM conversations"
+  }
+}
+
+resource "aws_dynamodb_table" "board_dm_messages" {
+  name         = "${local.name}-board-dm-messages"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board DM messages"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# DYNAMODB: BILLING & USAGE (Stripe subscriptions and usage metering)
+# ------------------------------------------------------------------------------
+
+resource "aws_dynamodb_table" "billing" {
+  name         = "${local.name}-billing"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Stripe customers and plan"
+  }
+}
+
+resource "aws_dynamodb_table" "usage" {
+  name         = "${local.name}-usage"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Usage metering by month"
+  }
+}
+
+# ------------------------------------------------------------------------------
 # IAM ROLE FOR LAMBDA FUNCTIONS
 # ------------------------------------------------------------------------------
 # Shared execution role for all Lambda functions.
@@ -326,6 +546,56 @@ resource "aws_iam_role_policy" "profiles_access" {
         "dynamodb:PutItem"
       ]
       Resource = aws_dynamodb_table.profiles.arn
+    }]
+  })
+}
+
+# DynamoDB board access (board Lambda)
+resource "aws_iam_role_policy" "board_access" {
+  name   = "${local.name}-board-access"
+  role   = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem"]
+      Resource = [
+        aws_dynamodb_table.board_channels.arn,
+        aws_dynamodb_table.board_threads.arn,
+        aws_dynamodb_table.board_comments.arn,
+        aws_dynamodb_table.board_likes.arn,
+        aws_dynamodb_table.board_bookmarks.arn,
+        aws_dynamodb_table.board_dm_convos.arn,
+        aws_dynamodb_table.board_dm_messages.arn
+      ]
+    }]
+  })
+}
+
+# DynamoDB billing and usage (billing Lambda)
+resource "aws_iam_role_policy" "billing_access" {
+  name   = "${local.name}-billing-access"
+  role   = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
+      Resource = [aws_dynamodb_table.billing.arn, aws_dynamodb_table.usage.arn]
+    }]
+  })
+}
+
+# CloudWatch read (alarms dashboard Lambda)
+resource "aws_iam_role_policy" "cloudwatch_alarms_read" {
+  name   = "${local.name}-cloudwatch-alarms-read"
+  role   = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["cloudwatch:DescribeAlarms", "cloudwatch:DescribeAlarmHistory"]
+      Resource = "*"
     }]
   })
 }
@@ -2358,6 +2628,192 @@ resource "aws_lambda_permission" "profile" {
 }
 
 # ------------------------------------------------------------------------------
+# LAMBDA: Board (channels, threads, comments, likes, bookmarks, DMs)
+# ------------------------------------------------------------------------------
+# Run before apply: cd backend/functions/board && npm install --omit=dev
+
+data "archive_file" "board_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/board"
+  output_path = "${path.module}/board.zip"
+}
+
+resource "aws_lambda_function" "board" {
+  function_name = "${local.name}-board"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Message board: channels, threads, comments, likes, bookmarks, DMs"
+  filename      = data.archive_file.board_zip.output_path
+  source_code_hash = data.archive_file.board_zip.output_base64sha256
+  timeout       = 15
+  memory_size   = 256
+  environment {
+    variables = {
+      BOARD_CHANNELS_TABLE   = aws_dynamodb_table.board_channels.name
+      BOARD_THREADS_TABLE    = aws_dynamodb_table.board_threads.name
+      BOARD_COMMENTS_TABLE   = aws_dynamodb_table.board_comments.name
+      BOARD_LIKES_TABLE      = aws_dynamodb_table.board_likes.name
+      BOARD_BOOKMARKS_TABLE  = aws_dynamodb_table.board_bookmarks.name
+      BOARD_DM_CONVOS_TABLE  = aws_dynamodb_table.board_dm_convos.name
+      BOARD_DM_MESSAGES_TABLE = aws_dynamodb_table.board_dm_messages.name
+      ADMIN_USERNAMES        = var.admin_usernames
+    }
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "board" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.board.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "board" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /board"
+  target    = "integrations/${aws_apigatewayv2_integration.board.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "board" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.board.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA: Alarms (CloudWatch alarms dashboard; admin-only)
+# ------------------------------------------------------------------------------
+# Run before apply: cd backend/functions/alarms && npm install --omit=dev
+
+data "archive_file" "alarms_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/alarms"
+  output_path = "${path.module}/alarms.zip"
+}
+
+resource "aws_lambda_function" "alarms" {
+  function_name   = "${local.name}-alarms"
+  role            = aws_iam_role.lambda_role.arn
+  runtime         = "nodejs20.x"
+  handler         = "index.handler"
+  description     = "CloudWatch alarms dashboard (admin-only)"
+  filename        = data.archive_file.alarms_zip.output_path
+  source_code_hash = data.archive_file.alarms_zip.output_base64sha256
+  timeout         = 15
+  memory_size     = 128
+  environment {
+    variables = {
+      ALARM_PREFIX              = local.name
+      ALARMS_DASHBOARD_USERNAMES = var.admin_usernames
+    }
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "alarms" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.alarms.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "alarms" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /alarms"
+  target    = "integrations/${aws_apigatewayv2_integration.alarms.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "alarms" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.alarms.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA: Billing (Stripe usage, checkout, portal, donations, webhook)
+# ------------------------------------------------------------------------------
+# Run before apply: cd backend/functions/billing && npm install --omit=dev
+
+data "archive_file" "billing_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/billing"
+  output_path = "${path.module}/billing.zip"
+}
+
+resource "aws_lambda_function" "billing" {
+  function_name   = "${local.name}-billing"
+  role            = aws_iam_role.lambda_role.arn
+  runtime         = "nodejs20.x"
+  handler         = "index.handler"
+  description     = "Stripe: usage, checkout, portal, donations, webhook"
+  filename        = data.archive_file.billing_zip.output_path
+  source_code_hash = data.archive_file.billing_zip.output_base64sha256
+  timeout         = 30
+  memory_size     = 256
+  environment {
+    variables = {
+      BILLING_TABLE            = aws_dynamodb_table.billing.name
+      USAGE_TABLE              = aws_dynamodb_table.usage.name
+      STRIPE_SECRET_KEY        = var.stripe_secret_key
+      STRIPE_WEBHOOK_SECRET    = var.stripe_webhook_secret
+      STRIPE_PRO_PRICE_ID      = var.stripe_pro_price_id
+      SITE_URL                 = var.site_url
+      BILLING_EXEMPT_USERNAMES = var.billing_exempt_usernames
+    }
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "billing" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.billing.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "billing" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /billing"
+  target             = "integrations/${aws_apigatewayv2_integration.billing.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_apigatewayv2_route" "billing_webhook" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /billing/webhook"
+  target             = "integrations/${aws_apigatewayv2_integration.billing.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "billing" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.billing.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
 # WAF WEB ACL (Rate Limiting)
 # ------------------------------------------------------------------------------
 # Protects the API from abuse with per-IP rate limiting.
@@ -2591,6 +3047,11 @@ output "lambda_security_advisor_name" {
 output "lambda_reports_name" {
   value       = nonsensitive(aws_lambda_function.reports.function_name)
   description = "Reports Lambda function name"
+}
+
+output "lambda_board_name" {
+  value       = nonsensitive(aws_lambda_function.board.function_name)
+  description = "Board Lambda function name"
 }
 
 output "reports_table_name" {

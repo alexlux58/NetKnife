@@ -58,15 +58,47 @@ export default function SettingsPage() {
         <h2 className="text-lg font-semibold mb-4">Profile</h2>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Avatar URL</label>
-            <input
-              type="url"
-              placeholder="https://…"
-              value={form.avatarUrl}
-              onChange={(e) => setForm((f) => ({ ...f, avatarUrl: e.target.value }))}
-              className="input w-full"
-            />
-            <p className="text-xs text-gray-500 mt-1">Paste an image URL for your profile picture.</p>
+            <label className="block text-sm text-gray-400 mb-1">Avatar</label>
+            <div className="flex flex-wrap gap-2 items-start">
+              <input
+                type="url"
+                placeholder="https://… or upload below"
+                value={form.avatarUrl && form.avatarUrl.startsWith('http') ? form.avatarUrl : ''}
+                onChange={(e) => setForm((f) => ({ ...f, avatarUrl: e.target.value.trim() || (f.avatarUrl?.startsWith('data:') ? f.avatarUrl : '') }))}
+                className="input flex-1 min-w-[200px]"
+              />
+              <label className="btn-secondary cursor-pointer inline-block py-2 px-3 text-sm">
+                Upload PNG/JPG/WebP
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    const reader = new FileReader()
+                    reader.onload = () => {
+                      const data = reader.result as string
+                      if (typeof data === 'string' && data.startsWith('data:image/')) {
+                        setForm((prev) => ({ ...prev, avatarUrl: data }))
+                      }
+                    }
+                    reader.readAsDataURL(f)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              {(form.avatarUrl || '').length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, avatarUrl: '' }))}
+                  className="text-sm text-gray-500 hover:text-gray-300"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Paste an image URL or upload PNG, JPG, or WebP (max ~200KB).</p>
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Display name</label>
@@ -95,6 +127,16 @@ export default function SettingsPage() {
               {saving ? 'Saving…' : 'Save profile'}
             </button>
             {message && <span className="text-sm text-gray-400">{message}</span>}
+          </div>
+          <p className="text-xs text-gray-500 mt-3">Preview (shown in top bar):</p>
+          <div className="flex items-center gap-2 mt-1">
+            {form.avatarUrl ? (
+              <img src={form.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+            ) : (
+              <span className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-gray-400 text-xs">?</span>
+            )}
+            <span className="text-sm text-gray-400">{form.displayName?.trim() || 'Account'}</span>
+            {form.bio?.trim() && <span className="text-xs text-gray-500 truncate max-w-[200px]">— {form.bio.trim()}</span>}
           </div>
         </div>
       </section>

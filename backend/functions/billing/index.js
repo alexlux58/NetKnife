@@ -26,8 +26,11 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const STRIPE_PRO_PRICE_ID = process.env.STRIPE_PRO_PRICE_ID;
 const SITE_URL = process.env.SITE_URL || 'https://localhost';
 
-// Cognito username that is exempt from billing (full access, no limits)
-const BILLING_EXEMPT_USERNAME = 'alex.lux';
+// Comma-separated usernames exempt from billing (superuser: full access, no limits, no paywall)
+const BILLING_EXEMPT_USERNAMES = (process.env.BILLING_EXEMPT_USERNAMES || 'alex.lux')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' }) : null;
 
@@ -72,7 +75,8 @@ function getUsername(event) {
 }
 
 function isBillingExempt(event) {
-  return getUsername(event) === BILLING_EXEMPT_USERNAME;
+  const u = getUsername(event);
+  return BILLING_EXEMPT_USERNAMES.includes(u);
 }
 
 // ------------------------------------------------------------------------------

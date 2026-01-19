@@ -19,3 +19,12 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
+/** Google Analytics / gtag.js (CookieConsent) */
+declare global {
+  interface Window {
+    dataLayer?: unknown[]
+    gtag?: (...args: unknown[]) => void
+    requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number
+  }
+}
+

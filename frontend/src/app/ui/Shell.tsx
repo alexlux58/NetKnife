@@ -29,6 +29,7 @@ import { BillingProvider } from '../../lib/BillingContext'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import UpgradeModal from '../../components/UpgradeModal'
+import AssistantChat from '../../components/AssistantChat'
 
 export default function Shell() {
   const location = useLocation()
@@ -56,6 +57,7 @@ export default function Shell() {
         </div>
         </div>
         <UpgradeModal />
+        <AssistantChat />
       </ReportProvider>
     </BillingProvider>
   )

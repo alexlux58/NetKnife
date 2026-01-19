@@ -143,6 +143,7 @@
 - **Headers**: HSTS, CSP, X-Frame-Options, X-Content-Type-Options
 - **SSRF Protection**: Private IPs blocked in headers scanner
 - **Secret Redaction**: Copy (redacted) button for sharing
+- **Automated checks**: [SECURITY.md](SECURITY.md) — GitGuardian (secrets), Snyk (deps + IaC), npm audit, Checkov, Trivy, pre-commit, Dependabot
 
 ## Deployment Guide
 

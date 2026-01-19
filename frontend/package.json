@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "audit": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -26,7 +27,8 @@
     "uuid": "^13.0.0",
     "zod": "^4.2.1",
     "jspdf": "^2.5.1",
-    "html2canvas": "^1.4.1"
+    "html2canvas": "^1.4.1",
+    "@cloudflare/speedtest": "^1.0.0"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6",

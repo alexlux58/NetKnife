@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react'
-import { apiClient } from '../../lib/api'
+import { apiClient, ApiError } from '../../lib/api'
 import OutputCard from '../../components/OutputCard'
 import AddToReportButton from '../../components/AddToReportButton'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
@@ -56,7 +56,11 @@ export default function IpqsUrlTool() {
       const data = await apiClient.post<IPQSUrlResult>('/ipqs-url', { url })
       setResult(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to scan URL')
+      const msg =
+        e instanceof ApiError && e.body && typeof e.body === 'object' && e.body !== null && 'error' in e.body && typeof (e.body as { error: unknown }).error === 'string'
+          ? (e.body as { error: string }).error
+          : e instanceof Error ? e.message : 'Failed to scan URL'
+      setError(msg)
     } finally {
       setLoading(false)
     }

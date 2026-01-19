@@ -143,6 +143,10 @@ openai_api_key = ""
 # GPT-4o-mini is ~100x cheaper than legacy GPT-4 and provides excellent quality
 openai_model = "gpt-4o-mini"
 
+# NVD (NIST) API key for CVE lookup — optional; higher rate limits with key
+# Request: https://nvd.nist.gov/developers/request-an-api-key
+nvd_api_key = ""
+
 # ============================================================================
 # STRIPE BILLING (Optional)
 # ============================================================================

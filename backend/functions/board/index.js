@@ -30,7 +30,8 @@ const LIKES = process.env.BOARD_LIKES_TABLE;
 const BOOKMARKS = process.env.BOARD_BOOKMARKS_TABLE;
 const DM_CONVOS = process.env.BOARD_DM_CONVOS_TABLE;
 const DM_MESSAGES = process.env.BOARD_DM_MESSAGES_TABLE;
-const ADMIN = (process.env.ADMIN_USERNAMES || 'alex.lux').split(',').map((s) => s.trim());
+const ACTIVITY = process.env.BOARD_ACTIVITY_TABLE;
+const ADMIN = (process.env.ADMIN_USERNAMES || 'alex.lux, god of lux').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 function getUserId(event) {
   const c = event.requestContext?.authorizer?.jwt?.claims || event.requestContext?.authorizer?.claims || {};
@@ -59,15 +60,29 @@ function getUsername(event) {
       } catch (_) {}
     }
   }
-  return u || '';
+  return (u || '').trim();
 }
 
 function isAdmin(event) {
-  return ADMIN.includes(getUsername(event));
+  const u = getUsername(event).toLowerCase();
+  return u && ADMIN.includes(u);
 }
 
 function json(status, body) {
   return { statusCode: status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
+}
+
+async function logActivity(userId, username, action, target, details) {
+  if (!ACTIVITY) return;
+  try {
+    const now = new Date().toISOString();
+    const id = Math.random().toString(36).slice(2, 10);
+    const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // 30 days
+    await ddb.send(new PutCommand({
+      TableName: ACTIVITY,
+      Item: { pk: 'ACT', sk: `${now}#${id}`, userId, username: (username || '?').slice(0, 200), action, target: (target || '').slice(0, 256), details: (details || '').slice(0, 500), createdAt: now, ttl },
+    }));
+  } catch (e) { console.warn('logActivity:', e.message); }
 }
 
 function convId(a, b) {
@@ -77,19 +92,25 @@ function convId(a, b) {
 // --- channels-list
 async function channelsList() {
   if (!CHANNELS) return json(200, { channels: [] });
-  const r = await ddb.send(new QueryCommand({ TableName: CHANNELS, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': 'CHAN' } }));
-  const channels = (r.Items || []).map((i) => ({ id: i.sk, name: i.name, description: i.description || '', createdAt: i.createdAt }));
-  return json(200, { channels });
+  try {
+    const r = await ddb.send(new QueryCommand({ TableName: CHANNELS, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': 'CHAN' } }));
+    const channels = (r.Items || []).map((i) => ({ id: i.sk, name: i.name, description: i.description || '', createdAt: i.createdAt }));
+    return json(200, { channels });
+  } catch (e) {
+    console.error('channelsList:', e);
+    return json(503, { error: 'Board data temporarily unavailable. Check DynamoDB tables and IAM.' });
+  }
 }
 
 // --- channel-create (admin only)
-async function channelCreate(userId, body) {
+async function channelCreate(userId, username, body) {
   if (!CHANNELS) return json(503, { error: 'Board not configured.' });
   const name = (body.name || '').trim();
   if (!name) return json(400, { error: 'Channel name is required.' });
   const id = `ch-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const item = { pk: 'CHAN', sk: id, name, description: (body.description || '').trim().slice(0, 500), createdBy: userId, createdAt: new Date().toISOString() };
   await ddb.send(new PutCommand({ TableName: CHANNELS, Item: item }));
+  await logActivity(userId, username, 'channel-create', id, name);
   return json(200, { channel: { id: item.sk, name: item.name, description: item.description, createdAt: item.createdAt } });
 }
 
@@ -110,7 +131,7 @@ async function threadsList(body) {
 }
 
 // --- thread-create
-async function threadCreate(userId, body) {
+async function threadCreate(userId, username, body) {
   if (!THREADS) return json(503, { error: 'Board not configured.' });
   const ch = (body.channelId || '').trim();
   const title = (body.title || '').trim();
@@ -120,6 +141,7 @@ async function threadCreate(userId, body) {
   const now = new Date().toISOString();
   const item = { pk: ch, sk: id, title, body: b.slice(0, 10000), authorId: userId, authorName: (body.authorName || '').trim().slice(0, 200) || '?', createdAt: now };
   await ddb.send(new PutCommand({ TableName: THREADS, Item: item }));
+  await logActivity(userId, username, 'thread-create', ch, title);
   return json(200, { thread: { id: item.sk, channelId: item.pk, title: item.title, body: item.body, authorId: item.authorId, authorName: item.authorName, createdAt: item.createdAt } });
 }
 
@@ -152,7 +174,7 @@ async function threadGet(userId, body) {
 }
 
 // --- comment-add
-async function commentAdd(userId, body) {
+async function commentAdd(userId, username, body) {
   if (!COMMENTS) return json(503, { error: 'Board not configured.' });
   const threadId = (body.threadId || '').trim();
   const b = (body.body || '').trim();
@@ -161,6 +183,7 @@ async function commentAdd(userId, body) {
   const now = new Date().toISOString();
   const item = { pk: threadId, sk: id, body: b.slice(0, 5000), authorId: userId, authorName: (body.authorName || '').trim().slice(0, 200) || '?', createdAt: now };
   await ddb.send(new PutCommand({ TableName: COMMENTS, Item: item }));
+  await logActivity(userId, username, 'comment-add', threadId, b.slice(0, 80));
   return json(200, { comment: { id: item.sk, threadId: item.pk, body: item.body, authorId: item.authorId, authorName: item.authorName, createdAt: item.createdAt } });
 }
 
@@ -205,24 +228,37 @@ async function bookmarkToggle(userId, body) {
 // --- bookmarks-list
 async function bookmarksList(userId) {
   if (!BOOKMARKS || !THREADS) return json(200, { threads: [] });
-  const r = await ddb.send(new QueryCommand({ TableName: BOOKMARKS, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': userId } }));
-  const threads = [];
-  for (const b of r.Items || []) {
-    const ch = b.channelId;
-    if (!ch) continue;
-    const tr = await ddb.send(new GetCommand({ TableName: THREADS, Key: { pk: ch, sk: b.sk } }));
-    if (tr.Item) threads.push({ id: tr.Item.sk, channelId: tr.Item.pk, title: tr.Item.title, authorName: tr.Item.authorName, createdAt: tr.Item.createdAt });
+  try {
+    const r = await ddb.send(new QueryCommand({ TableName: BOOKMARKS, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': userId } }));
+    const threads = [];
+    for (const b of r.Items || []) {
+      const ch = b.channelId;
+      if (!ch) continue;
+      const tr = await ddb.send(new GetCommand({ TableName: THREADS, Key: { pk: ch, sk: b.sk } }));
+      if (tr.Item) threads.push({ id: tr.Item.sk, channelId: tr.Item.pk, title: tr.Item.title, authorName: tr.Item.authorName, createdAt: tr.Item.createdAt });
+    }
+    threads.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return json(200, { threads });
+  } catch (e) {
+    console.error('bookmarksList:', e);
+    return json(503, { error: 'Board data temporarily unavailable. Check DynamoDB tables and IAM.' });
   }
-  threads.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  return json(200, { threads });
 }
 
 // --- dm-convos
 async function dmConvos(userId) {
   if (!DM_CONVOS) return json(200, { convos: [] });
-  const r = await ddb.send(new QueryCommand({ TableName: DM_CONVOS, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': userId } }));
-  const convos = (r.Items || []).map((i) => ({ otherUserId: i.sk, lastAt: i.lastAt, lastPreview: (i.lastPreview || '').slice(0, 100) })).sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''));
-  return json(200, { convos });
+  try {
+    const r = await ddb.send(new QueryCommand({ TableName: DM_CONVOS, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': userId } }));
+    const convos = (r.Items || []).map((i) => {
+      const preview = (i.lastPreview || '').slice(0, 100);
+      return { otherUserId: i.sk, lastAt: i.lastAt, lastPreview: preview, outbound: preview.startsWith('You: ') };
+    }).sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''));
+    return json(200, { convos });
+  } catch (e) {
+    console.error('dmConvos:', e);
+    return json(503, { error: 'Board data temporarily unavailable. Check DynamoDB tables and IAM.' });
+  }
 }
 
 // --- dm-messages
@@ -243,7 +279,7 @@ async function dmMessages(userId, body) {
 }
 
 // --- dm-send
-async function dmSend(userId, body) {
+async function dmSend(userId, username, body) {
   if (!DM_MESSAGES || !DM_CONVOS) return json(503, { error: 'DMs not configured.' });
   const other = (body.otherUserId || '').trim();
   const b = (body.body || '').trim();
@@ -264,7 +300,27 @@ async function dmSend(userId, body) {
       Item: { pk: u, sk: o, lastAt: now, lastPreview: u === userId ? `You: ${preview}` : preview, updatedAt: now },
     }));
   }
+  await logActivity(userId, username, 'dm-send', other, preview);
   return json(200, { message: { id: msgId, fromUserId: userId, fromName, body: b, createdAt: now } });
+}
+
+// --- activity-list (admin only): recent board actions for dashboard
+async function activityList() {
+  if (!ACTIVITY) return json(200, { items: [] });
+  try {
+    const r = await ddb.send(new QueryCommand({
+      TableName: ACTIVITY,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': 'ACT' },
+      ScanIndexForward: false,
+      Limit: 100,
+    }));
+    const items = (r.Items || []).map((i) => ({ action: i.action, userId: i.userId, username: i.username, target: i.target, details: i.details, createdAt: i.createdAt }));
+    return json(200, { items });
+  } catch (e) {
+    console.error('activityList:', e);
+    return json(503, { error: 'Activity log temporarily unavailable.' });
+  }
 }
 
 exports.handler = async (event) => {
@@ -283,19 +339,21 @@ exports.handler = async (event) => {
 
     const action = (body.action || '').trim();
 
+    const username = getUsername(event);
     switch (action) {
       case 'channels-list': return channelsList();
-      case 'channel-create': return isAdmin(event) ? channelCreate(userId, body) : json(403, { error: 'Only admins can create channels. Email admin@alexflux.com to request one.' });
+      case 'channel-create': return isAdmin(event) ? channelCreate(userId, username, body) : json(403, { error: 'Only admins can create channels. Email admin@alexflux.com to request one.' });
       case 'threads-list': return threadsList(body);
-      case 'thread-create': return threadCreate(userId, body);
+      case 'thread-create': return threadCreate(userId, username, body);
       case 'thread-get': return threadGet(userId, body);
-      case 'comment-add': return commentAdd(userId, body);
+      case 'comment-add': return commentAdd(userId, username, body);
       case 'like-toggle': return likeToggle(userId, body);
       case 'bookmark-toggle': return bookmarkToggle(userId, body);
       case 'bookmarks-list': return bookmarksList(userId);
       case 'dm-convos': return dmConvos(userId);
       case 'dm-messages': return dmMessages(userId, body);
-      case 'dm-send': return dmSend(userId, body);
+      case 'dm-send': return dmSend(userId, username, body);
+      case 'activity-list': return isAdmin(event) ? activityList() : json(403, { error: 'Only admins can view the activity dashboard.' });
       default: return json(400, { error: `Unknown action: ${action || '(missing)'}` });
     }
   } catch (err) {

@@ -17,11 +17,11 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
+import { useToolState } from '../../lib/useToolState'
 
 interface Certificate {
   subject: string
@@ -47,25 +47,22 @@ interface TlsResult {
 }
 
 export default function TlsTool() {
-  const [host, setHost] = useState('example.com')
-  const [port, setPort] = useState('443')
-  const [sni, setSni] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<TlsResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'tls',
+    { host: 'example.com', port: '443', sni: '', loading: false, result: null as TlsResult | null, error: '' },
+    { exclude: ['result', 'loading', 'error'] }
+  )
+  const { host, port, sni, loading, result, error } = state
 
   async function handleInspect() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const res = await apiPost('/tls', {
         host,
         port: Number(port),
         sni: sni || host,
       }) as any
-      
+
       // Transform backend response (snake_case) to frontend format (camelCase)
       const transformed: TlsResult = {
         host: res.host,
@@ -107,22 +104,18 @@ export default function TlsTool() {
         }),
       }
       
-      setResult(transformed)
+      setState({ result: transformed, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${JSON.stringify(e.body, null, 2)}`)
+        setState({ error: `Error ${e.status}: ${JSON.stringify(e.body, null, 2)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
   function loadExample() {
-    setHost('github.com')
-    setPort('443')
-    setSni('')
+    setState({ host: 'github.com', port: '443', sni: '' })
   }
 
   // Get color based on days remaining
@@ -152,7 +145,7 @@ export default function TlsTool() {
             <input
               type="text"
               value={host}
-              onChange={(e) => setHost(e.target.value)}
+              onChange={(e) => setState({ host: e.target.value })}
               placeholder="example.com"
               className="input font-mono"
             />
@@ -164,7 +157,7 @@ export default function TlsTool() {
             <input
               type="number"
               value={port}
-              onChange={(e) => setPort(e.target.value)}
+              onChange={(e) => setState({ port: e.target.value })}
               placeholder="443"
               className="input font-mono w-32"
             />
@@ -178,7 +171,7 @@ export default function TlsTool() {
             <input
               type="text"
               value={sni}
-              onChange={(e) => setSni(e.target.value)}
+              onChange={(e) => setState({ sni: e.target.value })}
               placeholder={host || 'Same as host'}
               className="input font-mono"
             />

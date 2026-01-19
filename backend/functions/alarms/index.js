@@ -16,7 +16,7 @@ const { CloudWatchClient, DescribeAlarmsCommand, DescribeAlarmHistoryCommand } =
 
 const cw = new CloudWatchClient({});
 const ALARM_PREFIX = process.env.ALARM_PREFIX || 'netknife-dev';
-const ALLOWED = (process.env.ALARMS_DASHBOARD_USERNAMES || 'alex.lux').split(',').map((s) => s.trim().toLowerCase());
+const ALLOWED = (process.env.ALARMS_DASHBOARD_USERNAMES || 'alex.lux, god of lux').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 function json(status, body) {
   return {
@@ -28,7 +28,17 @@ function json(status, body) {
 
 function getUsername(event) {
   const claims = event.requestContext?.authorizer?.jwt?.claims || event.requestContext?.authorizer?.claims || {};
-  return (claims['cognito:username'] || claims.preferred_username || '').toLowerCase();
+  let u = (claims['cognito:username'] || claims.preferred_username || '').trim();
+  if (!u) {
+    const h = event.headers?.authorization || event.headers?.Authorization;
+    if (h && h.startsWith('Bearer ')) {
+      try {
+        const p = JSON.parse(Buffer.from(h.split('.')[1], 'base64').toString());
+        u = (p['cognito:username'] || p['preferred_username'] || '').trim();
+      } catch (_) {}
+    }
+  }
+  return u.toLowerCase();
 }
 
 exports.handler = async (event) => {

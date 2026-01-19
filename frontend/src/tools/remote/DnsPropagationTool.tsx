@@ -4,12 +4,12 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
+import { useToolState } from '../../lib/useToolState'
 
 interface ResolverResult {
   resolver: string
@@ -29,28 +29,24 @@ interface PropagationResult {
 }
 
 export default function DnsPropagationTool() {
-  const [name, setName] = useState('example.com')
-  const [type, setType] = useState('A')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<PropagationResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'dns-propagation',
+    { name: 'example.com', type: 'A', loading: false, result: null as PropagationResult | null, error: '' },
+    { exclude: ['result'] }
+  )
+  const { name, type, loading, result, error } = state
 
   async function handleCheck() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const data = await apiPost<PropagationResult>('/dns-propagation', { name, type })
-      setResult(data)
+      setState({ result: data, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${formatJson(e.body)}`)
+        setState({ error: `Error ${e.status}: ${formatJson(e.body)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -72,14 +68,14 @@ export default function DnsPropagationTool() {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setState({ name: e.target.value })}
               placeholder="example.com"
               className="input"
             />
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-2">Record Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value)} className="input">
+            <select value={type} onChange={(e) => setState({ type: e.target.value })} className="input">
               {['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA'].map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}

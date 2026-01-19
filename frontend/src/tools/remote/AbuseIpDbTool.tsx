@@ -15,7 +15,7 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -97,12 +97,20 @@ export default function AbuseIpDbTool() {
   const [result, setResult] = useState<AbuseIpDbResult | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { ip: '' },
   })
 
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('netknife:tool:abuseipdb')
+      if (raw) reset(JSON.parse(raw))
+    } catch (_) {}
+  }, [reset])
+
   const onSubmit: SubmitHandler<FormData> = async (data) => {
+    sessionStorage.setItem('netknife:tool:abuseipdb', JSON.stringify(data))
     setLoading(true)
     setResult(null)
     try {

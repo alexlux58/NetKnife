@@ -16,11 +16,11 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
+import { useToolState } from '../../lib/useToolState'
 
 interface RdapResult {
   query: string
@@ -31,27 +31,24 @@ interface RdapResult {
 }
 
 export default function RdapTool() {
-  const [query, setQuery] = useState('8.8.8.8')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<RdapResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'rdap',
+    { query: '8.8.8.8', loading: false, result: null as RdapResult | null, error: '' },
+    { exclude: ['result'] }
+  )
+  const { query, loading, result, error } = state
 
   async function handleLookup() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const res = await apiPost('/rdap', { query }) as RdapResult
-      setResult(res)
+      setState({ result: res, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${JSON.stringify(e.body, null, 2)}`)
+        setState({ error: `Error ${e.status}: ${JSON.stringify(e.body, null, 2)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -81,7 +78,7 @@ export default function RdapTool() {
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => setState({ query: e.target.value })}
               placeholder="8.8.8.8 or example.com"
               className="input font-mono"
             />
@@ -108,7 +105,7 @@ export default function RdapTool() {
               {examples.map((ex) => (
                 <button
                   key={ex.value}
-                  onClick={() => setQuery(ex.value)}
+                  onClick={() => setState({ query: ex.value })}
                   className="btn-secondary text-xs py-1 px-2"
                 >
                   {ex.label}

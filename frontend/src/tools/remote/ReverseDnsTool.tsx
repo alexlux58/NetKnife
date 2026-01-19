@@ -9,7 +9,7 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -41,7 +41,7 @@ export default function ReverseDnsTool() {
   const [output, setOutput] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { ip: '' },
   })
@@ -49,7 +49,15 @@ export default function ReverseDnsTool() {
   const [resultData, setResultData] = useState<any>(null)
   const [inputIp, setInputIp] = useState('')
 
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('netknife:tool:reverse-dns')
+      if (raw) reset(JSON.parse(raw))
+    } catch (_) {}
+  }, [reset])
+
   async function onSubmit(data: FormData) {
+    sessionStorage.setItem('netknife:tool:reverse-dns', JSON.stringify(data))
     setLoading(true)
     setInputIp(data.ip)
     try {

@@ -309,6 +309,15 @@ export const tools: Tool[] = [
     description: 'Parse CVSS 2.0/3.x vectors, explain metrics, compute base score',
   },
   {
+    id: 'cve-lookup',
+    name: 'CVE & Exploit Intel',
+    kind: 'remote',
+    category: 'Threat Intelligence',
+    path: '/tools/cve-lookup',
+    component: React.lazy(() => import('./remote/CveLookupTool')),
+    description: 'Look up CVEs (NVD, OSV), top 30 by period/category/severity, optional AI',
+  },
+  {
     id: 'ip-api',
     name: 'IP Geolocation',
     kind: 'remote',

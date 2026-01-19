@@ -14,9 +14,9 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
 import AddToReportButton from '../../components/AddToReportButton'
+import { useToolState } from '../../lib/useToolState'
 
 interface CertificateInfo {
   subject: Record<string, string>
@@ -218,35 +218,33 @@ function parseASN1Certificate(bytes: Uint8Array): CertificateInfo | null {
 }
 
 export default function PemDecoderTool() {
-  const [pemInput, setPemInput] = useState('')
-  const [certInfo, setCertInfo] = useState<CertificateInfo | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'pem-decoder',
+    { pemInput: '', certInfo: null as CertificateInfo | null, error: '' },
+    { exclude: ['error'] }
+  )
+  const { pemInput, certInfo, error } = state
 
   const handleDecode = () => {
-    setError('')
-    setCertInfo(null)
-    
+    setState({ error: '', certInfo: null })
     if (!pemInput.trim()) {
-      setError('Please enter a PEM certificate')
+      setState({ error: 'Please enter a PEM certificate' })
       return
     }
-    
     if (!pemInput.includes('-----BEGIN CERTIFICATE-----')) {
-      setError('Invalid PEM format. Must start with -----BEGIN CERTIFICATE-----')
+      setState({ error: 'Invalid PEM format. Must start with -----BEGIN CERTIFICATE-----' })
       return
     }
-    
     const info = parsePEM(pemInput)
     if (info) {
-      setCertInfo(info)
+      setState({ certInfo: info })
     } else {
-      setError('Failed to parse certificate. Please ensure it\'s a valid X.509 certificate in PEM format.')
+      setState({ error: 'Failed to parse certificate. Please ensure it\'s a valid X.509 certificate in PEM format.' })
     }
   }
 
   const loadExample = () => {
-    // Example self-signed cert (for demo purposes)
-    setPemInput(`-----BEGIN CERTIFICATE-----
+    setState({ pemInput: `-----BEGIN CERTIFICATE-----
 MIIDXTCCAkWgAwIBAgIJAJC1HiIAZAiUMA0GCSqGSIb3Qw0LBQAwRzELMAkGA1UE
 BhMCVVMxCzAJBgNVBAgTAkNBMRQwEgYDVQQHEwtTYW50YSBDbGFyYTEVMBMGA1UE
 ChMMRXhhbXBsZSBJbmMuMB4XDTE3MDExMTAwMDAwMFoXDTI3MDExMTAwMDAwMFow
@@ -266,9 +264,7 @@ U7IxPdDB+JBtXPKZqPnP5S9X4hL9NwL2epX+Jy8n6Px6P5jkPX3BM5SH4EX9QSCS
 2F7aEXKbr3dNQIQ8P9YCsXPwS5Dd1QVSD4fHPB7Lb+M3OD6VfOLsS5qVj+qb9xqO
 z6cLP3OPG4sC6hP6f7Vr+8P/8t6HXMkP2O6lpu7aS0k1KdHHRj7P3r0Q3FLy7j7S
 PA/g4g==
------END CERTIFICATE-----`)
-    setCertInfo(null)
-    setError('')
+-----END CERTIFICATE-----`, certInfo: null, error: '' })
   }
 
   const getExpiryStatus = () => {
@@ -305,7 +301,7 @@ PA/g4g==
           </div>
           <textarea
             value={pemInput}
-            onChange={(e) => setPemInput(e.target.value)}
+            onChange={(e) => setState({ pemInput: e.target.value })}
             placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
             className={`input font-mono text-xs min-h-[300px] ${error ? 'border-red-500' : ''}`}
             spellCheck={false}

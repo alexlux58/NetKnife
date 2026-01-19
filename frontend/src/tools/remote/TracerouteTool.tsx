@@ -4,12 +4,12 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
+import { useToolState } from '../../lib/useToolState'
 
 interface TracerouteResult {
   target: string
@@ -32,27 +32,24 @@ interface TracerouteResult {
 }
 
 export default function TracerouteTool() {
-  const [target, setTarget] = useState('google.com')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<TracerouteResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'traceroute',
+    { target: 'google.com', loading: false, result: null as TracerouteResult | null, error: '' },
+    { exclude: ['result'] }
+  )
+  const { target, loading, result, error } = state
 
   async function handleTrace() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const data = await apiPost<TracerouteResult>('/traceroute', { target })
-      setResult(data)
+      setState({ result: data, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${formatJson(e.body)}`)
+        setState({ error: `Error ${e.status}: ${formatJson(e.body)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -77,7 +74,7 @@ export default function TracerouteTool() {
             <input
               type="text"
               value={target}
-              onChange={(e) => setTarget(e.target.value)}
+              onChange={(e) => setState({ target: e.target.value })}
               placeholder="IP or hostname"
               className="input"
             />

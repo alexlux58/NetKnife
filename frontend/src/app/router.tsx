@@ -37,6 +37,7 @@ import PricingPage from './views/PricingPage'
 import SettingsPage from './views/SettingsPage'
 import AlarmsPage from './views/AlarmsPage'
 import BoardPage from './views/BoardPage'
+import ActivityPage from './views/ActivityPage'
 import PrivacyPage from './views/PrivacyPage'
 import CookieConsent from '../components/CookieConsent'
 import { Link } from 'react-router-dom'
@@ -156,6 +157,7 @@ export const router = createBrowserRouter([
           { path: 'settings', element: <SettingsPage /> },
           { path: 'alarms', element: <AlarmsPage /> },
           { path: 'board', element: <BoardPage /> },
+          { path: 'activity', element: <ActivityPage /> },
           ...tools.map((tool) => ({
             path: tool.path.replace(/^\//, ''),
             element: <ToolLoader id={tool.id} />,

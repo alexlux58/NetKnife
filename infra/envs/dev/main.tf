@@ -251,6 +251,13 @@ variable "openai_model" {
   description = "OpenAI model to use (gpt-4o-mini recommended for cost efficiency, ~100x cheaper than GPT-4)"
 }
 
+variable "nvd_api_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "NVD (NIST) API key for CVE lookup rate limits. Optional. Request: https://nvd.nist.gov/developers/request-an-api-key"
+}
+
 variable "stripe_secret_key" {
   type        = string
   default     = ""
@@ -382,6 +389,7 @@ module "api" {
   hunter_api_key         = var.hunter_api_key
   openai_api_key         = var.openai_api_key
   openai_model           = var.openai_model
+  nvd_api_key            = var.nvd_api_key
 }
 
 # ------------------------------------------------------------------------------
@@ -438,6 +446,7 @@ module "ops" {
     module.api.lambda_hunter_name,
     module.api.lambda_security_advisor_name,
     module.api.lambda_reports_name,
+    module.api.lambda_cve_lookup_name,
     module.api.lambda_board_name,
   ]))
 

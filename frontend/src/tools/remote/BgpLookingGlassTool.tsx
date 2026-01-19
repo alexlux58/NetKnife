@@ -4,12 +4,12 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
+import { useToolState } from '../../lib/useToolState'
 
 interface BgpResult {
   query: string
@@ -27,27 +27,24 @@ interface BgpResult {
 }
 
 export default function BgpLookingGlassTool() {
-  const [query, setQuery] = useState('8.8.8.8')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<BgpResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'bgp-looking-glass',
+    { query: '8.8.8.8', loading: false, result: null as BgpResult | null, error: '' },
+    { exclude: ['result'] }
+  )
+  const { query, loading, result, error } = state
 
   async function handleLookup() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const data = await apiPost<BgpResult>('/bgp-looking-glass', { query })
-      setResult(data)
+      setState({ result: data, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${formatJson(e.body)}`)
+        setState({ error: `Error ${e.status}: ${formatJson(e.body)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -69,7 +66,7 @@ export default function BgpLookingGlassTool() {
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => setState({ query: e.target.value })}
               placeholder="8.8.8.8 or 8.8.8.0/24"
               className="input font-mono"
             />

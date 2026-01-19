@@ -34,7 +34,7 @@ export default function BoardPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null)
   const [selectedThread, setSelectedThread] = useState<{ thread: Thread; comments: Comment[]; likeCount: number; isLiked: boolean; isBookmarked: boolean } | null>(null)
-  const [dmConvoList, setDmConvoList] = useState<{ otherUserId: string; lastAt: string; lastPreview: string }[]>([])
+  const [dmConvoList, setDmConvoList] = useState<{ otherUserId: string; lastAt: string; lastPreview: string; outbound?: boolean }[]>([])
   const [dmOther, setDmOther] = useState<string | null>(null)
   const [dmMsgs, setDmMsgs] = useState<{ id: string; fromUserId: string; fromName: string; body: string; createdAt: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -262,16 +262,34 @@ export default function BoardPage() {
           </div>
           <div>
             <h2 className="font-semibold mb-2">Direct messages</h2>
-            <ul className="space-y-1 text-sm text-gray-400">
-              {dmConvoList.length === 0 && <li>No conversations</li>}
-              {dmConvoList.map((c) => (
-                <li key={c.otherUserId}>
-                  <button onClick={() => setDmOther(c.otherUserId)} className={`w-full text-left px-2 py-1 rounded truncate ${dmOther === c.otherUserId ? 'bg-blue-600/30 text-blue-300' : 'hover:bg-gray-700'}`}>
-                    {c.otherUserId} — {c.lastPreview || '…'}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-xs text-gray-500 mb-1">Inbox (received)</h3>
+                <ul className="space-y-1 text-sm text-gray-400">
+                  {(dmConvoList.filter((c) => !c.outbound)).length === 0 && <li>None</li>}
+                  {dmConvoList.filter((c) => !c.outbound).map((c) => (
+                    <li key={c.otherUserId}>
+                      <button onClick={() => setDmOther(c.otherUserId)} className={`w-full text-left px-2 py-1 rounded truncate ${dmOther === c.otherUserId ? 'bg-blue-600/30 text-blue-300' : 'hover:bg-gray-700'}`}>
+                        {c.otherUserId} — {c.lastPreview || '…'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-xs text-gray-500 mb-1">Outbox (sent)</h3>
+                <ul className="space-y-1 text-sm text-gray-400">
+                  {(dmConvoList.filter((c) => c.outbound)).length === 0 && <li>None</li>}
+                  {dmConvoList.filter((c) => c.outbound).map((c) => (
+                    <li key={c.otherUserId}>
+                      <button onClick={() => setDmOther(c.otherUserId)} className={`w-full text-left px-2 py-1 rounded truncate ${dmOther === c.otherUserId ? 'bg-blue-600/30 text-blue-300' : 'hover:bg-gray-700'}`}>
+                        {c.otherUserId} — {c.lastPreview || '…'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
 

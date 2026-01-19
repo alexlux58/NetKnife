@@ -104,6 +104,12 @@ export default function Topbar({ pathname, onMenuClick }: TopbarProps) {
             Board
           </Link>
           <Link
+            to="/activity"
+            className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
+          >
+            Activity
+          </Link>
+          <Link
             to="/tools/report-builder"
             className="text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
           >

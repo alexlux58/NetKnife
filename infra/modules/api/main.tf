@@ -147,10 +147,17 @@ variable "openai_model" {
   default     = "gpt-4o-mini"
 }
 
+variable "nvd_api_key" {
+  type        = string
+  description = "NVD (NIST) API key for higher rate limits. Optional; 5 req/30s without. Request: https://nvd.nist.gov/developers/request-an-api-key"
+  sensitive   = true
+  default     = ""
+}
+
 variable "admin_usernames" {
   type        = string
-  description = "Comma-separated Cognito usernames who can create board channels"
-  default     = "alex.lux"
+  description = "Comma-separated Cognito usernames (or display names) who can create board channels, access alarms, and view activity. Include both login (e.g. alex.lux) and display name (e.g. god of lux) if different."
+  default     = "alex.lux, god of lux"
 }
 
 variable "stripe_secret_key" {
@@ -421,6 +428,30 @@ resource "aws_dynamodb_table" "board_dm_messages" {
   }
 }
 
+resource "aws_dynamodb_table" "board_activity" {
+  name         = "${local.name}-board-activity"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Board activity admin dashboard"
+  }
+}
+
 # ------------------------------------------------------------------------------
 # DYNAMODB: BILLING & USAGE (Stripe subscriptions and usage metering)
 # ------------------------------------------------------------------------------
@@ -566,7 +597,8 @@ resource "aws_iam_role_policy" "board_access" {
         aws_dynamodb_table.board_likes.arn,
         aws_dynamodb_table.board_bookmarks.arn,
         aws_dynamodb_table.board_dm_convos.arn,
-        aws_dynamodb_table.board_dm_messages.arn
+        aws_dynamodb_table.board_dm_messages.arn,
+        aws_dynamodb_table.board_activity.arn
       ]
     }]
   })
@@ -2569,6 +2601,64 @@ resource "aws_lambda_permission" "reports" {
 }
 
 # ------------------------------------------------------------------------------
+# LAMBDA: CVE Lookup (NVD, OSV; modes: cve, package, top)
+# ------------------------------------------------------------------------------
+# Run before apply: cd backend/functions/cve-lookup && npm install --omit=dev
+
+data "archive_file" "cve_lookup_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/cve-lookup"
+  output_path = "${path.module}/cve-lookup.zip"
+}
+
+resource "aws_lambda_function" "cve_lookup" {
+  function_name   = "${local.name}-cve-lookup"
+  role            = aws_iam_role.lambda_role.arn
+  runtime         = "nodejs20.x"
+  handler         = "index.handler"
+  description     = "CVE lookup (NVD, OSV) and top vulns by period/category/severity"
+  filename        = data.archive_file.cve_lookup_zip.output_path
+  source_code_hash = data.archive_file.cve_lookup_zip.output_base64sha256
+  timeout         = 30
+  memory_size     = 256
+  environment {
+    variables = {
+      CACHE_TABLE     = aws_dynamodb_table.cache.name
+      NVD_API_KEY     = var.nvd_api_key
+      OPENAI_API_KEY  = var.openai_api_key
+      OPENAI_MODEL    = var.openai_model
+    }
+  }
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "cve_lookup" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.cve_lookup.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "cve_lookup" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /cve-lookup"
+  target    = "integrations/${aws_apigatewayv2_integration.cve_lookup.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "cve_lookup" {
+  statement_id  = "AllowAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cve_lookup.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
 # LAMBDA FUNCTION: User Profile (theme, avatar, bio, displayName)
 # ------------------------------------------------------------------------------
 
@@ -2657,6 +2747,7 @@ resource "aws_lambda_function" "board" {
       BOARD_BOOKMARKS_TABLE  = aws_dynamodb_table.board_bookmarks.name
       BOARD_DM_CONVOS_TABLE  = aws_dynamodb_table.board_dm_convos.name
       BOARD_DM_MESSAGES_TABLE = aws_dynamodb_table.board_dm_messages.name
+      BOARD_ACTIVITY_TABLE   = aws_dynamodb_table.board_activity.name
       ADMIN_USERNAMES        = var.admin_usernames
     }
   }
@@ -3047,6 +3138,11 @@ output "lambda_security_advisor_name" {
 output "lambda_reports_name" {
   value       = nonsensitive(aws_lambda_function.reports.function_name)
   description = "Reports Lambda function name"
+}
+
+output "lambda_cve_lookup_name" {
+  value       = nonsensitive(aws_lambda_function.cve_lookup.function_name)
+  description = "CVE Lookup Lambda function name"
 }
 
 output "lambda_board_name" {

@@ -52,7 +52,11 @@ export function bookmarksList() {
 }
 
 export function dmConvos() {
-  return boardActions<{ convos: { otherUserId: string; lastAt: string; lastPreview: string }[] }>({ action: 'dm-convos' })
+  return boardActions<{ convos: { otherUserId: string; lastAt: string; lastPreview: string; outbound?: boolean }[] }>({ action: 'dm-convos' })
+}
+
+export function activityList() {
+  return boardActions<{ items: { action: string; userId: string; username: string; target: string; details: string; createdAt: string }[] }>({ action: 'activity-list' })
 }
 
 export function dmMessages(otherUserId: string) {

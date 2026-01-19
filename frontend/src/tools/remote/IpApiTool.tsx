@@ -14,11 +14,11 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import { apiClient } from '../../lib/api'
 import OutputCard from '../../components/OutputCard'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import AddToReportButton from '../../components/AddToReportButton'
+import { useToolState } from '../../lib/useToolState'
 
 interface IpApiResult {
   status: string
@@ -40,29 +40,24 @@ interface IpApiResult {
 }
 
 export default function IpApiTool() {
-  const [ip, setIp] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<IpApiResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'ip-api',
+    { ip: '', loading: false, result: null as IpApiResult | null, error: '' },
+    { exclude: ['result'] }
+  )
+  const { ip, loading, result, error } = state
 
   async function handleLookup() {
     if (!ip) {
-      setError('Please enter an IP address')
+      setState({ error: 'Please enter an IP address' })
       return
     }
-
-    setLoading(true)
-    setError('')
-    setResult(null)
-
+    setState({ loading: true, error: '', result: null })
     try {
       const data = await apiClient.post('/ip-api', { ip })
-
-      setResult(data as IpApiResult)
+      setState({ result: data as IpApiResult, loading: false })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to lookup IP')
-    } finally {
-      setLoading(false)
+      setState({ error: e instanceof Error ? e.message : 'Failed to lookup IP', loading: false })
     }
   }
 
@@ -77,7 +72,7 @@ export default function IpApiTool() {
           <input
             type="text"
             value={ip}
-            onChange={(e) => setIp(e.target.value)}
+            onChange={(e) => setState({ ip: e.target.value })}
             onKeyPress={(e) => e.key === 'Enter' && handleLookup()}
             placeholder="8.8.8.8"
             className="input flex-1 font-mono"

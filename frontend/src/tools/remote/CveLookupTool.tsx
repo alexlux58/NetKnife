@@ -3,17 +3,24 @@
  * NETKNIFE - CVE & VULNERABILITY LOOKUP (REMOTE)
  * ==============================================================================
  *
- * Look up CVEs from NVD (NIST) and OSV; optional AI "should I be worried?"
- * analysis. Free APIs; no keys required (NVD_API_KEY optional for rate limits).
+ * - Look up CVEs from NVD (NIST) and OSV; optional AI "should I be worried?"
+ * - Browse top 30 CVEs by period, severity, and category (e.g. Microsoft, RCE).
+ * Free APIs; NVD_API_KEY optional for rate limits.
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
+import { useToolState } from '../../lib/useToolState'
 
-type Mode = 'cve' | 'package'
+type Mode = 'cve' | 'package' | 'top'
+
+interface CvssMetric {
+  score?: number
+  severity?: string
+  vector?: string
+}
 
 interface NvdItem {
   id: string
@@ -21,7 +28,7 @@ interface NvdItem {
   published: string | null
   updated: string | null
   references: string[]
-  cvss: { v3_1?: { score: number; severity: string; vector: string }; v3_0?: object; v2?: object }
+  cvss?: { v3_1?: CvssMetric; v3_0?: CvssMetric; v2?: CvssMetric }
   cwe: string | null
 }
 
@@ -42,6 +49,13 @@ interface CveResult {
   } | null
   analyze_limited?: boolean
   cached?: boolean
+  // top mode
+  items?: NvdItem[]
+  period?: string
+  severity?: string
+  category?: string
+  total?: number
+  apiError?: string
 }
 
 function firstNvd(r: CveResult): NvdItem | null {
@@ -53,74 +67,172 @@ function firstNvd(r: CveResult): NvdItem | null {
 
 const ECOSYSTEMS = ['npm', 'PyPI', 'Go', 'Maven', 'NuGet', 'RubyGems', 'crates.io', 'Packagist', 'Pub']
 
+const PERIODS = [
+  { value: 'this_month', label: 'This month' },
+  { value: 'last_month', label: 'Last month' },
+  { value: 'last_90', label: 'Last 90 days' },
+]
+
+const SEVERITIES = [
+  { value: 'CRITICAL', label: 'Critical' },
+  { value: 'HIGH', label: 'High' },
+  { value: 'BOTH', label: 'Critical + High' },
+]
+
+const CATEGORIES = [
+  { value: 'all', label: 'All' },
+  { value: 'microsoft', label: 'Microsoft' },
+  { value: 'apache', label: 'Apache' },
+  { value: 'linux kernel', label: 'Linux Kernel' },
+  { value: 'cisco', label: 'Cisco' },
+  { value: 'vmware', label: 'VMware' },
+  { value: 'rce', label: 'RCE' },
+  { value: 'auth', label: 'Authentication' },
+  { value: 'wordpress', label: 'WordPress' },
+  { value: 'kubernetes', label: 'Kubernetes' },
+  { value: 'oracle', label: 'Oracle' },
+  { value: 'adobe', label: 'Adobe' },
+  { value: 'fortinet', label: 'Fortinet' },
+  { value: 'sap', label: 'SAP' },
+  { value: 'google', label: 'Google' },
+  { value: 'apple', label: 'Apple' },
+  { value: 'php', label: 'PHP' },
+  { value: 'jenkins', label: 'Jenkins' },
+  { value: 'drupal', label: 'Drupal' },
+]
+
+const NVD_URL = (id: string) => `https://nvd.nist.gov/vuln/detail/${id}`
+
 export default function CveLookupTool() {
-  const [mode, setMode] = useState<Mode>('cve')
-  const [cveId, setCveId] = useState('CVE-2024-3400')
-  const [ecosystem, setEcosystem] = useState('npm')
-  const [pkg, setPkg] = useState('lodash')
-  const [version, setVersion] = useState('4.17.21')
-  const [analyze, setAnalyze] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<CveResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'cve-lookup',
+    {
+      mode: 'top' as Mode,
+      cveId: 'CVE-2024-3400',
+      ecosystem: 'npm',
+      pkg: 'lodash',
+      version: '4.17.21',
+      analyze: false,
+      period: 'last_month',
+      severity: 'CRITICAL',
+      category: 'all',
+      loading: false,
+      result: null as CveResult | null,
+      error: '',
+    },
+    { exclude: ['result'] }
+  )
+  const { mode, cveId, ecosystem, pkg, version, analyze, period, severity, category, loading, result, error } = state
 
   async function handleLookup() {
-    setLoading(true)
-    setError('')
-    setResult(null)
+    setState({ loading: true, error: '', result: null })
     try {
       const body: Record<string, unknown> = { mode, analyze }
       if (mode === 'cve') {
-        body.cveId = cveId.trim()
+        body.cveId = (cveId ?? '').trim()
+      } else if (mode === 'package') {
+        body.ecosystem = (ecosystem ?? '').trim()
+        body.package = (pkg ?? '').trim()
+        const v = (version ?? '').trim()
+        if (v) body.version = v
       } else {
-        body.ecosystem = ecosystem.trim()
-        body.package = pkg.trim()
-        if (version.trim()) body.version = version.trim()
+        body.period = period
+        body.severity = severity
+        body.category = category
       }
       const res = await apiPost<CveResult>('/cve-lookup', body)
-      setResult(res)
+      setState({ result: res, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${(e.body as { error?: string })?.error || JSON.stringify(e.body)}`)
+        setState({ error: `Error ${e.status}: ${(e.body as { error?: string })?.error || JSON.stringify(e.body)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
+
+  async function lookupCveById(id: string) {
+    const safeId = (id ?? '').trim()
+    if (!safeId) return
+    setState({ mode: 'cve', cveId: safeId, result: null, error: '', loading: true })
+    try {
+      const res = await apiPost<CveResult>('/cve-lookup', { mode: 'cve', cveId: safeId, analyze: false })
+      setState({ result: res, loading: false })
+    } catch (e) {
+      setState({ error: e instanceof ApiError ? (e.body as { error?: string })?.error || String(e.body) : String(e), loading: false })
+    }
+  }
+
+  const canRun = mode === 'top' || (mode === 'cve' ? (cveId ?? '').trim() : (pkg ?? '').trim())
+  const sends =
+    mode === 'cve' ? ['CVE ID'] : mode === 'package' ? ['Ecosystem', 'Package name', 'Version (optional)'] : ['Period, severity, category (filters)']
 
   return (
     <div className="space-y-6">
       <RemoteDisclosure
-        sends={mode === 'cve' ? ['CVE ID'] : ['Ecosystem', 'Package name', 'Version (optional)']}
-        notes="Uses free NVD (NIST) and OSV APIs. Optional AI analysis uses Security Advisor quota."
+        sends={sends}
+        notes="Uses NVD (NIST) and OSV. Top 30 uses NVD search by date/severity/keyword. Optional AI uses Security Advisor."
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-4">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setMode('cve')}
+              onClick={() => setState({ mode: 'top', result: null, error: '' })}
+              className={mode === 'top' ? 'btn-primary py-1 px-3' : 'btn-secondary py-1 px-3'}
+            >
+              Top 30
+            </button>
+            <button
+              onClick={() => setState({ mode: 'cve', result: null, error: '' })}
               className={mode === 'cve' ? 'btn-primary py-1 px-3' : 'btn-secondary py-1 px-3'}
             >
               CVE ID
             </button>
             <button
-              onClick={() => setMode('package')}
+              onClick={() => setState({ mode: 'package', result: null, error: '' })}
               className={mode === 'package' ? 'btn-primary py-1 px-3' : 'btn-secondary py-1 px-3'}
             >
               Package (OSV)
             </button>
           </div>
 
+          {mode === 'top' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-2">Period</label>
+                <select value={period} onChange={(e) => setState({ period: e.target.value })} className="input w-full">
+                  {PERIODS.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Severity</label>
+                <select value={severity} onChange={(e) => setState({ severity: e.target.value })} className="input w-full">
+                  {SEVERITIES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Category</label>
+                <select value={category} onChange={(e) => setState({ category: e.target.value })} className="input w-full">
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
           {mode === 'cve' && (
             <div>
               <label className="block text-sm font-medium mb-2">CVE ID</label>
               <input
                 type="text"
-                value={cveId}
-                onChange={(e) => setCveId(e.target.value)}
+                value={cveId ?? ''}
+                onChange={(e) => setState({ cveId: e.target.value })}
                 placeholder="CVE-2024-3400"
                 className="input font-mono w-full"
               />
@@ -131,11 +243,7 @@ export default function CveLookupTool() {
             <>
               <div>
                 <label className="block text-sm font-medium mb-2">Ecosystem</label>
-                <select
-                  value={ecosystem}
-                  onChange={(e) => setEcosystem(e.target.value)}
-                  className="input w-full"
-                >
+                <select value={ecosystem} onChange={(e) => setState({ ecosystem: e.target.value })} className="input w-full">
                   {ECOSYSTEMS.map((e) => (
                     <option key={e} value={e}>{e}</option>
                   ))}
@@ -146,7 +254,7 @@ export default function CveLookupTool() {
                 <input
                   type="text"
                   value={pkg}
-                  onChange={(e) => setPkg(e.target.value)}
+                  onChange={(e) => setState({ pkg: e.target.value })}
                   placeholder="lodash"
                   className="input font-mono w-full"
                 />
@@ -156,7 +264,7 @@ export default function CveLookupTool() {
                 <input
                   type="text"
                   value={version}
-                  onChange={(e) => setVersion(e.target.value)}
+                  onChange={(e) => setState({ version: e.target.value })}
                   placeholder="4.17.21"
                   className="input font-mono w-full"
                 />
@@ -164,17 +272,15 @@ export default function CveLookupTool() {
             </>
           )}
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={analyze} onChange={(e) => setAnalyze(e.target.checked)} />
-            <span className="text-sm">Analyze with AI — &quot;Should I be worried?&quot;</span>
-          </label>
+          {mode !== 'top' && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={analyze} onChange={(e) => setState({ analyze: e.target.checked })} />
+              <span className="text-sm">Analyze with AI — &quot;Should I be worried?&quot;</span>
+            </label>
+          )}
 
-          <button
-            onClick={handleLookup}
-            disabled={loading || (mode === 'cve' ? !cveId.trim() : !pkg.trim())}
-            className="btn-primary"
-          >
-            {loading ? 'Looking up…' : 'Look up'}
+          <button onClick={handleLookup} disabled={loading || !canRun} className="btn-primary">
+            {loading ? 'Loading…' : mode === 'top' ? 'Load top 30' : 'Look up'}
           </button>
 
           {error && (
@@ -183,12 +289,79 @@ export default function CveLookupTool() {
         </div>
 
         <div className="space-y-4">
-          {result && (
+          {result?.mode === 'top' && result.items && result.items.length > 0 && (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-gray-400">
+                  Top {result.items.length} · {result.period} · {result.severity} · {result.category || 'all'}
+                  {result.cached && ' · Cached'}
+                </span>
+                <AddToReportButton
+                  toolId="cve-lookup"
+                  input={`top:${result.period}-${result.severity}-${result.category || 'all'}`}
+                  data={result}
+                  category="Threat Intelligence"
+                />
+              </div>
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto max-h-[70vh]">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-[#161b22]">
+                      <tr className="text-left text-gray-400 border-b border-[#30363d]">
+                        <th className="px-3 py-2">CVE</th>
+                        <th className="px-3 py-2">CVSS</th>
+                        <th className="px-3 py-2">Description</th>
+                        <th className="px-3 py-2">Published</th>
+                        <th className="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.items.map((it, idx) => {
+                        const id = it?.id ?? ''
+                        if (!id) return null
+                        const sev = it.cvss?.v3_1 ?? it.cvss?.v3_0
+                        const score = sev?.score ?? null
+                        const sevLabel = sev?.severity || '—'
+                        const badge = (score != null && score >= 9) ? 'bg-red-500/20 text-red-400' : (score != null && score >= 7) ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-500/20 text-gray-400'
+                        return (
+                          <tr key={id || `row-${idx}`} className="border-b border-[#21262d] hover:bg-[#21262d]/50">
+                            <td className="px-3 py-2">
+                              <a href={NVD_URL(id)} target="_blank" rel="noreferrer" className="font-mono text-cyan-400 hover:underline">
+                                {id}
+                              </a>
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${badge}`}>{score != null ? score : '—'} {sevLabel}</span>
+                            </td>
+                            <td className="px-3 py-2 text-gray-400 max-w-xs truncate" title={it.description || ''}>
+                              {it.description?.slice(0, 120) || '—'}{(it.description?.length || 0) > 120 ? '…' : ''}
+                            </td>
+                            <td className="px-3 py-2 text-gray-500 text-xs">{it.published ? new Date(it.published).toLocaleDateString() : '—'}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => lookupCveById(id)}
+                                className="text-xs text-blue-400 hover:underline"
+                              >
+                                Details
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {result && result.mode !== 'top' && (
             <>
               <div className="flex justify-end">
                 <AddToReportButton
                   toolId="cve-lookup"
-                  input={mode === 'cve' ? cveId : `${ecosystem}/${pkg}${version ? '@' + version : ''}`}
+                  input={mode === 'cve' ? (cveId ?? '') : `${ecosystem ?? ''}/${pkg ?? ''}${(version ?? '') ? '@' + version : ''}`}
                   data={result}
                   category="Threat Intelligence"
                 />
@@ -270,6 +443,19 @@ export default function CveLookupTool() {
 
               {result.cached && <span className="badge text-gray-500">Cached</span>}
             </>
+          )}
+
+          {result?.mode === 'top' && result.items?.length === 0 && (
+            <div className={`card p-6 text-center ${result.apiError ? 'border-amber-500/50 bg-amber-500/5' : ''}`}>
+              {result.apiError ? (
+                <>
+                  <p className="text-amber-400 font-medium">NVD API issue</p>
+                  <p className="text-gray-400 text-sm mt-2">{result.apiError}</p>
+                </>
+              ) : (
+                <p className="text-gray-400">No CVEs found for this period/severity/category.</p>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -15,11 +15,11 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
+import { useToolState } from '../../lib/useToolState'
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV']
 
@@ -40,34 +40,29 @@ interface DnsResult {
 }
 
 export default function DnsTool() {
-  const [name, setName] = useState('example.com')
-  const [type, setType] = useState('A')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<DnsResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'dns',
+    { name: 'example.com', type: 'A', loading: false, result: null as DnsResult | null, error: '' },
+    { exclude: ['result', 'loading', 'error'] }
+  )
+  const { name, type, loading, result, error } = state
 
   async function handleLookup() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const res = await apiPost<DnsResult>('/dns', { name, type })
-      setResult(res)
+      setState({ result: res, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${JSON.stringify(e.body, null, 2)}`)
+        setState({ error: `Error ${e.status}: ${JSON.stringify(e.body, null, 2)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
   function loadExample() {
-    setName('cloudflare.com')
-    setType('A')
+    setState({ name: 'cloudflare.com', type: 'A' })
   }
 
   return (
@@ -88,7 +83,7 @@ export default function DnsTool() {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setState({ name: e.target.value })}
               placeholder="example.com"
               className="input font-mono"
             />
@@ -101,7 +96,7 @@ export default function DnsTool() {
               {RECORD_TYPES.map((t) => (
                 <button
                   key={t}
-                  onClick={() => setType(t)}
+                  onClick={() => setState({ type: t })}
                   className={type === t ? 'btn-primary py-1 px-3' : 'btn-secondary py-1 px-3'}
                 >
                   {t}

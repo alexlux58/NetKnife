@@ -4,12 +4,12 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
+import { useToolState } from '../../lib/useToolState'
 
 interface SslLabsResult {
   host: string
@@ -42,27 +42,24 @@ const gradeColors: Record<string, string> = {
 }
 
 export default function SslLabsTool() {
-  const [host, setHost] = useState('example.com')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<SslLabsResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'ssl-labs',
+    { host: 'example.com', loading: false, result: null as SslLabsResult | null, error: '' },
+    { exclude: ['result', 'loading', 'error'] }
+  )
+  const { host, loading, result, error } = state
 
   async function handleCheck() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const data = await apiPost<SslLabsResult>('/ssl-labs', { host })
-      setResult(data)
+      setState({ result: data, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${formatJson(e.body)}`)
+        setState({ error: `Error ${e.status}: ${formatJson(e.body)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -87,7 +84,7 @@ export default function SslLabsTool() {
             <input
               type="text"
               value={host}
-              onChange={(e) => setHost(e.target.value)}
+              onChange={(e) => setState({ host: e.target.value })}
               placeholder="example.com"
               className="input"
             />

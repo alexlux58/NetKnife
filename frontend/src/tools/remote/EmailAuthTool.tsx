@@ -10,7 +10,7 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -57,12 +57,20 @@ export default function EmailAuthTool() {
   const [result, setResult] = useState<EmailAuthResult | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { domain: '', dkimSelector: 'default' },
   })
 
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('netknife:tool:email-auth')
+      if (raw) reset(JSON.parse(raw))
+    } catch (_) {}
+  }, [reset])
+
   async function onSubmit(data: FormData) {
+    sessionStorage.setItem('netknife:tool:email-auth', JSON.stringify(data))
     setLoading(true)
     setResult(null)
     try {

@@ -4,12 +4,12 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import JsonViewer from '../../components/JsonViewer'
 import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
+import { useToolState } from '../../lib/useToolState'
 
 interface AsnResult {
   asn: number
@@ -34,27 +34,24 @@ interface AsnResult {
 }
 
 export default function AsnDetailsTool() {
-  const [asnInput, setAsnInput] = useState('13335')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<AsnResult | null>(null)
-  const [error, setError] = useState('')
+  const [state, setState] = useToolState(
+    'asn-details',
+    { asnInput: '13335', loading: false, result: null as AsnResult | null, error: '' },
+    { exclude: ['result'] }
+  )
+  const { asnInput, loading, result, error } = state
 
   async function handleLookup() {
-    setLoading(true)
-    setError('')
-    setResult(null)
-    
+    setState({ loading: true, error: '', result: null })
     try {
       const data = await apiPost<AsnResult>('/asn-details', { asn: asnInput })
-      setResult(data)
+      setState({ result: data, loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
-        setError(`Error ${e.status}: ${formatJson(e.body)}`)
+        setState({ error: `Error ${e.status}: ${formatJson(e.body)}`, loading: false })
       } else {
-        setError(String(e))
+        setState({ error: String(e), loading: false })
       }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -76,7 +73,7 @@ export default function AsnDetailsTool() {
             <input
               type="text"
               value={asnInput}
-              onChange={(e) => setAsnInput(e.target.value)}
+              onChange={(e) => setState({ asnInput: e.target.value })}
               placeholder="13335 or AS13335"
               className="input font-mono"
             />
@@ -98,7 +95,7 @@ export default function AsnDetailsTool() {
               ].map(a => (
                 <button
                   key={a.asn}
-                  onClick={() => setAsnInput(a.asn)}
+                  onClick={() => setState({ asnInput: a.asn })}
                   className="text-left px-2 py-1 rounded hover:bg-[#21262d] text-xs"
                 >
                   <span className="text-blue-400">{a.asn}</span> - {a.name}

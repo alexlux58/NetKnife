@@ -23,42 +23,34 @@
  * ==============================================================================
  */
 
-import { useState } from 'react'
 import OutputCard from '../../components/OutputCard'
 import AddToReportButton from '../../components/AddToReportButton'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
+import { useToolState } from '../../lib/useToolState'
 
 export default function HeadersTool() {
-  const [url, setUrl] = useState('https://example.com')
-  const [loading, setLoading] = useState(false)
-  const [output, setOutput] = useState('')
-  const [error, setError] = useState('')
-  const [resultData, setResultData] = useState<any>(null)
+  const [state, setState] = useToolState(
+    'headers',
+    { url: 'https://example.com', loading: false, output: '', error: '', resultData: null as any },
+    { exclude: ['output', 'resultData'] }
+  )
+  const { url, loading, output, error, resultData } = state
 
   async function handleScan() {
-    setLoading(true)
-    setError('')
-    setResultData(null)
-    
+    setState({ loading: true, error: '', resultData: null })
     try {
       const result = await apiPost('/headers', { url })
-      setResultData(result)
-      setOutput(formatJson(result))
+      setState({ resultData: result, output: formatJson(result), loading: false })
     } catch (e) {
       if (e instanceof ApiError) {
         const errorData = { error: `Error ${e.status}: ${formatJson(e.body)}` }
-        setResultData(errorData)
-        setError(`Error ${e.status}: ${formatJson(e.body)}`)
+        setState({ resultData: errorData, error: `Error ${e.status}: ${formatJson(e.body)}`, output: '', loading: false })
       } else {
         const errorData = { error: String(e) }
-        setResultData(errorData)
-        setError(String(e))
+        setState({ resultData: errorData, error: String(e), output: '', loading: false })
       }
-      setOutput('')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -86,7 +78,7 @@ export default function HeadersTool() {
             <input
               type="text"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => setState({ url: e.target.value })}
               placeholder="https://example.com"
               className="input font-mono"
             />
@@ -113,7 +105,7 @@ export default function HeadersTool() {
               {examples.map((ex) => (
                 <button
                   key={ex.value}
-                  onClick={() => setUrl(ex.value)}
+                  onClick={() => setState({ url: ex.value })}
                   className="btn-secondary text-xs py-1 px-2"
                 >
                   {ex.label}

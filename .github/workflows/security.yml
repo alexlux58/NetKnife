@@ -33,7 +33,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run GitGuardian ggshield
-        uses: GitGuardian/ggshield-action@v1.26.0
+        uses: GitGuardian/ggshield-action@v1.46.0
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}

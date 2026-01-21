@@ -224,7 +224,7 @@ export default function HeadersTool() {
             <span className="text-xs">→</span>
             <div>
               <div className="font-medium">All Security Resources</div>
-              <div className="text-xs text-gray-500">Browse 300+ resources</div>
+              <div className="text-xs text-gray-500">Browse 190+ resources</div>
             </div>
           </a>
         </div>

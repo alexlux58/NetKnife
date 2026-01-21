@@ -694,7 +694,7 @@ export const tools: Tool[] = [
     category: 'Reference & Templates',
     path: '/tools/security-resources',
     component: React.lazy(() => import('./offline/SecurityResourcesTool')),
-    description: 'Curated directory of 300+ security tools, platforms, and references',
+    description: 'Curated directory of 190+ security tools, platforms, and references',
   },
 ]
 

@@ -6,7 +6,7 @@
  * Curated collection of security tools, platforms, and references.
  *
  * FEATURES:
- * - 300+ categorized security resources
+ * - 190+ categorized security resources
  * - Search by name, description, or tags
  * - Filter by category
  * - Direct links to external resources
@@ -60,7 +60,7 @@ export default function SecurityResourcesTool() {
             <div>
               <h2 className="text-2xl font-bold text-white">Security Resources Directory</h2>
               <p className="text-blue-300 text-sm">
-                Curated collection of 300+ security tools, platforms, and references
+                Curated collection of 190+ security tools, platforms, and references
               </p>
             </div>
           </div>

@@ -767,12 +767,6 @@ export const SECURITY_RESOURCES: ResourceCategory[] = [
         tags: ["training", "pentesting", "labs"]
       },
       {
-        name: "PortSwigger Web Security Academy",
-        url: "https://portswigger.net/web-security/all-labs",
-        description: "Free web security training with practical labs",
-        tags: ["training", "web-security", "labs"]
-      },
-      {
         name: "HackerSploit",
         url: "https://hackersploit.org/",
         description: "Cybersecurity training and tutorials",

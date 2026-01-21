@@ -263,6 +263,140 @@ resource "aws_dynamodb_table" "reports" {
 }
 
 # ------------------------------------------------------------------------------
+# DYNAMODB TABLE: GUIDE PROGRESS
+# ------------------------------------------------------------------------------
+# pk: USER#<sub>
+# sk: GUIDE#<guideId>#STEP#<stepId>
+# TTL: 1 year by default
+resource "aws_dynamodb_table" "guide_progress" {
+  name         = "${local.name}-guide-progress"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Guide progress tracking"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# DYNAMODB TABLE: GUIDE CONTENT (AI cache / authored content)
+# ------------------------------------------------------------------------------
+# pk: GUIDE#<guideId>
+# sk: STEP#<stepId>#v<version>
+# TTL: optional (used for AI cache)
+resource "aws_dynamodb_table" "guide_content" {
+  name         = "${local.name}-guide-content"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Guide content cache"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# DYNAMODB TABLE: SCANNER CONFIGS
+# ------------------------------------------------------------------------------
+# pk: USER#<sub>
+# sk: SCANNER#<scannerId>
+resource "aws_dynamodb_table" "scanner_configs" {
+  name         = "${local.name}-scanner-configs"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Scanner configuration metadata (secrets stored elsewhere)"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# DYNAMODB TABLE: SCAN RESULTS
+# ------------------------------------------------------------------------------
+# pk: USER#<sub>
+# sk: SCAN#<scanId>
+resource "aws_dynamodb_table" "scan_results" {
+  name         = "${local.name}-scan-results"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+    Purpose     = "Vulnerability scan results"
+  }
+}
+
+# ------------------------------------------------------------------------------
 # DYNAMODB TABLE: USER PROFILES
 # ------------------------------------------------------------------------------
 # User settings: theme, avatarUrl, bio, displayName. pk = Cognito sub.
@@ -628,6 +762,26 @@ resource "aws_iam_role_policy" "cloudwatch_alarms_read" {
       Effect   = "Allow"
       Action   = ["cloudwatch:DescribeAlarms", "cloudwatch:DescribeAlarmHistory"]
       Resource = "*"
+    }]
+  })
+}
+
+# Secrets Manager access (scanners Lambda - for storing scanner credentials)
+resource "aws_iam_role_policy" "secrets_manager_access" {
+  name   = "${local.name}-secrets-manager-access"
+  role   = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret"
+      ]
+      Resource = "arn:aws:secretsmanager:*:*:secret:netknife/*"
     }]
   })
 }
@@ -2596,6 +2750,129 @@ resource "aws_lambda_permission" "reports" {
   statement_id  = "AllowAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.reports.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Guides (progress + content)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "guides_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/guides"
+  output_path = "${path.module}/guides.zip"
+}
+
+resource "aws_lambda_function" "guides" {
+  function_name = "${local.name}-guides"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Guides: progress + content (action-based)"
+
+  filename         = data.archive_file.guides_zip.output_path
+  source_code_hash = data.archive_file.guides_zip.output_base64sha256
+
+  timeout     = 15
+  memory_size = 256
+
+  environment {
+    variables = {
+      GUIDE_PROGRESS_TABLE       = aws_dynamodb_table.guide_progress.name
+      GUIDE_CONTENT_TABLE        = aws_dynamodb_table.guide_content.name
+      # Optional: internal call to Security Advisor for content generation.
+      # You can set this to the API URL + /security-advisor (or leave blank).
+      SECURITY_ADVISOR_LAMBDA_URL = ""
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "guides" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.guides.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "guides" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /guides"
+  target    = "integrations/${aws_apigatewayv2_integration.guides.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "guides" {
+  statement_id  = "AllowAPIGatewayGuides"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.guides.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+# ------------------------------------------------------------------------------
+# LAMBDA FUNCTION: Scanners (configs + scans)
+# ------------------------------------------------------------------------------
+
+data "archive_file" "scanners_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../backend/functions/scanners"
+  output_path = "${path.module}/scanners.zip"
+}
+
+resource "aws_lambda_function" "scanners" {
+  function_name = "${local.name}-scanners"
+  role          = aws_iam_role.lambda_role.arn
+  runtime       = "nodejs20.x"
+  handler       = "index.handler"
+  description   = "Vulnerability scanners: configs + scans (action-based)"
+
+  filename         = data.archive_file.scanners_zip.output_path
+  source_code_hash = data.archive_file.scanners_zip.output_base64sha256
+
+  timeout     = 30
+  memory_size = 256
+
+  environment {
+    variables = {
+      SCANNER_CONFIGS_TABLE = aws_dynamodb_table.scanner_configs.name
+      SCAN_RESULTS_TABLE    = aws_dynamodb_table.scan_results.name
+    }
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.env
+  }
+}
+
+resource "aws_apigatewayv2_integration" "scanners" {
+  api_id             = aws_apigatewayv2_api.http.id
+  integration_type   = "AWS_PROXY"
+  integration_uri    = aws_lambda_function.scanners.arn
+  integration_method = "POST"
+}
+
+resource "aws_apigatewayv2_route" "scanners" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /scanners"
+  target    = "integrations/${aws_apigatewayv2_integration.scanners.id}"
+
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_lambda_permission" "scanners" {
+  statement_id  = "AllowAPIGatewayScanners"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.scanners.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }

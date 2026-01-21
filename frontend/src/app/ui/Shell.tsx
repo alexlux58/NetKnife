@@ -26,6 +26,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { ReportProvider } from '../../lib/reportContext'
 import { BillingProvider } from '../../lib/BillingContext'
+import { GuideProvider } from '../../lib/GuideContext'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import UpgradeModal from '../../components/UpgradeModal'
@@ -43,6 +44,7 @@ export default function Shell() {
   return (
     <BillingProvider>
       <ReportProvider>
+        <GuideProvider>
         <div className="min-h-screen min-h-[100dvh] bg-terminal-bg text-terminal-text">
         <div className="flex">
           <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -58,6 +60,7 @@ export default function Shell() {
         </div>
         <UpgradeModal />
         <AssistantChat />
+        </GuideProvider>
       </ReportProvider>
     </BillingProvider>
   )

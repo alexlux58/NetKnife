@@ -164,6 +164,29 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }: Side
       {/* Message board */}
       <div className="px-4 pb-2 space-y-1">
         <NavLink
+          to="/guides"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+              isActive ? 'bg-blue-500/20 text-blue-300' : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
+            }`
+          }
+        >
+          <ReaderIcon className="w-4 h-4" />
+          Guides
+        </NavLink>
+        <NavLink
+          to="/guides/coverage-map"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-3 py-2 rounded text-sm ml-4 ${
+              isActive ? 'bg-blue-500/20 text-blue-300' : 'text-gray-400 hover:text-white hover:bg-[#21262d]/50'
+            }`
+          }
+        >
+          Coverage Map
+        </NavLink>
+        <NavLink
           to="/board"
           onClick={onClose}
           className={({ isActive }) =>

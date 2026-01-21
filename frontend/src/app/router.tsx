@@ -39,6 +39,9 @@ import AlarmsPage from './views/AlarmsPage'
 import BoardPage from './views/BoardPage'
 import ActivityPage from './views/ActivityPage'
 import PrivacyPage from './views/PrivacyPage'
+import GuidesOverviewPage from './views/GuidesOverviewPage'
+import GuideLayoutPage from './views/GuideLayoutPage'
+import CoverageMapPage from './views/CoverageMapPage'
 import CookieConsent from '../components/CookieConsent'
 import { Link } from 'react-router-dom'
 import { tools } from '../tools/registry'
@@ -158,6 +161,10 @@ export const router = createBrowserRouter([
           { path: 'alarms', element: <AlarmsPage /> },
           { path: 'board', element: <BoardPage /> },
           { path: 'activity', element: <ActivityPage /> },
+          { path: 'guides', element: <GuidesOverviewPage /> },
+          { path: 'guides/coverage-map', element: <CoverageMapPage /> },
+          { path: 'guides/:guideId', element: <GuideLayoutPage /> },
+          { path: 'guides/:guideId/:stepId', element: <GuideLayoutPage /> },
           ...tools.map((tool) => ({
             path: tool.path.replace(/^\//, ''),
             element: <ToolLoader id={tool.id} />,

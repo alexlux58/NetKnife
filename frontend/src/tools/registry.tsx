@@ -394,6 +394,15 @@ export const tools: Tool[] = [
     description: 'Collect tool results and generate PDF reports',
   },
   {
+    id: 'vuln-scanner',
+    name: 'Vulnerability Scanners',
+    kind: 'remote',
+    category: 'Utilities',
+    path: '/tools/vuln-scanner',
+    component: React.lazy(() => import('./remote/VulnScannerTool')),
+    description: 'Run vulnerability scanners (cloud + agent)',
+  },
+  {
     id: 'virustotal',
     name: 'VirusTotal',
     kind: 'remote',

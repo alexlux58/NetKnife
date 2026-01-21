@@ -687,6 +687,15 @@ export const tools: Tool[] = [
     component: React.lazy(() => import('./offline/PromptTemplatesTool')),
     description: 'Security and network engineering prompt templates',
   },
+  {
+    id: 'security-resources',
+    name: 'Security Resources',
+    kind: 'offline',
+    category: 'Reference & Templates',
+    path: '/tools/security-resources',
+    component: React.lazy(() => import('./offline/SecurityResourcesTool')),
+    description: 'Curated directory of 190+ security tools, platforms, and references',
+  },
 ]
 
 /**

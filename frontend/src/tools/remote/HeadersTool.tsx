@@ -271,6 +271,86 @@ export default function HeadersTool() {
           </div>
         )}
       </div>
+
+      {/* Related Resources */}
+      <div className="card p-4">
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <span>📚</span>
+          <span>Related Resources</span>
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          <a
+            href="https://csp-evaluator.withgoogle.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">CSP Evaluator</div>
+              <div className="text-xs text-gray-500">Google's CSP validator</div>
+            </div>
+          </a>
+          <a
+            href="https://content-security-policy.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">CSP Reference</div>
+              <div className="text-xs text-gray-500">Complete CSP documentation</div>
+            </div>
+          </a>
+          <a
+            href="https://securityheaders.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">Security Headers Scanner</div>
+              <div className="text-xs text-gray-500">Analyze HTTP headers</div>
+            </div>
+          </a>
+          <a
+            href="https://report-uri.com/home/generate"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">Report URI Generator</div>
+              <div className="text-xs text-gray-500">Generate CSP reporting</div>
+            </div>
+          </a>
+          <a
+            href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">HTTP Headers (MDN)</div>
+              <div className="text-xs text-gray-500">Complete HTTP reference</div>
+            </div>
+          </a>
+          <a
+            href="/tools/security-resources"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-green-400 hover:text-green-300"
+          >
+            <span className="text-xs">→</span>
+            <div>
+              <div className="font-medium">All Security Resources</div>
+              <div className="text-xs text-gray-500">Browse 190+ resources</div>
+            </div>
+          </a>
+        </div>
+      </div>
     </div>
   )
 }

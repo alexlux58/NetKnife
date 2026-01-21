@@ -263,25 +263,25 @@ export default function PortReferenceTool() {
           </span>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-[#161b22]">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Port</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Protocol</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Service</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Description</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Category</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Notes</th>
+                <th className="text-left px-3 sm:px-4 py-2 sm:py-3 font-medium text-gray-400">Port</th>
+                <th className="text-left px-3 sm:px-4 py-2 sm:py-3 font-medium text-gray-400">Protocol</th>
+                <th className="text-left px-3 sm:px-4 py-2 sm:py-3 font-medium text-gray-400">Service</th>
+                <th className="text-left px-3 sm:px-4 py-2 sm:py-3 font-medium text-gray-400 hidden md:table-cell">Description</th>
+                <th className="text-left px-3 sm:px-4 py-2 sm:py-3 font-medium text-gray-400 hidden lg:table-cell">Category</th>
+                <th className="text-left px-3 sm:px-4 py-2 sm:py-3 font-medium text-gray-400 hidden xl:table-cell">Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#21262d]">
               {filteredPorts.map((entry, index) => (
                 <tr key={index} className="hover:bg-[#161b22]">
-                  <td className="px-4 py-3">
+                  <td className="px-3 sm:px-4 py-2 sm:py-3">
                     <span className="font-mono text-blue-400">{entry.port}</span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 sm:px-4 py-2 sm:py-3">
                     <span className={`text-xs px-2 py-0.5 rounded ${
                       entry.protocol === 'TCP' ? 'bg-cyan-500/20 text-cyan-400' :
                       entry.protocol === 'UDP' ? 'bg-purple-500/20 text-purple-400' :
@@ -290,19 +290,25 @@ export default function PortReferenceTool() {
                       {entry.protocol}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-white">
-                    {entry.service}
-                    {entry.secure && (
-                      <span className="ml-2 text-emerald-400" title="Secure">🔒</span>
-                    )}
+                  <td className="px-3 sm:px-4 py-2 sm:py-3 font-medium text-white">
+                    <div className="flex items-center gap-1">
+                      <span className="truncate max-w-[120px] sm:max-w-none">{entry.service}</span>
+                      {entry.secure && (
+                        <span className="text-emerald-400 flex-shrink-0" title="Secure">🔒</span>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-400">{entry.description}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 sm:px-4 py-2 sm:py-3 text-gray-400 hidden md:table-cell">
+                    <span className="truncate block max-w-[200px] lg:max-w-none" title={entry.description}>
+                      {entry.description}
+                    </span>
+                  </td>
+                  <td className="px-3 sm:px-4 py-2 sm:py-3 hidden lg:table-cell">
                     <span className="text-xs px-2 py-0.5 rounded bg-[#21262d] text-gray-300">
                       {entry.category}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-yellow-400">
+                  <td className="px-3 sm:px-4 py-2 sm:py-3 text-xs text-yellow-400 hidden xl:table-cell">
                     {entry.notes || '-'}
                   </td>
                 </tr>

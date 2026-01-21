@@ -47,10 +47,10 @@ export default function Shell() {
         <div className="flex">
           <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-          <div className="flex-1 min-w-0 md:ml-72">
+          <div className="flex-1 min-w-0 lg:ml-72">
             <Topbar pathname={location.pathname} onMenuClick={() => setSidebarOpen(true)} />
 
-            <main className="p-4 sm:p-5 md:p-6 max-w-6xl">
+            <main className="p-3 sm:p-4 md:p-5 lg:p-6 max-w-6xl mx-auto w-full">
               <Outlet />
             </main>
           </div>

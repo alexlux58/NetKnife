@@ -99,7 +99,7 @@ export default function CommandTemplatesTool() {
       </div>
 
       {/* Main content */}
-      <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-[400px_1fr]">
         {/* Left panel: Filters and template list */}
         <div className="space-y-4">
           {/* Search */}

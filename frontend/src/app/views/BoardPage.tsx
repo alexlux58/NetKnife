@@ -201,7 +201,7 @@ export default function BoardPage() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
         {/* Left: channels + bookmarks + DMs */}
         <div className="card p-4 space-y-4">
           <div>

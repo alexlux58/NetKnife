@@ -59,7 +59,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ mobileOpen = false, onClose = () => {} }: SidebarProps) {
-  const isMobile = useMediaQuery('(max-width: 767px)')
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const { canUseRemote } = useBilling()
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<Set<ToolCategory>>(
@@ -102,10 +102,10 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }: Side
 
   return (
     <>
-      {/* Backdrop - mobile only when open */}
+      {/* Backdrop - mobile/tablet only when open */}
       {isMobile && mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
           onClick={onClose}
           onKeyDown={(e) => e.key === 'Escape' && onClose()}
           aria-hidden
@@ -115,12 +115,12 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }: Side
       <aside
         aria-hidden={isMobile && !mobileOpen}
         className={`
-          fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:max-w-none
+          fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] lg:max-w-none
           bg-[#161b22] border-r border-[#30363d]
           flex flex-col
           transform transition-transform duration-200 ease-out
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0
+          lg:translate-x-0
         `}
       >
         {/* Header */}
@@ -135,11 +135,11 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }: Side
             <h1 className="text-lg font-bold">NetKnife</h1>
             <p className="text-xs text-gray-400">{tools.length} Tools</p>
           </div>
-          {/* Close button - mobile only */}
+          {/* Close button - mobile/tablet only */}
           <button
             type="button"
             onClick={onClose}
-            className="md:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 -m-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#21262d] touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 -m-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#21262d] touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Close menu"
           >
             <Cross2Icon className="w-5 h-5" />

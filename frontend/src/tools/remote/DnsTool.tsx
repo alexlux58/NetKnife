@@ -164,25 +164,90 @@ export default function DnsTool() {
                       Answer Records ({result.answer.length})
                     </span>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                    <table className="w-full text-sm min-w-[500px]">
                       <thead>
                         <tr className="border-b border-gray-800 text-gray-500 text-left">
-                          <th className="p-3 font-medium">Name</th>
-                          <th className="p-3 font-medium">TTL</th>
-                          <th className="p-3 font-medium">Data</th>
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium">Name</th>
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium hidden md:table-cell">Type</th>
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium">TTL</th>
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium">Data</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {result.answer.map((record, idx) => (
+                        {result.answer.map((record, idx) => {
+                          const typeNames: Record<number, string> = {
+                            1: 'A', 2: 'NS', 5: 'CNAME', 15: 'MX', 16: 'TXT', 28: 'AAAA', 33: 'SRV'
+                          }
+                          return (
+                            <tr key={idx} className="border-b border-gray-800/50 hover:bg-gray-900/30">
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 font-mono text-cyan-400 break-all">{record.name}</td>
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 text-gray-400 hidden md:table-cell">
+                                <span className="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400">
+                                  {typeNames[record.type] || `Type ${record.type}`}
+                                </span>
+                              </td>
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 text-gray-400">
+                                <span className="font-mono text-xs">{record.TTL}s</span>
+                                <span className="md:hidden ml-2 text-xs text-gray-500">
+                                  ({typeNames[record.type] || record.type})
+                                </span>
+                              </td>
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 font-mono text-green-400 break-all">
+                                {record.data}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Authority records */}
+              {result.authority && Array.isArray(result.authority) && result.authority.length > 0 && (
+                <div className="card overflow-hidden">
+                  <div className="p-3 border-b border-gray-800 bg-gray-900/50">
+                    <span className="text-sm font-medium text-gray-400">
+                      Authority Records ({result.authority.length})
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                    <table className="w-full text-sm min-w-[500px]">
+                      <thead>
+                        <tr className="border-b border-gray-800 text-gray-500 text-left">
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium">Name</th>
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium hidden md:table-cell">Type</th>
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium">TTL</th>
+                          <th className="px-3 sm:p-3 py-2 sm:py-3 font-medium">Data</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(result.authority as DnsRecord[]).map((record, idx) => {
+                          const typeNames: Record<number, string> = {
+                            1: 'A', 2: 'NS', 5: 'CNAME', 15: 'MX', 16: 'TXT', 28: 'AAAA', 33: 'SRV'
+                          }
+                          return (
                           <tr key={idx} className="border-b border-gray-800/50 hover:bg-gray-900/30">
-                            <td className="p-3 font-mono text-cyan-400">{record.name}</td>
-                            <td className="p-3 text-gray-400">{record.TTL}s</td>
-                            <td className="p-3 font-mono text-green-400 break-all">
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 font-mono text-cyan-400 break-all">{record.name}</td>
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 text-gray-400 hidden md:table-cell">
+                                <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
+                                  {typeNames[record.type] || `Type ${record.type}`}
+                                </span>
+                              </td>
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 text-gray-400">
+                                <span className="font-mono text-xs">{record.TTL}s</span>
+                                <span className="md:hidden ml-2 text-xs text-gray-500">
+                                  ({typeNames[record.type] || record.type})
+                                </span>
+                              </td>
+                              <td className="px-3 sm:p-3 py-2 sm:py-3 font-mono text-green-400 break-all">
                               {record.data}
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>

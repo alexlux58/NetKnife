@@ -175,11 +175,111 @@ exports.handler = async (event) => {
     
     // If scan is in progress
     if (data.status === "IN_PROGRESS") {
+      const progress = data.endpoints?.[0]?.progress || 0;
+      
+      // Special case: If progress is 100%, SSL Labs might have just finished
+      // Try fetching without fromCache to get fresh results
+      if (progress >= 100) {
+        try {
+          const freshUrl = `${SSL_LABS_API}/analyze?host=${encodeURIComponent(cleanHost)}&all=done`;
+          const freshResponse = await fetchWithTimeout(freshUrl, 10000);
+          
+          if (freshResponse.ok) {
+            const freshData = await freshResponse.json();
+            
+            // If it's now ready, process it
+            if (freshData.status === "READY") {
+              // Process the ready result (code continues below)
+              const result = {
+                host: cleanHost,
+                status: "ready",
+                startTime: new Date(freshData.startTime).toISOString(),
+                testTime: new Date(freshData.testTime).toISOString(),
+                engineVersion: freshData.engineVersion,
+                criteriaVersion: freshData.criteriaVersion,
+                
+                // Overall grade from first endpoint
+                grade: freshData.endpoints?.[0]?.grade,
+                gradeTrustIgnored: freshData.endpoints?.[0]?.gradeTrustIgnored,
+                hasWarnings: freshData.endpoints?.[0]?.hasWarnings,
+                isExceptional: freshData.endpoints?.[0]?.isExceptional,
+                
+                // Endpoints summary
+                endpoints: (freshData.endpoints || []).map(ep => ({
+                  ipAddress: ep.ipAddress,
+                  serverName: ep.serverName,
+                  grade: ep.grade,
+                  gradeTrustIgnored: ep.gradeTrustIgnored,
+                  hasWarnings: ep.hasWarnings,
+                  isExceptional: ep.isExceptional,
+                  progress: ep.progress,
+                  duration: ep.duration,
+                  delegation: ep.delegation,
+                })),
+                
+                // Protocol support (from first endpoint's details if available)
+                protocols: freshData.endpoints?.[0]?.details?.protocols?.map(p => ({
+                  name: p.name,
+                  version: p.version,
+                })),
+                
+                // Certificate information (from first endpoint's details)
+                certificate: freshData.endpoints?.[0]?.details?.cert ? {
+                  subject: freshData.endpoints[0].details.cert.subject,
+                  issuer: freshData.endpoints[0].details.cert.issuerLabel || freshData.endpoints[0].details.cert.issuer,
+                  validFrom: freshData.endpoints[0].details.cert.notBefore,
+                  validTo: freshData.endpoints[0].details.cert.notAfter,
+                  serialNumber: freshData.endpoints[0].details.cert.sigAlg,
+                  signatureAlgorithm: freshData.endpoints[0].details.cert.sigAlg,
+                  keyAlg: freshData.endpoints[0].details.cert.keyAlg,
+                  keySize: freshData.endpoints[0].details.cert.keySize,
+                  commonNames: freshData.endpoints[0].details.cert.commonNames || [],
+                  altNames: freshData.endpoints[0].details.cert.altNames || [],
+                  issues: freshData.endpoints[0].details.cert.issues || [],
+                } : null,
+                
+                // Vulnerabilities
+                vulnerabilities: freshData.endpoints?.[0]?.details ? {
+                  beast: freshData.endpoints[0].details.vulnBeast,
+                  poodle: freshData.endpoints[0].details.poodle,
+                  poodleTls: freshData.endpoints[0].details.poodleTls,
+                  heartbleed: freshData.endpoints[0].details.heartbleed,
+                  heartbeat: freshData.endpoints[0].details.heartbeat,
+                  openSslCcs: freshData.endpoints[0].details.openSslCcs,
+                  openSSLLuckyMinus20: freshData.endpoints[0].details.openSSLLuckyMinus20,
+                  ticketbleed: freshData.endpoints[0].details.ticketbleed,
+                  bleichenbacher: freshData.endpoints[0].details.bleichenbacher,
+                  zombiePoodle: freshData.endpoints[0].details.zombiePoodle,
+                  goldenDoodle: freshData.endpoints[0].details.goldenDoodle,
+                  zeroLengthPaddingOracle: freshData.endpoints[0].details.zeroLengthPaddingOracle,
+                  sleepingPoodle: freshData.endpoints[0].details.sleepingPoodle,
+                  freak: freshData.endpoints[0].details.freak,
+                  logjam: freshData.endpoints[0].details.logjam,
+                  drownVulnerable: freshData.endpoints[0].details.drownVulnerable,
+                } : null,
+                
+                queriedAt: new Date().toISOString(),
+              };
+
+              // Cache results
+              await cachePut(cacheKey, result, TTL_SECONDS);
+
+              return json(200, { ...result, cached: false });
+            }
+          }
+        } catch (e) {
+          // If fresh fetch fails, fall through to return in_progress status
+          console.log("Fresh fetch failed, returning in_progress:", e.message);
+        }
+      }
+      
       return json(202, {
         host: cleanHost,
         status: "in_progress",
-        message: "SSL Labs scan in progress. Try again in a few minutes.",
-        progress: data.endpoints?.[0]?.progress,
+        message: progress >= 100 
+          ? "Scan complete, finalizing results. Click 'Check SSL Grade' again to fetch final results."
+          : "SSL Labs scan in progress. Try again in a few minutes.",
+        progress: progress,
       });
     }
     
@@ -217,6 +317,36 @@ exports.handler = async (event) => {
           name: p.name,
           version: p.version,
         })),
+        
+        // Certificate information (from first endpoint's details)
+        certificate: data.endpoints?.[0]?.details?.cert ? (() => {
+          const cert = data.endpoints[0].details.cert;
+          // Convert timestamps to ISO strings if they're numbers
+          let validFrom = cert.notBefore;
+          let validTo = cert.notAfter;
+          if (typeof validFrom === 'number') {
+            validFrom = new Date(validFrom).toISOString();
+          }
+          if (typeof validTo === 'number') {
+            validTo = new Date(validTo).toISOString();
+          }
+          
+          return {
+            subject: cert.subject,
+            issuer: cert.issuerLabel || cert.issuer,
+            validFrom: validFrom,
+            validTo: validTo,
+            serialNumber: cert.serialNumber || cert.sigAlg,
+            signatureAlgorithm: cert.sigAlg,
+            keyAlg: cert.keyAlg,
+            keySize: cert.keySize,
+            commonNames: cert.commonNames || [],
+            altNames: cert.altNames || [],
+            issues: cert.issues || [],
+            fingerprint: cert.fingerprint || cert.fingerprintSha256,
+            fingerprintSha1: cert.fingerprintSha1,
+          };
+        })() : null,
         
         // Vulnerabilities
         vulnerabilities: data.endpoints?.[0]?.details ? {

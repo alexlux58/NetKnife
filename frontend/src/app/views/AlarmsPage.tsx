@@ -157,28 +157,38 @@ export default function AlarmsPage() {
       {/* Alarms table */}
       <div className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-[#30363d] font-medium">Alarms</div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="text-left text-gray-400 border-b border-[#30363d]">
-                <th className="px-4 py-2">State</th>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Metric</th>
-                <th className="px-4 py-2">Updated</th>
+                <th className="px-3 sm:px-4 py-2">State</th>
+                <th className="px-3 sm:px-4 py-2">Name</th>
+                <th className="px-3 sm:px-4 py-2 hidden md:table-cell">Metric</th>
+                <th className="px-3 sm:px-4 py-2 hidden lg:table-cell">Updated</th>
               </tr>
             </thead>
             <tbody>
               {alarms.map((a) => (
                 <tr key={a.name} className="border-b border-[#21262d] last:border-0">
-                  <td className="px-4 py-2">{stateBadge(a.state)}</td>
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs">{a.name}</span>
+                  <td className="px-3 sm:px-4 py-2">{stateBadge(a.state)}</td>
+                  <td className="px-3 sm:px-4 py-2">
+                    <div className="space-y-1">
+                      <span className="font-mono text-xs break-all">{a.name}</span>
                     {a.stateReason && (
-                      <div className="text-gray-500 text-xs mt-1 max-w-md">{a.stateReason}</div>
-                    )}
+                        <div className="text-gray-500 text-xs max-w-md">{a.stateReason}</div>
+                      )}
+                      <div className="md:hidden text-gray-400 text-xs">
+                        {a.namespace} / {a.metric}
+                      </div>
+                      <div className="lg:hidden text-gray-500 text-xs">
+                        {a.stateUpdated ? new Date(a.stateUpdated).toLocaleString() : '—'}
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-4 py-2 text-gray-400">{a.namespace} / {a.metric}</td>
-                  <td className="px-4 py-2 text-gray-500 text-xs">
+                  <td className="px-3 sm:px-4 py-2 text-gray-400 hidden md:table-cell">
+                    {a.namespace} / {a.metric}
+                  </td>
+                  <td className="px-3 sm:px-4 py-2 text-gray-500 text-xs hidden lg:table-cell">
                     {a.stateUpdated ? new Date(a.stateUpdated).toLocaleString() : '—'}
                   </td>
                 </tr>

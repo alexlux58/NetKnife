@@ -91,12 +91,20 @@
     color: var(--color-text-primary);
     line-height: 1.5;
     -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden; /* Prevent horizontal scroll on mobile */
   }
   
   /* Better touch targets on mobile */
   @media (pointer: coarse) {
     .btn, .input, button:not(.no-touch-resize), a {
       touch-action: manipulation;
+    }
+  }
+  
+  /* Prevent text size adjustment on iOS */
+  @supports (-webkit-touch-callout: none) {
+    body {
+      -webkit-text-size-adjust: 100%;
     }
   }
   
@@ -155,6 +163,7 @@
   /* Card component */
   .card {
     @apply bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg;
+    @apply overflow-hidden; /* Prevent content overflow */
   }
   
   /* Input fields - comfortable on touch */

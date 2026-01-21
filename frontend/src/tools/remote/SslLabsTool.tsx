@@ -11,6 +11,46 @@ import { apiPost, ApiError } from '../../lib/api'
 import { formatJson } from '../../lib/utils'
 import { useToolState } from '../../lib/useToolState'
 
+interface CertificateInfo {
+  subject?: string
+  issuer?: string
+  validFrom?: string | number
+  validTo?: string | number
+  serialNumber?: string
+  signatureAlgorithm?: string
+  keyAlg?: string
+  keySize?: number
+  commonNames?: string[]
+  altNames?: string[]
+  issues?: number[]
+  fingerprint?: string
+  fingerprintSha1?: string
+}
+
+// Helper to parse DN (Distinguished Name) fields like "CN=example.com, O=Company, OU=Org Unit"
+function parseDN(dn: string): { CN?: string; O?: string; OU?: string; full: string } {
+  if (!dn) return { full: dn || '' };
+  const parts: Record<string, string> = {};
+  const full = dn;
+  
+  // Parse format: CN=example.com, O=Company, OU=Org Unit
+  const matches = dn.match(/([A-Z]+)=([^,]+)/g);
+  if (matches) {
+    matches.forEach(match => {
+      const [key, ...valueParts] = match.split('=');
+      const value = valueParts.join('=').trim();
+      parts[key.trim()] = value;
+    });
+  }
+  
+  return {
+    CN: parts.CN,
+    O: parts.O,
+    OU: parts.OU,
+    full,
+  };
+}
+
 interface SslLabsResult {
   host: string
   status: string
@@ -24,6 +64,7 @@ interface SslLabsResult {
     hasWarnings: boolean
   }[]
   protocols?: { name: string; version: string }[]
+  certificate?: CertificateInfo | null
   vulnerabilities?: Record<string, boolean | number>
   message?: string
   progress?: number
@@ -142,30 +183,293 @@ export default function SslLabsTool() {
               {result.progress !== undefined && (
                 <div className="space-y-2">
                   <div className="text-sm text-gray-500">Progress: {result.progress}%</div>
-                  {result.progress >= 100 && (
-                    <div className="text-xs text-yellow-400 mt-2">
-                      Scan appears complete. Click "Check SSL Grade" again to fetch results.
+                  {result.progress >= 100 ? (
+                    <div className="space-y-2">
+                      <div className="w-full bg-gray-800 rounded-full h-2">
+                        <div 
+                          className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div className="text-sm text-yellow-400 mt-2">
+                        ⚠ Scan complete but results are finalizing. Click "Check SSL Grade" again to fetch final results.
+                      </div>
                     </div>
-                  )}
-                  {result.progress < 100 && result.progress > 0 && (
+                  ) : result.progress > 0 ? (
                     <div className="w-full bg-gray-800 rounded-full h-2">
                       <div 
                         className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${result.progress}%` }}
                       />
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )}
               <button 
                 onClick={handleCheck} 
                 disabled={loading}
-                className="btn btn-secondary mt-4"
+                className={`btn mt-4 ${result.progress !== undefined && result.progress >= 100 ? 'btn-primary' : 'btn-secondary'}`}
               >
-                {loading ? 'Checking...' : 'Check Again'}
+                {loading ? 'Checking...' : (result.progress !== undefined && result.progress >= 100) ? 'Fetch Final Results' : 'Check Again'}
               </button>
             </div>
           )}
+
+          {result && result.certificate && (() => {
+            const cert = result.certificate;
+            const subjectDN = parseDN(cert.subject || '');
+            const issuerDN = parseDN(cert.issuer || '');
+            
+            // Parse dates - handle both string and number formats
+            const validFromDate = cert.validFrom ? new Date(cert.validFrom) : null;
+            const validToDate = cert.validTo ? new Date(cert.validTo) : null;
+            const daysRemaining = validToDate ? Math.floor((validToDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+            
+            return (
+              <div className="card p-4 space-y-4">
+                <h3 className="font-medium mb-3">Certificate Information</h3>
+                
+                {/* Issued To (Subject) */}
+                {cert.subject && (
+                  <div className="space-y-2">
+                    <span className="text-gray-500 block text-xs uppercase mb-2">Issued To</span>
+                    <div className="space-y-1 text-sm pl-2 border-l-2 border-cyan-500/30">
+                      {subjectDN.CN && (
+                        <div>
+                          <span className="text-gray-400">Common Name (CN): </span>
+                          <span className="font-mono text-cyan-400">{subjectDN.CN}</span>
+                        </div>
+                      )}
+                      {subjectDN.O && (
+                        <div>
+                          <span className="text-gray-400">Organization (O): </span>
+                          <span className="text-gray-300">{subjectDN.O}</span>
+                        </div>
+                      )}
+                      {subjectDN.OU && (
+                        <div>
+                          <span className="text-gray-400">Organizational Unit (OU): </span>
+                          <span className="text-gray-300">{subjectDN.OU}</span>
+                        </div>
+                      )}
+                      {!subjectDN.CN && !subjectDN.O && !subjectDN.OU && (
+                        <div className="font-mono text-cyan-400 text-xs">{cert.subject}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Issued By (Issuer) */}
+                {cert.issuer && (
+                  <div className="space-y-2">
+                    <span className="text-gray-500 block text-xs uppercase mb-2">Issued By</span>
+                    <div className="space-y-1 text-sm pl-2 border-l-2 border-purple-500/30">
+                      {issuerDN.CN && (
+                        <div>
+                          <span className="text-gray-400">Common Name (CN): </span>
+                          <span className="font-mono text-purple-400">{issuerDN.CN}</span>
+                        </div>
+                      )}
+                      {issuerDN.O && (
+                        <div>
+                          <span className="text-gray-400">Organization (O): </span>
+                          <span className="text-gray-300">{issuerDN.O}</span>
+                        </div>
+                      )}
+                      {issuerDN.OU && (
+                        <div>
+                          <span className="text-gray-400">Organizational Unit (OU): </span>
+                          <span className="text-gray-300">{issuerDN.OU}</span>
+                        </div>
+                      )}
+                      {!issuerDN.CN && !issuerDN.O && !issuerDN.OU && (
+                        <div className="font-mono text-purple-400 text-xs">{cert.issuer}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Validity Period */}
+                {(validFromDate || validToDate) && (
+                  <div className="space-y-2">
+                    <span className="text-gray-500 block text-xs uppercase mb-2">Validity Period</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      {validFromDate && (
+                        <div>
+                          <span className="text-gray-400 block mb-1">Issued On</span>
+                          <span className="text-gray-300">
+                            {validFromDate.toLocaleString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                      )}
+                      {validToDate && (
+                        <div>
+                          <span className="text-gray-400 block mb-1">Expires On</span>
+                          <span className={(() => {
+                            if (daysRemaining === null) return 'text-gray-300';
+                            if (daysRemaining < 0) return 'text-red-400';
+                            if (daysRemaining < 30) return 'text-orange-400';
+                            if (daysRemaining < 90) return 'text-yellow-400';
+                            return 'text-gray-300';
+                          })()}>
+                            {validToDate.toLocaleString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                            {daysRemaining !== null && (
+                              <span className="ml-2 text-xs">
+                                ({daysRemaining < 0 
+                                  ? `Expired ${Math.abs(daysRemaining)} days ago`
+                                  : `${daysRemaining} days remaining`})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* SHA-256 Fingerprint */}
+                {cert.fingerprint && (
+                  <div className="space-y-2">
+                    <span className="text-gray-500 block text-xs uppercase mb-2">SHA-256 Fingerprints</span>
+                    <div className="space-y-1 text-sm">
+                      <div>
+                        <span className="text-gray-400">Certificate: </span>
+                        <span className="font-mono text-xs text-gray-300 break-all">{cert.fingerprint}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+              {/* Key Information */}
+              {(result.certificate.keyAlg || result.certificate.keySize) && (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {result.certificate.keyAlg && result.certificate.keySize && (
+                    <div>
+                      <span className="text-gray-500 block text-xs uppercase mb-1">Key</span>
+                      <span>
+                        {result.certificate.keyAlg} {result.certificate.keySize}-bit
+                      </span>
+                    </div>
+                  )}
+                  {result.certificate.signatureAlgorithm && (
+                    <div>
+                      <span className="text-gray-500 block text-xs uppercase mb-1">Signature</span>
+                      <span className="text-xs">{result.certificate.signatureAlgorithm}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Common Names & SANs */}
+              {((result.certificate.commonNames && result.certificate.commonNames.length > 0) || 
+                (result.certificate.altNames && result.certificate.altNames.length > 0)) && (
+                <div>
+                  <span className="text-gray-500 block text-xs uppercase mb-2">Domains Covered</span>
+                  <div className="flex flex-wrap gap-1">
+                    {result.certificate.commonNames?.map((cn, i) => (
+                      <span key={i} className="px-2 py-0.5 text-xs rounded bg-blue-500/20 text-blue-400 font-mono">
+                        {cn}
+                      </span>
+                    ))}
+                    {result.certificate.altNames?.map((an, i) => (
+                      <span key={i} className="px-2 py-0.5 text-xs rounded bg-purple-500/20 text-purple-400 font-mono">
+                        {an}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+                {/* Serial Number */}
+                {cert.serialNumber && (
+                  <div className="space-y-2">
+                    <span className="text-gray-500 block text-xs uppercase mb-1">Serial Number</span>
+                    <span className="font-mono text-xs text-gray-300 break-all">{cert.serialNumber}</span>
+                  </div>
+                )}
+
+                {/* Key Information */}
+                {(cert.keyAlg || cert.keySize) && (
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {cert.keyAlg && cert.keySize && (
+                      <div>
+                        <span className="text-gray-500 block text-xs uppercase mb-1">Key Algorithm</span>
+                        <span>
+                          {cert.keyAlg} {cert.keySize}-bit
+                        </span>
+                      </div>
+                    )}
+                    {cert.signatureAlgorithm && (
+                      <div>
+                        <span className="text-gray-500 block text-xs uppercase mb-1">Signature Algorithm</span>
+                        <span className="text-xs">{cert.signatureAlgorithm}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Common Names & SANs */}
+                {((cert.commonNames && cert.commonNames.length > 0) || 
+                  (cert.altNames && cert.altNames.length > 0)) && (
+                  <div>
+                    <span className="text-gray-500 block text-xs uppercase mb-2">Domains Covered</span>
+                    <div className="flex flex-wrap gap-1">
+                      {cert.commonNames?.map((cn, i) => (
+                        <span key={i} className="px-2 py-0.5 text-xs rounded bg-blue-500/20 text-blue-400 font-mono">
+                          {cn}
+                        </span>
+                      ))}
+                      {cert.altNames?.map((an, i) => (
+                        <span key={i} className="px-2 py-0.5 text-xs rounded bg-purple-500/20 text-purple-400 font-mono">
+                          {an}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Certificate Issues */}
+                {cert.issues && cert.issues.length > 0 && (
+                  <div>
+                    <span className="text-gray-500 block text-xs uppercase mb-2">Issues</span>
+                    <div className="space-y-1">
+                      {cert.issues.map((issue, i) => (
+                        <div key={i} className="text-xs text-yellow-400">
+                          {issue === 1 && '⚠ Certificate not valid'}
+                          {issue === 2 && '⚠ Certificate not trusted'}
+                          {issue === 3 && '⚠ Certificate not valid for domain'}
+                          {issue === 4 && '⚠ Certificate chain incomplete'}
+                          {issue === 5 && '⚠ Certificate expired'}
+                          {issue === 6 && '⚠ Certificate self-signed'}
+                          {issue === 7 && '⚠ Certificate revoked'}
+                          {issue === 8 && '⚠ Certificate blacklisted'}
+                          {issue === 9 && '⚠ Certificate pinning mismatch'}
+                          {issue === 10 && '⚠ Certificate weak signature'}
+                          {!issue || (issue > 10 && `Issue code: ${issue}`)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {result && result.protocols && (
             <div className="card p-4">

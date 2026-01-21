@@ -375,6 +375,86 @@ export default function AbuseIpDbTool() {
           </div>
         </div>
       </div>
+
+      {/* Related Resources */}
+      <div className="card p-4">
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <span>📚</span>
+          <span>Related Resources</span>
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          <a
+            href="https://www.abuseipdb.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">AbuseIPDB</div>
+              <div className="text-xs text-gray-500">IP abuse reporting database</div>
+            </div>
+          </a>
+          <a
+            href="https://viz.greynoise.io/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">GreyNoise</div>
+              <div className="text-xs text-gray-500">Internet scanning activity</div>
+            </div>
+          </a>
+          <a
+            href="https://ipinfo.io/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">IPInfo</div>
+              <div className="text-xs text-gray-500">IP geolocation and ASN info</div>
+            </div>
+          </a>
+          <a
+            href="https://talosintelligence.com/reputation"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">Talos Reputation</div>
+              <div className="text-xs text-gray-500">Cisco threat intelligence</div>
+            </div>
+          </a>
+          <a
+            href="https://www.virustotal.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">VirusTotal</div>
+              <div className="text-xs text-gray-500">Multi-engine threat analysis</div>
+            </div>
+          </a>
+          <a
+            href="/tools/security-resources"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-green-400 hover:text-green-300"
+          >
+            <span className="text-xs">→</span>
+            <div>
+              <div className="font-medium">All Security Resources</div>
+              <div className="text-xs text-gray-500">Browse 300+ resources</div>
+            </div>
+          </a>
+        </div>
+      </div>
     </div>
   )
 }

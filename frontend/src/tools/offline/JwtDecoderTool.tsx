@@ -279,6 +279,62 @@ export default function JwtDecoderTool() {
 
       {/* Full output */}
       <OutputCard title="Decoded JWT" value={output} />
+
+      {/* Related Resources */}
+      <div className="card p-4">
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <span>📚</span>
+          <span>Related Resources</span>
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          <a
+            href="https://jwt.io/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">JWT.io</div>
+              <div className="text-xs text-gray-500">Decode, verify, and generate JWTs</div>
+            </div>
+          </a>
+          <a
+            href="https://datatracker.ietf.org/doc/html/rfc7519"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">JWT RFC 7519</div>
+              <div className="text-xs text-gray-500">Official JWT specification</div>
+            </div>
+          </a>
+          <a
+            href="https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">OWASP JWT Cheat Sheet</div>
+              <div className="text-xs text-gray-500">JWT security best practices</div>
+            </div>
+          </a>
+          <a
+            href="/tools/security-resources"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-green-400 hover:text-green-300"
+          >
+            <span className="text-xs">→</span>
+            <div>
+              <div className="font-medium">All Security Resources</div>
+              <div className="text-xs text-gray-500">Browse 300+ resources</div>
+            </div>
+          </a>
+        </div>
+      </div>
     </div>
   )
 }

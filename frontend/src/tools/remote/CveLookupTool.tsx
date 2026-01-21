@@ -459,6 +459,86 @@ export default function CveLookupTool() {
           )}
         </div>
       </div>
+
+      {/* Related Resources */}
+      <div className="card p-4">
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <span>📚</span>
+          <span>Related Resources</span>
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          <a
+            href="https://cve.mitre.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">CVE Database (MITRE)</div>
+              <div className="text-xs text-gray-500">Official CVE reference</div>
+            </div>
+          </a>
+          <a
+            href="https://www.cvedetails.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">CVE Details</div>
+              <div className="text-xs text-gray-500">Enhanced CVE database</div>
+            </div>
+          </a>
+          <a
+            href="https://www.first.org/cvss/calculator/3.0"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">CVSS Calculator</div>
+              <div className="text-xs text-gray-500">Calculate severity scores</div>
+            </div>
+          </a>
+          <a
+            href="https://www.exploit-db.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">Exploit Database</div>
+              <div className="text-xs text-gray-500">Public exploits archive</div>
+            </div>
+          </a>
+          <a
+            href="https://attack.mitre.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-blue-400 hover:text-blue-300"
+          >
+            <span className="text-xs">↗</span>
+            <div>
+              <div className="font-medium">MITRE ATT&CK</div>
+              <div className="text-xs text-gray-500">Adversary tactics framework</div>
+            </div>
+          </a>
+          <a
+            href="/tools/security-resources"
+            className="flex items-center gap-2 p-2 rounded hover:bg-white/5 transition-colors text-green-400 hover:text-green-300"
+          >
+            <span className="text-xs">→</span>
+            <div>
+              <div className="font-medium">All Security Resources</div>
+              <div className="text-xs text-gray-500">Browse 300+ resources</div>
+            </div>
+          </a>
+        </div>
+      </div>
     </div>
   )
 }

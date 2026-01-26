@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Run GitGuardian ggshield
@@ -50,7 +50,7 @@ jobs:
     name: npm audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -78,7 +78,7 @@ jobs:
     name: Snyk (dependencies)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -112,7 +112,7 @@ jobs:
     name: Snyk (Terraform)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Snyk IaC scan
         uses: snyk/actions/iac@master
         env:
@@ -129,7 +129,7 @@ jobs:
     name: Checkov (IaC)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Checkov – Terraform
         uses: bridgecrewio/checkov-action@v12
         with:
@@ -145,7 +145,7 @@ jobs:
     name: Trivy (config)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
         with:

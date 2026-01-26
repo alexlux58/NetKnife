@@ -4,7 +4,7 @@
   "description": "Cognito PreSignUp and PostConfirmation triggers: auto-confirm, signup notifications, failsafe switch",
   "main": "index.js",
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/client-dynamodb": "^3.975.0",
     "@aws-sdk/client-sns": "^3.600.0",
     "@aws-sdk/lib-dynamodb": "^3.600.0"
   }

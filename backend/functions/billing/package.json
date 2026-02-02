@@ -4,6 +4,6 @@
   "description": "NetKnife billing Lambda (Stripe, usage)",
   "main": "index.js",
   "dependencies": {
-    "stripe": "^14.21.0"
+    "stripe": "^20.3.0"
   }
 }

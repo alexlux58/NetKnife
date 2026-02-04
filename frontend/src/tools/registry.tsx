@@ -598,6 +598,15 @@ export const tools: Tool[] = [
     component: React.lazy(() => import('./offline/RegexTool')),
     description: 'Build and test regex patterns',
   },
+  {
+    id: 'git-graph',
+    name: 'Git Branch Visualizer',
+    kind: 'offline',
+    category: 'Data & Text',
+    path: '/tools/git-graph',
+    component: React.lazy(() => import('./offline/GitGraphTool')),
+    description: 'Visualize git branches and merges from log output',
+  },
 
   // ============================================================================
   // GENERATORS (Offline)

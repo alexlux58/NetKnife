@@ -6,7 +6,7 @@
 ![React](https://img.shields.io/badge/React-18-blue)
 ![Terraform](https://img.shields.io/badge/Terraform-1.6+-purple)
 
-**Contents:** [Features](#features) · [Architecture](#architecture) · [Security](#security) · [Deployment](#deployment-guide) · [Custom Domain](#custom-domain-setup-optional) · [Cost](#cost-estimation) · [Development](#development) · [Project Structure](#project-structure) · [Report Builder](#report-builder--chat-storage) · [Adding Tools](#adding-new-tools) · [OSINT](#osint-features) · [API Keys](#api-keys-configuration) · [Production Readiness](#production-readiness) · [Monetization](#monetization) · [Infra / Dev](#infra--dev-environment) · [Improvements & Roadmap](#improvements--roadmap) · [Troubleshooting](#troubleshooting)
+**Contents:** [Features](#features) · [Architecture](#architecture) · [Security](#security) · [Deployment](#deployment-guide) · [Custom Domain](#custom-domain-setup-optional) · [Cost](#cost-estimation) · [Development](#development) · [Project Structure](#project-structure) · [Report Builder](#report-builder--chat-storage) · [Adding Tools](#adding-new-tools) · [OSINT](#osint-features) · [Knowledge Base](#knowledge-base) · [API Keys](#api-keys-configuration) · [Production Readiness](#production-readiness) · [Monetization](#monetization) · [Infra / Dev](#infra--dev-environment) · [Improvements & Roadmap](#improvements--roadmap) · [Troubleshooting](#troubleshooting)
 
 ![NetKnife](https://github.com/user-attachments/assets/1aff1895-df19-4827-ba33-c56c5c275c3e)
 
@@ -576,6 +576,10 @@ All IPQualityScore tools use the same API key and share the free tier limit (1,0
 - Domain and server information
 - Free tier: 1,000 requests/month
 
+## Knowledge Base
+
+The curated knowledge base, red/blue team checklists, and non-YouTube tool directory live in [`docs/KNOWLEDGE-BASE.md`](docs/KNOWLEDGE-BASE.md).
+
 ## API Keys Configuration
 
 ### Required API Keys
@@ -1003,4 +1007,3 @@ MIT License - See [LICENSE](LICENSE) file
 ## Contributing
 
 This is a personal project, but suggestions are welcome. Please open an issue first to discuss changes.
-

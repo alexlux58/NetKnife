@@ -2,8 +2,9 @@
 # NETKNIFE - GITIGNORE
 # ==============================================================================
 
-# Dependencies
-node_modules/
+__pycache__/
+*.py[cod]
+
 .pnpm-store/
 
 # Build outputs

@@ -24,7 +24,7 @@ permissions:
 env:
   TF_ENV_DIR: infra/envs/dev
   AWS_REGION: us-west-2
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
   TERRAFORM_VERSION: "1.9.8"
 
 defaults:

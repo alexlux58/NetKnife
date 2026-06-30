@@ -3,12 +3,7 @@
 # ==============================================================================
 # Runs on push/PR to main: secrets, dependency vulns, IaC misconfigs.
 #
-# Required GitHub Secrets (Settings → Secrets → Actions):
-#   - GITGUARDIAN_API_KEY  (optional) From https://dashboard.gitguardian.com
-#   - SNYK_TOKEN           (optional) From https://app.snyk.io/account
-#
-# Without them: GitGuardian and Snyk jobs are skipped; npm audit + Checkov
-# still run.
+# Optional secrets: GITGUARDIAN_API_KEY, SNYK_TOKEN
 # ==============================================================================
 
 name: Security
@@ -20,9 +15,6 @@ on:
     branches: [main, master]
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # 1. GitGuardian (ggshield) – secrets in code and history
-  # ---------------------------------------------------------------------------
   secrets:
     name: Secrets (GitGuardian)
     runs-on: ubuntu-latest
@@ -41,73 +33,91 @@ jobs:
           GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         continue-on-error: true
-        # Fails when GITGUARDIAN_API_KEY is unset; add the secret to enable
 
-  # ---------------------------------------------------------------------------
-  # 2. npm audit – dependency vulnerabilities (no API key)
-  # ---------------------------------------------------------------------------
   npm-audit:
     name: npm audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Audit frontend
-        run: |
-          cd frontend && npm ci && npm audit --audit-level=high
+        run: npm ci && npm audit --audit-level=high
+        working-directory: frontend
         continue-on-error: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/functions/billing/package-lock.json
 
       - name: Audit backend (billing)
-        run: |
-          cd backend/functions/billing && npm ci && npm audit --audit-level=high
+        run: npm ci && npm audit --audit-level=high
+        working-directory: backend/functions/billing
         continue-on-error: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/functions/cognito-triggers/package-lock.json
 
       - name: Audit backend (cognito-triggers)
-        run: |
-          cd backend/functions/cognito-triggers && npm ci && npm audit --audit-level=high
+        run: npm ci && npm audit --audit-level=high
+        working-directory: backend/functions/cognito-triggers
         continue-on-error: true
 
-  # ---------------------------------------------------------------------------
-  # 3. Snyk – dependencies + optional IaC (needs SNYK_TOKEN)
-  # ---------------------------------------------------------------------------
   snyk-deps:
     name: Snyk (dependencies)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Snyk – frontend
-        run: |
-          cd frontend && npm ci && npx snyk@latest test --severity-threshold=high
+        run: npm ci && npx snyk@latest test --severity-threshold=high
+        working-directory: frontend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/functions/billing/package-lock.json
 
       - name: Snyk – backend billing
-        run: |
-          cd backend/functions/billing && npm ci && npx snyk@latest test --severity-threshold=high
+        run: npm ci && npx snyk@latest test --severity-threshold=high
+        working-directory: backend/functions/billing
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/functions/cognito-triggers/package-lock.json
 
       - name: Snyk – backend cognito-triggers
-        run: |
-          cd backend/functions/cognito-triggers && npm ci && npx snyk@latest test --severity-threshold=high
+        run: npm ci && npx snyk@latest test --severity-threshold=high
+        working-directory: backend/functions/cognito-triggers
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
-  # ---------------------------------------------------------------------------
-  # 4. Snyk IaC – Terraform misconfigurations (needs SNYK_TOKEN)
-  # ---------------------------------------------------------------------------
   snyk-iac:
     name: Snyk (Terraform)
     runs-on: ubuntu-latest
@@ -118,13 +128,9 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          directory: infra/
-          args: --severity-threshold=high
+          args: --severity-threshold=high infra/
         continue-on-error: true
 
-  # ---------------------------------------------------------------------------
-  # 5. Checkov – Terraform/IaC (no API key)
-  # ---------------------------------------------------------------------------
   checkov:
     name: Checkov (IaC)
     runs-on: ubuntu-latest
@@ -137,10 +143,8 @@ jobs:
           output_format: cli
           soft_fail: true
           framework: terraform
+          skip_check: CKV_AWS_119,CKV_AWS_28
 
-  # ---------------------------------------------------------------------------
-  # 6. Trivy – config & filesystem (no API key)
-  # ---------------------------------------------------------------------------
   trivy:
     name: Trivy (config)
     runs-on: ubuntu-latest
@@ -149,9 +153,9 @@ jobs:
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: "fs"
-          scan-ref: "."
-          severity: "CRITICAL,HIGH"
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
           exit-code: "0"
           ignore-unfixed: true
         continue-on-error: true

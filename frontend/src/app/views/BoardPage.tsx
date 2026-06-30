@@ -147,7 +147,9 @@ export default function BoardPage() {
         const g = await threadGet(selectedChannel, selectedThread.thread.id)
         setSelectedThread({ ...g, isLiked: r.liked })
       }
-    } catch (_) {}
+    } catch {
+      // ignore like toggle errors
+    }
   }
 
   const doBookmark = async () => {
@@ -159,7 +161,9 @@ export default function BoardPage() {
         setSelectedThread({ ...g, isBookmarked: r.bookmarked })
       }
       bookmarksList().then((x) => setBookmarks(x.threads || []))
-    } catch (_) {}
+    } catch {
+      // ignore bookmark toggle errors
+    }
   }
 
   const doDmSend = async () => {

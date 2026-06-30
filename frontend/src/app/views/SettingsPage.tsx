@@ -4,7 +4,8 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getProfile, updateProfile } from '../../lib/profile'
+import { getProfile, updateProfile, PROFILE_UPDATED_EVENT } from '../../lib/profile'
+import { resizeImageForAvatar } from '../../lib/avatarImage'
 import { useTheme } from '../../lib/ThemeContext'
 
 export default function SettingsPage() {
@@ -12,6 +13,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [messageError, setMessageError] = useState(false)
   const [form, setForm] = useState({ displayName: '', avatarUrl: '', bio: '' })
 
   useEffect(() => {
@@ -26,16 +28,31 @@ export default function SettingsPage() {
   const onSaveProfile = async () => {
     setSaving(true)
     setMessage(null)
+    setMessageError(false)
     try {
-      await updateProfile({
+      const saved = await updateProfile({
         displayName: form.displayName.trim() || null,
         avatarUrl: form.avatarUrl.trim() || null,
         bio: form.bio.trim() || null,
       })
+      setForm({
+        displayName: saved.displayName || '',
+        avatarUrl: saved.avatarUrl || '',
+        bio: saved.bio || '',
+      })
+      window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT, { detail: saved }))
+      const wantedAvatar = form.avatarUrl.trim()
+      if (wantedAvatar && !saved.avatarUrl) {
+        setMessage('Profile saved, but the avatar was too large or invalid. Try a smaller image.')
+        setMessageError(true)
+        return
+      }
       setMessage('Saved.')
       setTimeout(() => setMessage(null), 3000)
-    } catch (e) {
-      setMessage('Failed to save.')
+    } catch (e: unknown) {
+      const err = e as { body?: { error?: string } }
+      setMessage(err?.body?.error || 'Failed to save.')
+      setMessageError(true)
     } finally {
       setSaving(false)
     }
@@ -73,18 +90,19 @@ export default function SettingsPage() {
                   type="file"
                   accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
                   className="hidden"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const f = e.target.files?.[0]
-                    if (!f) return
-                    const reader = new FileReader()
-                    reader.onload = () => {
-                      const data = reader.result as string
-                      if (typeof data === 'string' && data.startsWith('data:image/')) {
-                        setForm((prev) => ({ ...prev, avatarUrl: data }))
-                      }
-                    }
-                    reader.readAsDataURL(f)
                     e.target.value = ''
+                    if (!f) return
+                    try {
+                      const data = await resizeImageForAvatar(f)
+                      setForm((prev) => ({ ...prev, avatarUrl: data }))
+                      setMessage(null)
+                      setMessageError(false)
+                    } catch (err: unknown) {
+                      setMessage(err instanceof Error ? err.message : 'Could not process image.')
+                      setMessageError(true)
+                    }
                   }}
                 />
               </label>
@@ -126,7 +144,9 @@ export default function SettingsPage() {
             <button onClick={onSaveProfile} disabled={saving} className="btn-primary">
               {saving ? 'Saving…' : 'Save profile'}
             </button>
-            {message && <span className="text-sm text-gray-400">{message}</span>}
+            {message && (
+              <span className={`text-sm ${messageError ? 'text-red-400' : 'text-gray-400'}`}>{message}</span>
+            )}
           </div>
           <p className="text-xs text-gray-500 mt-3">Preview (shown in top bar):</p>
           <div className="flex items-center gap-2 mt-1">

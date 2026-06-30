@@ -10,6 +10,15 @@ export interface ScannerConfig {
   lastHealthCheck?: number | null
 }
 
+export interface ScanFinding {
+  severity?: string
+  cvssScore?: number
+  epssScore?: number
+  title?: string
+  description?: string
+  cve?: string
+}
+
 export interface ScanItem {
   scanId: string
   scannerType: 'cloud' | 'agent'
@@ -17,7 +26,7 @@ export interface ScanItem {
   target: string
   scanProfile: string
   status: string
-  findings?: any[]
+  findings?: ScanFinding[]
   createdAt?: number
   completedAt?: number | null
 }

@@ -1,0 +1,1 @@
+# NetKnife CLI — stdlib only (Python 3.10+)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { guidesListProgress, type GuideProgressItem } from '../../lib/guides'
+import { guidesListProgress } from '../../lib/guides'
 import { GUIDE_REGISTRY } from '../../guides/registry'
 
 interface CoverageMetric {
@@ -14,44 +14,40 @@ interface CoverageMetric {
 }
 
 export default function CoverageMapPage() {
-  const [progress, setProgress] = useState<GuideProgressItem[]>([])
   const [coverage, setCoverage] = useState<CoverageMetric[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadData()
-  }, [])
-
-  async function loadData() {
-    try {
-      const res = await guidesListProgress()
-      setProgress(res.items || [])
-      
-      // Extract ATT&CK techniques from guide progress
-      const techniques = new Map<string, CoverageMetric>()
-      
-      // Collect all ATT&CK techniques from guides
-      Object.values(GUIDE_REGISTRY).forEach((guide) => {
-        guide.steps.forEach((step) => {
-          step.attckTechniques.forEach((techId) => {
-            if (!techniques.has(techId)) {
-              techniques.set(techId, {
-                techniqueId: techId,
-                techniqueName: techId, // Could fetch from ATT&CK API
-                category: step.title,
-                hasDetection: false,
-                hasPrevention: false,
-                hasResponse: false,
-                maturity: 'none',
-                notes: '',
-              })
-            }
+    async function loadData() {
+      try {
+        const res = await guidesListProgress()
+        const items = res.items || []
+        
+        // Extract ATT&CK techniques from guide progress
+        const techniques = new Map<string, CoverageMetric>()
+        
+        // Collect all ATT&CK techniques from guides
+        Object.values(GUIDE_REGISTRY).forEach((guide) => {
+          guide.steps.forEach((step) => {
+            step.attckTechniques.forEach((techId) => {
+              if (!techniques.has(techId)) {
+                techniques.set(techId, {
+                  techniqueId: techId,
+                  techniqueName: techId, // Could fetch from ATT&CK API
+                  category: step.title,
+                  hasDetection: false,
+                  hasPrevention: false,
+                  hasResponse: false,
+                  maturity: 'none',
+                  notes: '',
+                })
+              }
+            })
           })
         })
-      })
 
       // Check progress for coverage indicators
-      progress.forEach((p) => {
+      items.forEach((p) => {
         const guide = GUIDE_REGISTRY[p.guideId]
         if (!guide) return
         
@@ -84,7 +80,10 @@ export default function CoverageMapPage() {
     } finally {
       setLoading(false)
     }
-  }
+    }
+
+    loadData()
+  }, [])
 
   const coveragePct = coverage.length > 0
     ? Math.round((coverage.filter((c) => c.hasDetection || c.hasPrevention || c.hasResponse).length / coverage.length) * 100)

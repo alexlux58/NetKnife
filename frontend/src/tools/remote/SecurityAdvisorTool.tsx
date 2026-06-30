@@ -24,6 +24,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
+  advisorResponse?: AdvisorResponse
 }
 
 interface AdvisorResponse {
@@ -85,7 +86,7 @@ export default function SecurityAdvisorTool() {
     setLoading(true)
     setError('')
     try {
-      const response = await apiClient.post<{ data?: { messages?: any[] }; messages?: any[] }>('/reports', {
+      const response = await apiClient.post<{ data?: { messages?: Message[] }; messages?: Message[] }>('/reports', {
         action: 'get',
         type: 'chat',
         id,
@@ -93,7 +94,7 @@ export default function SecurityAdvisorTool() {
       // Backend returns { success, data: { title, messages } }; fallback to top-level messages for compatibility
       const list = response.data?.messages ?? response.messages
       if (Array.isArray(list) && list.length > 0) {
-        setMessages(list.map((msg: any) => ({
+        setMessages(list.map((msg) => ({
           role: msg.role,
           content: msg.content,
           timestamp: msg.timestamp,
@@ -159,11 +160,9 @@ export default function SecurityAdvisorTool() {
         role: 'assistant',
         content: response.response || 'No response received',
         timestamp: new Date().toISOString(),
+        advisorResponse: response,
       }
       setMessages(prev => [...prev, assistantMessage])
-
-      // Store full response in message metadata for tool recommendations
-      ;(assistantMessage as any).advisorResponse = response
 
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to get advice')
@@ -205,7 +204,7 @@ export default function SecurityAdvisorTool() {
           role: msg.role,
           content: msg.content,
           timestamp: msg.timestamp,
-          advisorResponse: (msg as any).advisorResponse,
+          advisorResponse: msg.advisorResponse,
         })),
       }
 
@@ -324,7 +323,7 @@ export default function SecurityAdvisorTool() {
         ) : (
           <div className="space-y-4">
             {messages.map((msg, i) => {
-              const advisorResponse = (msg as any).advisorResponse as AdvisorResponse | undefined
+              const advisorResponse = msg.advisorResponse
               
               return (
                 <div

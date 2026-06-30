@@ -16,156 +16,11 @@
 import { useState, useEffect } from 'react'
 import OutputCard from '../../components/OutputCard'
 import AddToReportButton from '../../components/AddToReportButton'
-
-interface Ipv4Representations {
-  dotted: string
-  decimal: string
-  hex: string
-  hexDotted: string
-  binary: string
-  binaryDotted: string
-  octal: string
-}
-
-interface Ipv6Representations {
-  full: string
-  compressed: string
-  hex: string
-  binary: string
-}
-
-/**
- * Parse IPv4 from any format
- */
-function parseIPv4(input: string): number | null {
-  const trimmed = input.trim()
-  
-  // Dotted decimal (192.168.1.1)
-  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(trimmed)) {
-    const parts = trimmed.split('.').map(Number)
-    if (parts.some(p => p > 255)) return null
-    return (parts[0] << 24 | parts[1] << 16 | parts[2] << 8 | parts[3]) >>> 0
-  }
-  
-  // Pure decimal (3232235777)
-  if (/^\d+$/.test(trimmed)) {
-    const num = parseInt(trimmed, 10)
-    if (num > 0xFFFFFFFF) return null
-    return num >>> 0
-  }
-  
-  // Hex (0xC0A80101 or C0A80101)
-  if (/^(0x)?[0-9a-fA-F]+$/.test(trimmed)) {
-    const hex = trimmed.replace(/^0x/, '')
-    if (hex.length > 8) return null
-    return parseInt(hex, 16) >>> 0
-  }
-  
-  // Dotted hex (0xC0.0xA8.0x01.0x01)
-  if (/^(0x[0-9a-fA-F]{1,2}\.){3}0x[0-9a-fA-F]{1,2}$/.test(trimmed)) {
-    const parts = trimmed.split('.').map(p => parseInt(p, 16))
-    if (parts.some(p => p > 255)) return null
-    return (parts[0] << 24 | parts[1] << 16 | parts[2] << 8 | parts[3]) >>> 0
-  }
-  
-  // Binary (11000000101010000000000100000001)
-  if (/^[01]+$/.test(trimmed) && trimmed.length <= 32) {
-    return parseInt(trimmed.padStart(32, '0'), 2) >>> 0
-  }
-  
-  // Dotted binary (11000000.10101000.00000001.00000001)
-  if (/^[01]{8}\.[01]{8}\.[01]{8}\.[01]{8}$/.test(trimmed)) {
-    const parts = trimmed.split('.').map(p => parseInt(p, 2))
-    return (parts[0] << 24 | parts[1] << 16 | parts[2] << 8 | parts[3]) >>> 0
-  }
-  
-  return null
-}
-
-/**
- * Convert IPv4 number to all representations
- */
-function ipv4ToRepresentations(num: number): Ipv4Representations {
-  const o1 = (num >>> 24) & 0xFF
-  const o2 = (num >>> 16) & 0xFF
-  const o3 = (num >>> 8) & 0xFF
-  const o4 = num & 0xFF
-  
-  return {
-    dotted: `${o1}.${o2}.${o3}.${o4}`,
-    decimal: num.toString(),
-    hex: '0x' + num.toString(16).padStart(8, '0').toUpperCase(),
-    hexDotted: `0x${o1.toString(16).padStart(2, '0')}.0x${o2.toString(16).padStart(2, '0')}.0x${o3.toString(16).padStart(2, '0')}.0x${o4.toString(16).padStart(2, '0')}`.toUpperCase(),
-    binary: num.toString(2).padStart(32, '0'),
-    binaryDotted: `${o1.toString(2).padStart(8, '0')}.${o2.toString(2).padStart(8, '0')}.${o3.toString(2).padStart(8, '0')}.${o4.toString(2).padStart(8, '0')}`,
-    octal: '0' + num.toString(8),
-  }
-}
-
-/**
- * Parse IPv6 to BigInt
- */
-function parseIPv6(input: string): bigint | null {
-  const trimmed = input.trim().toLowerCase()
-  
-  // Handle :: expansion
-  let expanded = trimmed
-  if (expanded.includes('::')) {
-    const parts = expanded.split('::')
-    if (parts.length > 2) return null
-    
-    const left = parts[0] ? parts[0].split(':').filter(Boolean) : []
-    const right = parts[1] ? parts[1].split(':').filter(Boolean) : []
-    const missing = 8 - left.length - right.length
-    
-    if (missing < 0) return null
-    
-    expanded = [...left, ...Array(missing).fill('0'), ...right].join(':')
-  }
-  
-  const groups = expanded.split(':')
-  if (groups.length !== 8) return null
-  
-  let result = BigInt(0)
-  for (const group of groups) {
-    if (!/^[0-9a-f]{0,4}$/.test(group)) return null
-    result = (result << BigInt(16)) | BigInt(parseInt(group || '0', 16))
-  }
-  
-  return result
-}
-
-/**
- * Convert IPv6 BigInt to representations
- */
-function ipv6ToRepresentations(num: bigint): Ipv6Representations {
-  // Full form
-  const groups: string[] = []
-  let temp = num
-  for (let i = 0; i < 8; i++) {
-    groups.unshift((temp & BigInt(0xFFFF)).toString(16).padStart(4, '0'))
-    temp = temp >> BigInt(16)
-  }
-  const full = groups.join(':')
-  
-  // Compressed form
-  let compressed = full
-  // Find longest run of zeros
-  const zeroRuns = compressed.match(/(^|:)(0000:)+0000(:|$)/g) || []
-  if (zeroRuns.length > 0) {
-    const longest = zeroRuns.reduce((a, b) => a.length > b.length ? a : b)
-    compressed = compressed.replace(longest, '::')
-    compressed = compressed.replace(/:{3,}/, '::')
-  }
-  compressed = compressed.replace(/(^|:)0+([0-9a-f])/g, '$1$2')
-  
-  return {
-    full,
-    compressed,
-    hex: '0x' + num.toString(16).padStart(32, '0'),
-    binary: num.toString(2).padStart(128, '0'),
-  }
-}
+import {
+  convertIpInput,
+  type Ipv4Representations,
+  type Ipv6Representations,
+} from './ipConverterLogic'
 
 export default function IpConverterTool() {
   const [input, setInput] = useState('192.168.1.1')
@@ -174,27 +29,12 @@ export default function IpConverterTool() {
   const [inputType, setInputType] = useState<'ipv4' | 'ipv6'>('ipv4')
 
   useEffect(() => {
-    // Try IPv4 first
-    const ipv4Num = parseIPv4(input)
-    if (ipv4Num !== null) {
-      setIpv4Result(ipv4ToRepresentations(ipv4Num))
-      setIpv6Result(null)
-      setInputType('ipv4')
-      return
+    const converted = convertIpInput(input)
+    setIpv4Result(converted.ipv4)
+    setIpv6Result(converted.ipv6)
+    if (converted.type) {
+      setInputType(converted.type)
     }
-    
-    // Try IPv6
-    const ipv6Num = parseIPv6(input)
-    if (ipv6Num !== null) {
-      setIpv6Result(ipv6ToRepresentations(ipv6Num))
-      setIpv4Result(null)
-      setInputType('ipv6')
-      return
-    }
-    
-    // Invalid
-    setIpv4Result(null)
-    setIpv6Result(null)
   }, [input])
 
   const renderBinaryVisualization = (binary: string) => {

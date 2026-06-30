@@ -17,7 +17,7 @@ export interface ReportItem {
   toolName: string
   timestamp: string
   input: string
-  data: any
+  data: unknown
   category?: string
 }
 
@@ -36,7 +36,7 @@ export interface Report {
 interface ReportContextType {
   currentReport: Report | null
   setCurrentReport: (report: Report | null) => void
-  addToReport: (toolId: string, toolName: string, input: string, data: any, category?: string) => void
+  addToReport: (toolId: string, toolName: string, input: string, data: unknown, category?: string) => void
   saveReport: (title?: string, description?: string, reportCategory?: ReportCategory) => Promise<string>
   loadReport: (id: string) => Promise<void>
   deleteReport: (id: string) => Promise<void>
@@ -50,7 +50,7 @@ const ReportContext = createContext<ReportContextType | undefined>(undefined)
 export function ReportProvider({ children }: { children: ReactNode }) {
   const [currentReport, setCurrentReport] = useState<Report | null>(null)
 
-  const addToReport = useCallback((toolId: string, toolName: string, input: string, data: any, category?: string) => {
+  const addToReport = useCallback((toolId: string, toolName: string, input: string, data: unknown, category?: string) => {
     setCurrentReport(prev => {
       const newReport: Report = prev || {
         title: 'NetKnife Report',
@@ -339,7 +339,7 @@ export function ReportProvider({ children }: { children: ReactNode }) {
           doc.text(`... (${dataLines.length - maxLines} more lines truncated)`, margin + 5, yPos)
           yPos += 4
         }
-      } catch (e) {
+      } catch {
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(200, 0, 0)
         doc.text('Error formatting data', margin + 5, yPos)
@@ -389,6 +389,7 @@ export function ReportProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useReport() {
   const context = useContext(ReportContext)
   if (context === undefined) {

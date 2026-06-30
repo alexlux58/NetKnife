@@ -46,14 +46,16 @@ export default function ReverseDnsTool() {
     defaultValues: { ip: '' },
   })
 
-  const [resultData, setResultData] = useState<any>(null)
+  const [resultData, setResultData] = useState<unknown>(null)
   const [inputIp, setInputIp] = useState('')
 
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem('netknife:tool:reverse-dns')
       if (raw) reset(JSON.parse(raw))
-    } catch (_) {}
+    } catch {
+      // ignore invalid session storage
+    }
   }, [reset])
 
   async function onSubmit(data: FormData) {
@@ -118,7 +120,7 @@ export default function ReverseDnsTool() {
       </form>
 
       {/* Output */}
-      {output && resultData && (
+      {output && resultData != null && (
         <div className="space-y-4">
           <div className="flex items-center justify-end">
             <AddToReportButton

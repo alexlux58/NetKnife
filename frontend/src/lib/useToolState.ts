@@ -14,7 +14,7 @@
  * ==============================================================================
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 const STORAGE_PREFIX = 'netknife:tool:'
 const DEFAULT_MAX_BYTES = 500_000
@@ -52,7 +52,10 @@ export function useToolState<T extends Record<string, unknown>>(
   options?: UseToolStateOptions
 ): [T, (patch: Partial<T> | ((prev: T) => Partial<T>)) => void] {
   const key = `${STORAGE_PREFIX}${toolId}`
-  const excludeSet = new Set([...ALWAYS_EXCLUDE, ...(options?.exclude ?? [])])
+  const excludeSet = useMemo(
+    () => new Set([...ALWAYS_EXCLUDE, ...(options?.exclude ?? [])]),
+    [options?.exclude]
+  )
   const maxBytes = options?.maxBytes ?? DEFAULT_MAX_BYTES
 
   const [state, setState] = useState<T>(() => {
@@ -76,12 +79,12 @@ export function useToolState<T extends Record<string, unknown>>(
       if (s.length > maxBytes) return
       try {
         sessionStorage.setItem(key, s)
-      } catch (_) {
+      } catch {
         // quota or disabled
       }
     }, DEBOUNCE_MS)
     return () => clearTimeout(t)
-  }, [state, key, maxBytes])
+  }, [state, key, maxBytes, excludeSet])
 
   const update = useCallback((patch: Partial<T> | ((prev: T) => Partial<T>)) => {
     setState((prev) => {

@@ -7,7 +7,7 @@
  * ==============================================================================
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useReport, ReportCategory } from '../../lib/reportContext'
 import OutputCard from '../../components/OutputCard'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
@@ -42,18 +42,18 @@ export default function ReportBuilderTool() {
   const [selectedCategory, setSelectedCategory] = useState<ReportCategory | 'all'>('all')
   const [generatingAI, setGeneratingAI] = useState(false)
 
-  async function loadSavedReports() {
+  const loadSavedReports = useCallback(async () => {
     try {
       const reports = await listReports(selectedCategory === 'all' ? undefined : selectedCategory)
       setSavedReports(reports)
     } catch (e) {
       console.error('Failed to load reports:', e)
     }
-  }
+  }, [listReports, selectedCategory])
 
   useEffect(() => {
     loadSavedReports()
-  }, [selectedCategory])
+  }, [loadSavedReports])
 
   async function handleSave() {
     if (!currentReport || currentReport.items.length === 0) {

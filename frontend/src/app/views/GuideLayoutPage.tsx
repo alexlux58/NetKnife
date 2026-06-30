@@ -36,6 +36,7 @@ export default function GuideLayoutPage() {
     if (!resolvedGuide || !resolvedStep) return
     setGuideAndStep(resolvedGuide, resolvedStep)
     refreshGuideProgress(resolvedGuide.id).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when guide/step identity changes
   }, [resolvedGuide?.id, resolvedStep?.id])
 
   useEffect(() => {

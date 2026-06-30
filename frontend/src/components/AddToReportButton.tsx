@@ -15,7 +15,7 @@ import { tools } from '../tools/registry'
 interface AddToReportButtonProps {
   toolId: string
   input: string
-  data: any
+  data: unknown
   category?: string
   className?: string
 }

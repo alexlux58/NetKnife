@@ -11,6 +11,12 @@ import { billingUsage, createCheckout, createDonation, customerPortal, type Bill
 
 const DONATION_PRESETS = [3, 5, 10, 20] // dollars
 
+const DEFAULT_USAGE: BillingUsage = {
+  plan: 'free',
+  usage: { remoteCalls: 0, advisorMessages: 0, reportSaves: 0 },
+  limits: { remote: 0, advisor: 0, report_save: 3 },
+}
+
 export default function PricingPage() {
   const { isSuperuser } = useBilling()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -25,12 +31,6 @@ export default function PricingPage() {
   const [showDonatedThankYou, setShowDonatedThankYou] = useState(false)
   const donated = searchParams.get('donated') === '1'
 
-  const defaultUsage: BillingUsage = {
-    plan: 'free',
-    usage: { remoteCalls: 0, advisorMessages: 0, reportSaves: 0 },
-    limits: { remote: 0, advisor: 0, report_save: 3 },
-  }
-
   useEffect(() => {
     let done = false
     ;(async () => {
@@ -39,7 +39,7 @@ export default function PricingPage() {
         if (!done) setUsage(u)
       } catch (e: unknown) {
         if (!done) {
-          setUsage(defaultUsage)
+          setUsage(DEFAULT_USAGE)
           const err = e as { body?: { error?: string }; status?: number }
           if (err?.status === 404 || err?.status === 503) {
             setError(null)
@@ -67,6 +67,7 @@ export default function PricingPage() {
   useEffect(() => {
     if (donated) {
       setShowDonatedThankYou(true)
+      setError(null)
       setSearchParams((p) => { p.delete('donated'); return p }, { replace: true })
     }
   }, [donated, setSearchParams])
@@ -182,7 +183,7 @@ export default function PricingPage() {
             <li>• 100 Security Advisor messages / month</li>
             <li>• 50 saved reports / month</li>
           </ul>
-          {usage?.plan === 'pro' ? (
+          {usage?.plan === 'pro' && usage?.hasSubscription ? (
             <button
               onClick={onManage}
               disabled={portalLoading}

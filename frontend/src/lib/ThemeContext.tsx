@@ -8,6 +8,8 @@ import { getProfile, updateProfile, type UserProfile } from './profile'
 
 type Theme = 'light' | 'dark' | 'system'
 
+export type { Theme }
+
 interface ThemeContextValue {
   theme: Theme
   setTheme: (t: Theme) => void
@@ -69,6 +71,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
   const c = useContext(ThemeContext)
   if (!c) return { theme: 'dark' as Theme, setTheme: () => {}, resolvedTheme: 'dark' as const }

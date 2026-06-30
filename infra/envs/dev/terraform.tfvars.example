@@ -42,7 +42,7 @@ aws_region = "us-west-2"
 # 3. Set cloudflare_api_token (or run ./sync-cloudflare-token.sh to auto-sync)
 
 # Custom domain for the site (leave empty to use CloudFront domain)
-custom_domain = "tools.alexflux.com"
+custom_domain = "netknife.alexflux.com"
 
 # Cloudflare Zone ID (required if using custom_domain)
 # Find at: https://dash.cloudflare.com → Domain → API section → Zone ID
@@ -55,7 +55,7 @@ cloudflare_zone_name = "alexflux.com"
 # Cloudflare Subdomain (required if using custom_domain)
 # The subdomain part (e.g., "tools" creates tools.alexflux.com)
 # Should match the subdomain in custom_domain above
-cloudflare_subdomain = "tools"
+cloudflare_subdomain = "netknife"
 
 # Cloudflare API Token (required if using custom_domain)
 # Get from: https://dash.cloudflare.com/profile/api-tokens
@@ -158,7 +158,7 @@ nvd_api_key = ""
 # STRIPE BILLING (Optional)
 # ============================================================================
 # Full step-by-step: see docs/STRIPE-SETUP.md
-# Leave empty to disable. Run: cd backend/functions/billing && npm install --omit=dev
+# Leave empty to disable billing. Lambda deps install automatically via infra/scripts/install-lambda-deps.sh.
 # before terraform apply so the Stripe SDK is bundled.
 #
 # --- TEST MODE (no real charges) ---

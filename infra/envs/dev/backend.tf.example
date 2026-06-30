@@ -1,0 +1,13 @@
+# Remote state for CI/CD only — not used for local dev.
+# GitHub Actions writes this file before terraform init.
+# Local dev uses terraform.tfstate in this directory.
+#
+# To migrate local state to S3 for team/CI use:
+#   bash infra/ci/bootstrap-state.sh
+#   cp infra/envs/dev/backend.hcl.example infra/envs/dev/backend.hcl
+#   cp infra/envs/dev/backend.tf.example infra/envs/dev/backend.tf
+#   cd infra/envs/dev && terraform init -backend-config=backend.hcl -migrate-state
+
+terraform {
+  backend "s3" {}
+}

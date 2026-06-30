@@ -122,6 +122,74 @@ async function getBilling(userId) {
   return r.Item || null;
 }
 
+function stripeErrorMessage(err) {
+  return (err && (err.message || (err.raw && err.raw.message))) || '';
+}
+
+function isStripeMissingCustomer(err) {
+  if (!err || err.code !== 'resource_missing') return false;
+  // customers.retrieve uses param "id"; portal/checkout use param "customer"
+  if (err.param === 'customer' || err.param === 'id') return true;
+  return /no such customer/i.test(stripeErrorMessage(err));
+}
+
+function isStripeMissingPrice(err) {
+  if (!err || err.code !== 'resource_missing') return false;
+  if (err.param === 'price' || err.param === 'plan') return true;
+  return /no such price/i.test(stripeErrorMessage(err));
+}
+
+async function clearStaleStripeCustomer(userId) {
+  if (!BILLING_TABLE) return;
+  await ddb.send(new UpdateCommand({
+    TableName: BILLING_TABLE,
+    Key: { pk: userId },
+    UpdateExpression: 'SET planId = :free, stripeCustomerId = :null, stripeSubscriptionId = :null, periodEnd = :null, updatedAt = :u',
+    ExpressionAttributeValues: {
+      ':free': 'free',
+      ':null': null,
+      ':u': new Date().toISOString(),
+    },
+  }));
+}
+
+async function ensureStripeCustomer(userId, email) {
+  let billing = await getBilling(userId);
+  let customerId = billing?.stripeCustomerId;
+
+  if (customerId) {
+    try {
+      await stripe.customers.retrieve(customerId);
+      return customerId;
+    } catch (e) {
+      if (!isStripeMissingCustomer(e)) throw e;
+      await clearStaleStripeCustomer(userId);
+      billing = await getBilling(userId);
+      customerId = null;
+    }
+  }
+
+  const cust = await stripe.customers.create({
+    email: email.trim(),
+    metadata: { netknife_user_id: userId },
+  });
+  customerId = cust.id;
+  const now = new Date().toISOString();
+  await ddb.send(new PutCommand({
+    TableName: BILLING_TABLE,
+    Item: {
+      pk: userId,
+      planId: 'free',
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: null,
+      periodEnd: null,
+      createdAt: billing?.createdAt || now,
+      updatedAt: now,
+    },
+  }));
+  return customerId;
+}
+
 // ------------------------------------------------------------------------------
 // DB: get or create usage row for current month
 // ------------------------------------------------------------------------------
@@ -157,10 +225,63 @@ async function handleUsage(userId, exempt) {
       usage: { remoteCalls: 0, advisorMessages: 0, reportSaves: 0 },
       limits: PLAN_LIMITS.grandfathered,
       isGrandfathered: true,
+      hasSubscription: false,
     };
   }
   const billing = await getBilling(userId);
-  const planId = billing?.planId || 'free';
+  let planId = billing?.planId || 'free';
+  let hasSubscription = Boolean(billing?.stripeSubscriptionId);
+
+  // Invalid or stale Stripe refs (e.g. after rotating API keys to another account)
+  if (stripe && billing?.stripeCustomerId) {
+    try {
+      await stripe.customers.retrieve(billing.stripeCustomerId);
+    } catch (e) {
+      if (isStripeMissingCustomer(e)) {
+        await clearStaleStripeCustomer(userId);
+        billing = await getBilling(userId);
+        planId = 'free';
+        hasSubscription = false;
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  if (planId === 'pro' && hasSubscription && stripe) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(billing.stripeSubscriptionId);
+      if (sub.status !== 'active' && sub.status !== 'trialing') {
+        planId = 'free';
+        hasSubscription = false;
+      }
+    } catch (e) {
+      if (e.code === 'resource_missing') {
+        await clearStaleStripeCustomer(userId);
+        planId = 'free';
+        hasSubscription = false;
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  // Invalid state from legacy webhook bug: pro without a Stripe subscription
+  if (planId === 'pro' && !hasSubscription) {
+    planId = 'free';
+    if (billing && BILLING_TABLE) {
+      await ddb.send(new UpdateCommand({
+        TableName: BILLING_TABLE,
+        Key: { pk: userId },
+        UpdateExpression: 'SET planId = :free, updatedAt = :u',
+        ExpressionAttributeValues: {
+          ':free': 'free',
+          ':u': new Date().toISOString(),
+        },
+      })).catch((e) => console.warn('Failed to repair billing row:', e.message));
+    }
+  }
+
   const usage = await getUsage(userId);
   const limits = {
     remote:     getLimit(planId, 'remote'),
@@ -172,6 +293,7 @@ async function handleUsage(userId, exempt) {
     usage,
     limits,
     isGrandfathered: false,
+    hasSubscription,
   };
 }
 
@@ -190,42 +312,27 @@ async function handleCreateCheckout(userId, email, exempt) {
     return json(400, { error: 'Email is required for checkout.' });
   }
 
-  let billing = await getBilling(userId);
-  let customerId = billing?.stripeCustomerId;
+  const customerId = await ensureStripeCustomer(userId, email);
 
-  if (!customerId) {
-    const cust = await stripe.customers.create({
-      email: email.trim(),
+  try {
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      line_items: [{ price: STRIPE_PRO_PRICE_ID, quantity: 1 }],
+      success_url: `${SITE_URL}/pricing?success=1`,
+      cancel_url: `${SITE_URL}/pricing?cancel=1`,
       metadata: { netknife_user_id: userId },
+      subscription_data: { metadata: { netknife_user_id: userId } },
     });
-    customerId = cust.id;
-    await ddb.send(new PutCommand({
-      TableName: BILLING_TABLE,
-      Item: {
-        pk: userId,
-        planId: 'free',
-        stripeCustomerId: customerId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      ConditionExpression: 'attribute_not_exists(pk)',
-    })).catch(() => {});
-    // If condition failed, another request created the row; refetch
-    billing = await getBilling(userId);
-    if (billing?.stripeCustomerId) customerId = billing.stripeCustomerId;
+    return json(200, { url: session.url });
+  } catch (e) {
+    if (isStripeMissingPrice(e)) {
+      return json(503, {
+        error: 'Subscription price not found in Stripe. Update stripe_pro_price_id in terraform.tfvars for your current account.',
+      });
+    }
+    throw e;
   }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: 'subscription',
-    line_items: [{ price: STRIPE_PRO_PRICE_ID, quantity: 1 }],
-    success_url: `${SITE_URL}/pricing?success=1`,
-    cancel_url: `${SITE_URL}/pricing?cancel=1`,
-    metadata: { netknife_user_id: userId },
-    subscription_data: { metadata: { netknife_user_id: userId } },
-  });
-
-  return json(200, { url: session.url });
 }
 
 // ------------------------------------------------------------------------------
@@ -244,12 +351,29 @@ async function handlePortal(userId, exempt) {
     return json(400, { error: 'No billing account found. Subscribe first.' });
   }
 
-  const session = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${SITE_URL}/pricing`,
-  });
+  try {
+    await stripe.customers.retrieve(customerId);
+  } catch (e) {
+    if (isStripeMissingCustomer(e)) {
+      await clearStaleStripeCustomer(userId);
+      return json(400, { error: 'No billing account found. Subscribe first.' });
+    }
+    throw e;
+  }
 
-  return json(200, { url: session.url });
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${SITE_URL}/pricing`,
+    });
+    return json(200, { url: session.url });
+  } catch (e) {
+    if (isStripeMissingCustomer(e)) {
+      await clearStaleStripeCustomer(userId);
+      return json(400, { error: 'No billing account found. Subscribe first.' });
+    }
+    throw e;
+  }
 }
 
 // ------------------------------------------------------------------------------
@@ -307,10 +431,14 @@ async function handleWebhook(rawBody, sig) {
   switch (ev.type) {
     case 'checkout.session.completed': {
       const sess = ev.data.object;
+      // One-time donations must not grant API Access / pro plan
+      if (sess.mode === 'payment' || sess.metadata?.type === 'donation') {
+        break;
+      }
       const cid = sess.customer;
       const subId = sess.subscription;
       const uid = sess.metadata?.netknife_user_id || userId;
-      if (!uid) break;
+      if (!uid || !subId) break;
       const subObj = subId ? await stripe.subscriptions.retrieve(subId) : null;
       const periodEnd = subObj?.current_period_end
         ? new Date(subObj.current_period_end * 1000).toISOString().slice(0, 10)
@@ -408,16 +536,22 @@ exports.handler = async (event) => {
     return json(400, { error: 'Missing action' });
   }
 
-  switch (action) {
-    case 'usage':
-      return json(200, await handleUsage(userId, exempt));
-    case 'create-checkout':
-      return handleCreateCheckout(userId, body.email, exempt);
-    case 'create-donation':
-      return handleCreateDonation(userId, body.amount, body.email, exempt);
-    case 'portal':
-      return handlePortal(userId, exempt);
-    default:
-      return json(400, { error: `Unknown action: ${action}` });
+  try {
+    switch (action) {
+      case 'usage':
+        return json(200, await handleUsage(userId, exempt));
+      case 'create-checkout':
+        return await handleCreateCheckout(userId, body.email, exempt);
+      case 'create-donation':
+        return await handleCreateDonation(userId, body.amount, body.email, exempt);
+      case 'portal':
+        return await handlePortal(userId, exempt);
+      default:
+        return json(400, { error: `Unknown action: ${action}` });
+    }
+  } catch (e) {
+    console.error('Billing handler error:', e);
+    const msg = e && e.message ? e.message : 'Billing request failed';
+    return json(500, { error: msg });
   }
 };

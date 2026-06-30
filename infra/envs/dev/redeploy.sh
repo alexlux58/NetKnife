@@ -44,15 +44,22 @@ if [ -f "sync-cloudflare-token.sh" ]; then
     ./sync-cloudflare-token.sh 2>/dev/null || true
 fi
 
+# Step 2.6: Install Lambda function dependencies
+echo "Step 2.6: Installing Lambda function dependencies..."
+bash "$PROJECT_ROOT/infra/scripts/install-lambda-deps.sh"
+bash "$PROJECT_ROOT/infra/scripts/prepare-lambda-shared.sh"
+echo "✅ Lambda dependencies installed"
+echo ""
+
 # Step 3: Deploy Infrastructure
-echo "Step 2: Deploying infrastructure..."
+echo "Step 3: Deploying infrastructure..."
 echo "   This will take 5-10 minutes..."
 terraform apply -auto-approve
 echo "✅ Infrastructure deployed"
 echo ""
 
 # Step 4: Get outputs
-echo "Step 3: Getting Terraform outputs..."
+echo "Step 4: Getting Terraform outputs..."
 USER_POOL_ID=$(terraform output -raw user_pool_id 2>/dev/null || echo "")
 BUCKET_NAME=$(terraform output -raw bucket_name 2>/dev/null || echo "")
 CLOUDFRONT_ID=$(terraform output -raw cloudfront_id 2>/dev/null || echo "")
@@ -71,7 +78,7 @@ echo "   Site URL: $SITE_URL"
 echo ""
 
 # Step 5: Create admin user
-echo "Step 4: Creating admin user in Cognito..."
+echo "Step 5: Creating admin user in Cognito..."
 read -p "Enter username (default: alex.lux): " USERNAME
 USERNAME=${USERNAME:-alex.lux}
 
@@ -125,7 +132,7 @@ echo "✅ User ready: $USERNAME"
 echo ""
 
 # Step 6: Update frontend environment
-echo "Step 5: Updating frontend environment variables..."
+echo "Step 6: Updating frontend environment variables..."
 if [ ! -d "$PROJECT_ROOT/frontend" ]; then
     echo "❌ Error: Frontend directory not found at $PROJECT_ROOT/frontend"
     exit 1
@@ -141,7 +148,7 @@ echo "✅ Frontend environment updated"
 echo ""
 
 # Step 7: Build frontend
-echo "Step 6: Building frontend..."
+echo "Step 7: Building frontend..."
 if [ ! -d "node_modules" ]; then
     echo "   Installing dependencies..."
     npm install
@@ -166,7 +173,7 @@ echo "✅ Frontend built"
 echo ""
 
 # Step 8: Deploy frontend
-echo "Step 7: Deploying frontend..."
+echo "Step 8: Deploying frontend..."
 if [ -f "deploy.sh" ]; then
     ./deploy.sh
     if [ $? -ne 0 ]; then

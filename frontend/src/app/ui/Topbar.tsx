@@ -2,52 +2,57 @@
  * ==============================================================================
  * NETKNIFE - TOP BAR
  * ==============================================================================
- * 
- * The top bar displays:
- * - Current path/breadcrumb
- * - User avatar and display name (from profile)
- * - Account, Pricing, Reports, Sign out
- * 
- * It's sticky at the top of the content area.
- * ==============================================================================
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { logout, isDevMode } from '../../lib/auth'
-import { getProfile } from '../../lib/profile'
+import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
+import { getProfile, PROFILE_UPDATED_EVENT } from '../../lib/profile'
+import UserMenu from './UserMenu'
 
 interface TopbarProps {
   pathname: string
   onMenuClick?: () => void
+  onSearchClick?: () => void
 }
 
-export default function Topbar({ pathname, onMenuClick }: TopbarProps) {
-  const devMode = isDevMode()
+function breadcrumbLabel(pathname: string): string {
+  if (pathname === '/' || pathname === '') return 'home'
+  if (pathname.startsWith('/tools/')) {
+    return pathname.replace('/tools/', '').replace(/-/g, ' ')
+  }
+  return pathname.replace(/^\//, '').replace(/-/g, ' ')
+}
+
+export default function Topbar({ pathname, onMenuClick, onSearchClick }: TopbarProps) {
   const [profile, setProfile] = useState<{ displayName?: string | null; avatarUrl?: string | null } | null>(null)
 
   useEffect(() => {
     getProfile()
       .then((p) => setProfile(p))
       .catch(() => setProfile(null))
+
+    const onProfileUpdated = (event: Event) => {
+      const detail = (event as CustomEvent).detail
+      if (detail) setProfile(detail)
+    }
+    window.addEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated)
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated)
   }, [])
 
   const label = profile?.displayName?.trim() || 'Account'
 
   return (
     <header
-      className="sticky top-0 z-10 border-b border-[#30363d] bg-terminal-bg/95 backdrop-blur-sm"
+      className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur-sm"
       style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
     >
       <div className="px-3 sm:px-4 md:px-6 pb-3 flex items-center justify-between gap-2 min-h-[52px]">
-        {/* Hamburger + Path breadcrumb */}
         <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
-          {/* Hamburger - mobile/tablet only */}
           {onMenuClick && (
             <button
               type="button"
               onClick={onMenuClick}
-              className="lg:hidden flex-shrink-0 p-2 -ml-1 rounded-lg text-gray-400 hover:text-white hover:bg-[#21262d] touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="lg:hidden flex-shrink-0 p-2 -ml-1 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Open menu"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -56,83 +61,33 @@ export default function Topbar({ pathname, onMenuClick }: TopbarProps) {
             </button>
           )}
           <div className="flex items-center gap-2 text-sm min-w-0">
-            <span className="text-gray-500 hidden md:inline">NetKnife</span>
-            <span className="text-gray-600 hidden md:inline">/</span>
-            <span className="text-gray-300 truncate">
-              {pathname.replace('/tools/', '').replace(/-/g, ' ').replace('/', '') || 'home'}
+            <span className="text-[var(--color-text-muted)] hidden md:inline">NetKnife</span>
+            <span className="text-[var(--color-text-muted)] hidden md:inline">/</span>
+            <span className="text-[var(--color-text-primary)] truncate capitalize">
+              {breadcrumbLabel(pathname)}
             </span>
           </div>
         </div>
 
-        {/* User (avatar + name) and actions */}
-        <div className="flex items-center gap-1 sm:gap-2 lg:gap-4 flex-shrink-0">
-          <Link
-            to="/settings"
-            className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap min-w-0"
-          >
-            {profile?.avatarUrl ? (
-              <img
-                src={profile.avatarUrl}
-                alt=""
-                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <span className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0 text-gray-400 text-xs" aria-hidden>
-                ?
-              </span>
-            )}
-            <span className="hidden md:inline truncate max-w-[120px]">{label}</span>
-          </Link>
-          <a
-            href="https://speed.cloudflare.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden lg:inline text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
-          >
-            Speed test
-          </a>
-          <Link
-            to="/pricing"
-            className="hidden md:inline text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
-          >
-            Pricing
-          </Link>
-          <Link
-            to="/board"
-            className="hidden lg:inline text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
-          >
-            Board
-          </Link>
-          <Link
-            to="/activity"
-            className="hidden lg:inline text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
-          >
-            Activity
-          </Link>
-          <Link
-            to="/tools/report-builder"
-            className="hidden xl:inline text-sm text-blue-400 hover:text-blue-300 hover:underline whitespace-nowrap"
-          >
-            Reports
-          </Link>
-          {/* Dev mode indicator - hide on very small */}
-          {devMode && (
-            <span className="hidden md:inline-flex text-xs bg-amber-900/50 text-amber-400 px-2 py-1 rounded">
-              🔓 Dev
-            </span>
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {onSearchClick && (
+            <button
+              type="button"
+              onClick={onSearchClick}
+              className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-accent-blue)] min-h-[44px] touch-manipulation"
+              aria-label="Search tools (Command K)"
+            >
+              <MagnifyingGlassIcon className="w-4 h-4" />
+              <span className="hidden sm:inline text-sm">Search</span>
+              <kbd className="hidden md:inline text-[10px] font-mono border border-[var(--color-border)] rounded px-1 py-0.5">
+              ⌘
+              K
+              </kbd>
+            </button>
           )}
-          
-          {/* Sign out - touch-friendly */}
-          <button
-            onClick={() => logout()}
-            className="btn-secondary text-sm !py-2.5 !px-2 sm:!px-3 lg:!px-4 min-h-[44px] touch-manipulation"
-          >
-            <span className="hidden sm:inline">Sign out</span>
-            <span className="sm:hidden">Out</span>
-          </button>
+          <UserMenu displayName={label} avatarUrl={profile?.avatarUrl} />
         </div>
       </div>
     </header>
   )
 }
-

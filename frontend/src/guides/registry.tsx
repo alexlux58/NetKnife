@@ -12,7 +12,7 @@ export interface ExternalTool {
 export interface ToolIntegration {
   toolId: string
   purpose: string
-  defaultInput?: any
+  defaultInput?: unknown
   required: boolean
   tips: string[]
   externalTools?: ExternalTool[]

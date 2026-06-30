@@ -14,6 +14,7 @@
 
 import { useState, useMemo } from 'react'
 import { CheckIcon, ClipboardIcon, ChevronDownIcon, ChevronRightIcon } from '@radix-ui/react-icons'
+import { copyToClipboard } from '../lib/utils'
 
 // ------------------------------------------------------------------------------
 // TYPES
@@ -46,7 +47,7 @@ function syntaxHighlight(json: string): string {
   
   // Apply syntax highlighting with CSS classes
   return json.replace(
-    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
     (match) => {
       let cls = 'text-amber-400' // number
       if (/^"/.test(match)) {
@@ -217,9 +218,9 @@ export default function JsonViewer({
   
   const highlightedJson = useMemo(() => syntaxHighlight(jsonString), [jsonString])
   
-  async function copyToClipboard() {
+  async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(jsonString)
+      await copyToClipboard(jsonString)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -230,9 +231,9 @@ export default function JsonViewer({
   // Show error if present
   if (error) {
     return (
-      <div className="card p-4 border-red-500/50 bg-red-500/10">
-        <h3 className="font-medium text-red-400 mb-2">{title}</h3>
-        <pre className="text-sm text-red-300 whitespace-pre-wrap">{error}</pre>
+      <div className="card p-4 border-[var(--color-error)]/50 bg-[var(--color-error)]/10">
+        <h3 className="font-medium text-[var(--color-accent-red)] mb-2">{title}</h3>
+        <pre className="text-sm text-[var(--color-accent-red)] whitespace-pre-wrap">{error}</pre>
       </div>
     )
   }
@@ -242,38 +243,37 @@ export default function JsonViewer({
   return (
     <div className="card overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-800 bg-gray-900/50">
-        <span className="text-sm font-medium text-gray-400">{title}</span>
+      <div className="flex items-center justify-between p-3 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]/50">
+        <span className="text-sm font-medium text-[var(--color-text-secondary)]">{title}</span>
         
         <div className="flex items-center gap-2">
           {/* View toggle */}
-          <div className="flex rounded-md overflow-hidden border border-gray-700">
+          <div className="flex rounded-md overflow-hidden border border-[var(--color-border)]">
             <button
               onClick={() => setView('formatted')}
-              className={`px-3 py-1 text-xs transition-colors ${
-                view === 'formatted' 
-                  ? 'bg-gray-700 text-white' 
-                  : 'text-gray-400 hover:text-gray-200'
+              className={`px-3 py-1 text-xs transition-colors min-h-[44px] sm:min-h-0 ${
+                view === 'formatted'
+                  ? 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)]'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               }`}
             >
               Formatted
             </button>
             <button
               onClick={() => setView('raw')}
-              className={`px-3 py-1 text-xs transition-colors ${
-                view === 'raw' 
-                  ? 'bg-gray-700 text-white' 
-                  : 'text-gray-400 hover:text-gray-200'
+              className={`px-3 py-1 text-xs transition-colors min-h-[44px] sm:min-h-0 ${
+                view === 'raw'
+                  ? 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)]'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
               }`}
             >
               Raw JSON
             </button>
           </div>
-          
-          {/* Copy button */}
+
           <button
-            onClick={copyToClipboard}
-            className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            onClick={handleCopy}
+            className="p-2 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             title="Copy to clipboard"
           >
             {copied ? (

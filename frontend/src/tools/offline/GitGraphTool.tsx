@@ -19,12 +19,12 @@ import { useMemo, useState } from 'react'
 import AddToReportButton from '../../components/AddToReportButton'
 
 const EXAMPLE_LOG = `*   9fceb2a (HEAD -> main, origin/main) Merge branch 'feature/ui'
-|\  
+|  
 | * 2c1f9d0 (feature/ui) Add new sidebar navigation
 | * 6f8e3c1 Tweak tool cards
 |/  
 *   52b7a11 Merge branch 'feature/api'
-|\  
+|  
 | * 7d4a1ef (origin/feature/api, feature/api) Add headers endpoint
 | * 21a9e08 Add auth guard
 |/  

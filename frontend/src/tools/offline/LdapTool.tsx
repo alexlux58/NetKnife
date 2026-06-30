@@ -235,7 +235,7 @@ export default function LdapTool() {
         <label className="block text-sm font-medium mb-2">Search Scope</label>
         <select
           value={scope}
-          onChange={(e) => setScope(e.target.value as any)}
+              onChange={(e) => setScope(e.target.value as 'base' | 'one' | 'sub')}
           className="input"
         >
           <option value="base">base (only base DN)</option>

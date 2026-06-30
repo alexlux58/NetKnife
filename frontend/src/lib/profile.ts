@@ -5,6 +5,8 @@
 
 import { apiPost } from './api'
 
+export const PROFILE_UPDATED_EVENT = 'netknife:profile-updated'
+
 export interface UserProfile {
   theme: 'light' | 'dark' | 'system'
   avatarUrl: string | null

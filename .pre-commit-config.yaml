@@ -38,3 +38,13 @@ repos:
   #   hooks:
   #     - id: ggshield
   #       language_version: python3
+
+  # Frontend ESLint (requires: cd frontend && npm install)
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: ESLint (frontend)
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx)$
+        pass_filenames: false

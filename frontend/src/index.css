@@ -160,6 +160,13 @@
    CUSTOM COMPONENT STYLES
    ============================================================================ */
 @layer components {
+  /* Dropdown menu item */
+  .menu-item {
+    @apply flex items-center gap-2 w-full px-3 py-2.5 sm:py-2 text-sm text-left text-[var(--color-text-primary)];
+    @apply hover:bg-[var(--color-bg-tertiary)] min-h-[44px] sm:min-h-0 touch-manipulation;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent-blue)];
+  }
+
   /* Card component */
   .card {
     @apply bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg;

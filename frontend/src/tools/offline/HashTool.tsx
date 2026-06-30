@@ -155,13 +155,13 @@ async function hashWithWebCrypto(algorithm: string, data: string): Promise<strin
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+const HASH_ALGORITHMS: Algorithm[] = ['MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512']
+
 export default function HashTool() {
   const [input, setInput] = useState('')
   const [results, setResults] = useState<HashResult[]>([])
   const [isHashing, setIsHashing] = useState(false)
   const [selectedAlgo, setSelectedAlgo] = useState<Algorithm | 'ALL'>('ALL')
-
-  const algorithms: Algorithm[] = ['MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512']
 
   const generateHashes = useCallback(async () => {
     if (!input) {
@@ -172,7 +172,7 @@ export default function HashTool() {
     setIsHashing(true)
     const newResults: HashResult[] = []
 
-    const algosToRun = selectedAlgo === 'ALL' ? algorithms : [selectedAlgo]
+    const algosToRun = selectedAlgo === 'ALL' ? HASH_ALGORITHMS : [selectedAlgo]
 
     for (const algo of algosToRun) {
       try {
@@ -228,7 +228,7 @@ export default function HashTool() {
         >
           All
         </button>
-        {algorithms.map((algo) => (
+        {HASH_ALGORITHMS.map((algo) => (
           <button
             key={algo}
             onClick={() => setSelectedAlgo(algo)}

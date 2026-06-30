@@ -66,7 +66,9 @@ export default function EmailAuthTool() {
     try {
       const raw = sessionStorage.getItem('netknife:tool:email-auth')
       if (raw) reset(JSON.parse(raw))
-    } catch (_) {}
+    } catch {
+      // ignore invalid session storage
+    }
   }, [reset])
 
   async function onSubmit(data: FormData) {

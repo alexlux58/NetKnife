@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import AddToReportButton from '../../components/AddToReportButton'
-import { scannersListConfigs, scannersSaveConfig, scannersDeleteConfig, scannersRunScan, scannersListScans, type ScannerConfig, type ScanItem } from '../../lib/scanners'
+import { scannersListConfigs, scannersSaveConfig, scannersDeleteConfig, scannersRunScan, scannersListScans, type ScannerConfig, type ScanItem, type ScanFinding } from '../../lib/scanners'
 import { ApiError } from '../../lib/api'
 
 export default function VulnScannerTool() {
@@ -127,7 +127,7 @@ export default function VulnScannerTool() {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Type</label>
-                <select className="input" value={newType} onChange={(e) => setNewType(e.target.value as any)}>
+                <select className="input" value={newType} onChange={(e) => setNewType(e.target.value as typeof newType)}>
                   <option value="nessus">Nessus</option>
                   <option value="greenbone">Greenbone</option>
                   <option value="agent">Agent</option>
@@ -190,14 +190,14 @@ export default function VulnScannerTool() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Mode</label>
-                <select className="input" value={scannerType} onChange={(e) => setScannerType(e.target.value as any)}>
+                <select className="input" value={scannerType} onChange={(e) => setScannerType(e.target.value as typeof scannerType)}>
                   <option value="agent">Agent / On-prem</option>
                   <option value="cloud">Cloud (future)</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Profile</label>
-                <select className="input" value={scanProfile} onChange={(e) => setScanProfile(e.target.value as any)}>
+                <select className="input" value={scanProfile} onChange={(e) => setScanProfile(e.target.value as typeof scanProfile)}>
                   <option value="quick">Quick</option>
                   <option value="full">Full</option>
                 </select>
@@ -256,11 +256,11 @@ export default function VulnScannerTool() {
                   {scans
                     .filter((s) => {
                       if (severityFilter !== 'all' && Array.isArray(s.findings)) {
-                        const hasSeverity = s.findings.some((f: any) => f.severity === severityFilter)
+                        const hasSeverity = s.findings.some((f: ScanFinding) => f.severity === severityFilter)
                         if (!hasSeverity) return false
                       }
                       if (minCvss > 0 && Array.isArray(s.findings)) {
-                        const hasMinCvss = s.findings.some((f: any) => (f.cvssScore || 0) >= minCvss)
+                        const hasMinCvss = s.findings.some((f: ScanFinding) => (f.cvssScore || 0) >= minCvss)
                         if (!hasMinCvss) return false
                       }
                       return true
@@ -284,7 +284,7 @@ export default function VulnScannerTool() {
                             {s.findings[0]?.cvssScore && (
                               <span className="ml-2">Max CVSS: {s.findings[0].cvssScore}</span>
                             )}
-                            {s.findings[0]?.epssScore && (
+                            {typeof s.findings[0]?.epssScore === 'number' && (
                               <span className="ml-2">EPSS: {(s.findings[0].epssScore * 100).toFixed(1)}%</span>
                             )}
                           </div>
@@ -297,12 +297,12 @@ export default function VulnScannerTool() {
                     <h4 className="font-medium mb-2 text-sm">Findings Details</h4>
                     <div className="space-y-2 max-h-[200px] overflow-y-auto">
                       {selectedScan.findings
-                        .filter((f: any) => {
+                        .filter((f: ScanFinding) => {
                           if (severityFilter !== 'all' && f.severity !== severityFilter) return false
                           if (minCvss > 0 && (f.cvssScore || 0) < minCvss) return false
                           return true
                         })
-                        .map((f: any, idx: number) => (
+                        .map((f: ScanFinding, idx: number) => (
                           <div key={idx} className="text-xs p-2 rounded bg-[#0d1117]">
                             <div className="flex items-center gap-2 mb-1">
                               <span
@@ -323,9 +323,9 @@ export default function VulnScannerTool() {
                               {f.cvssScore && (
                                 <span className="text-gray-400">CVSS: {f.cvssScore}</span>
                               )}
-                              {f.epssScore && (
-                                <span className="text-gray-400">EPSS: {(f.epssScore * 100).toFixed(1)}%</span>
-                              )}
+                            {typeof f.epssScore === 'number' && (
+                              <span className="text-gray-400">EPSS: {(f.epssScore * 100).toFixed(1)}%</span>
+                            )}
                             </div>
                             <div className="font-medium text-gray-300">{f.title}</div>
                             {f.description && <div className="text-gray-500 mt-1">{f.description}</div>}

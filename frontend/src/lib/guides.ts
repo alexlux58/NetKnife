@@ -6,9 +6,9 @@ export interface GuideProgressItem {
   completed: boolean
   completedAt: number | null
   notes: string
-  findings: any[]
-  scanResults: any[]
-  toolResults: Record<string, any>
+  findings: unknown[]
+  scanResults: unknown[]
+  toolResults: Record<string, unknown>
   shared?: boolean
   collaborators?: string[]
   lastViewedAt?: number
@@ -28,9 +28,9 @@ export async function guidesSaveProgress(payload: {
   stepId: string
   completed?: boolean
   notes?: string
-  findings?: any[]
-  scanResults?: any[]
-  toolResults?: Record<string, any>
+  findings?: unknown[]
+  scanResults?: unknown[]
+  toolResults?: Record<string, unknown>
   shared?: boolean
   collaborators?: string[]
 }) {

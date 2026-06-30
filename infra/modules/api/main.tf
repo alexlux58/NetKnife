@@ -191,6 +191,11 @@ variable "site_url" {
   description = "Frontend URL for Stripe redirects (e.g. https://tools.alexflux.com)"
 }
 
+variable "lambda_deps_trigger" {
+  type        = any
+  description = "null_resource from root that runs npm install for Lambdas with package.json before zipping"
+}
+
 # Local variables for consistent naming
 locals {
   name = "${var.project}-${var.env}"
@@ -359,7 +364,7 @@ resource "aws_dynamodb_table" "scanner_configs" {
   tags = {
     Project     = var.project
     Environment = var.env
-    Purpose     = "Scanner configuration metadata (secrets stored elsewhere)"
+    Purpose     = "Scanner configuration metadata - secrets stored elsewhere"
   }
 }
 
@@ -884,6 +889,7 @@ resource "aws_lambda_function" "dns" {
 
   filename         = data.archive_file.dns_zip.output_path
   source_code_hash = data.archive_file.dns_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.common.arn]
 
   timeout     = 10
   memory_size = 128
@@ -1057,6 +1063,7 @@ resource "aws_lambda_function" "headers" {
 
   filename         = data.archive_file.headers_zip.output_path
   source_code_hash = data.archive_file.headers_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.common.arn]
 
   timeout     = 15
   memory_size = 256
@@ -1170,6 +1177,7 @@ resource "aws_lambda_function" "reverse_dns" {
 
   filename         = data.archive_file.reverse_dns_zip.output_path
   source_code_hash = data.archive_file.reverse_dns_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.common.arn]
 
   timeout     = 10
   memory_size = 128
@@ -2879,10 +2887,11 @@ resource "aws_lambda_permission" "scanners" {
 
 # ------------------------------------------------------------------------------
 # LAMBDA: CVE Lookup (NVD, OSV; modes: cve, package, top)
+# npm install: infra/scripts/install-lambda-deps.sh (via root null_resource)
 # ------------------------------------------------------------------------------
-# Run before apply: cd backend/functions/cve-lookup && npm install --omit=dev
 
 data "archive_file" "cve_lookup_zip" {
+  depends_on  = [var.lambda_deps_trigger]
   type        = "zip"
   source_dir  = "${path.module}/../../../backend/functions/cve-lookup"
   output_path = "${path.module}/cve-lookup.zip"
@@ -2996,10 +3005,11 @@ resource "aws_lambda_permission" "profile" {
 
 # ------------------------------------------------------------------------------
 # LAMBDA: Board (channels, threads, comments, likes, bookmarks, DMs)
+# npm install: infra/scripts/install-lambda-deps.sh (via root null_resource)
 # ------------------------------------------------------------------------------
-# Run before apply: cd backend/functions/board && npm install --omit=dev
 
 data "archive_file" "board_zip" {
+  depends_on  = [var.lambda_deps_trigger]
   type        = "zip"
   source_dir  = "${path.module}/../../../backend/functions/board"
   output_path = "${path.module}/board.zip"
@@ -3059,10 +3069,11 @@ resource "aws_lambda_permission" "board" {
 
 # ------------------------------------------------------------------------------
 # LAMBDA: Alarms (CloudWatch alarms dashboard; admin-only)
+# npm install: infra/scripts/install-lambda-deps.sh (via root null_resource)
 # ------------------------------------------------------------------------------
-# Run before apply: cd backend/functions/alarms && npm install --omit=dev
 
 data "archive_file" "alarms_zip" {
+  depends_on  = [var.lambda_deps_trigger]
   type        = "zip"
   source_dir  = "${path.module}/../../../backend/functions/alarms"
   output_path = "${path.module}/alarms.zip"
@@ -3115,10 +3126,11 @@ resource "aws_lambda_permission" "alarms" {
 
 # ------------------------------------------------------------------------------
 # LAMBDA: Billing (Stripe usage, checkout, portal, donations, webhook)
+# npm install: infra/scripts/install-lambda-deps.sh (via root null_resource)
 # ------------------------------------------------------------------------------
-# Run before apply: cd backend/functions/billing && npm install --omit=dev
 
 data "archive_file" "billing_zip" {
+  depends_on  = [var.lambda_deps_trigger]
   type        = "zip"
   source_dir  = "${path.module}/../../../backend/functions/billing"
   output_path = "${path.module}/billing.zip"

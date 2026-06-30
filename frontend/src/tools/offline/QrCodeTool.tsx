@@ -96,12 +96,12 @@ export default function QrCodeTool() {
       case 'wifi':
         return `WIFI:T:${wifi.encryption};S:${wifi.ssid};P:${wifi.password};H:${wifi.hidden};;`
       
-      case 'email':
+      case 'email': {
         const emailParams = new URLSearchParams()
         if (email.subject) emailParams.set('subject', email.subject)
         if (email.body) emailParams.set('body', email.body)
         return `mailto:${email.to}${emailParams.toString() ? '?' + emailParams.toString() : ''}`
-      
+      }
       case 'sms':
         return `smsto:${sms.phone}:${sms.message}`
       
@@ -148,6 +148,7 @@ END:VCARD`
         setError(err.message)
         setQrDataUrl('')
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- generateQrData derives from listed state deps
   }, [qrType, textInput, wifi, email, sms, vcard, size, errorCorrection])
 
   const downloadQr = () => {

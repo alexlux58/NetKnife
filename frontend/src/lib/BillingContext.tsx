@@ -57,6 +57,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   return <BillingContext.Provider value={value}>{children}</BillingContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useBilling() {
   const c = useContext(BillingContext)
   return c ?? { usage: null, loading: true, hasPro: false, canUseRemote: false, isSuperuser: false, refetch: () => {} }

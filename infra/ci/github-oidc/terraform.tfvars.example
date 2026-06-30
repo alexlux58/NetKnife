@@ -1,0 +1,3 @@
+github_org  = "YOUR_GITHUB_USERNAME_OR_ORG"
+github_repo = "NetKnife"
+aws_region  = "us-west-2"

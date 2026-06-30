@@ -27,10 +27,6 @@ terraform {
       source  = "hashicorp/archive"
       version = ">= 2.0"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = ">= 3.0"
-    }
     random = {
       source  = "hashicorp/random"
       version = ">= 3.0"
@@ -66,6 +62,11 @@ variable "signup_notification_email" {
   type        = string
   default     = ""
   description = "Email to notify on each new sign-up. Leave empty to disable notifications."
+}
+
+variable "lambda_deps_trigger" {
+  type        = any
+  description = "null_resource from root that runs npm install for Lambdas with package.json before zipping"
 }
 
 # Get current AWS region
@@ -296,21 +297,11 @@ resource "aws_sns_topic_subscription" "signup_notifications_email" {
 
 # ------------------------------------------------------------------------------
 # COGNITO TRIGGERS LAMBDA (PreSignUp + PostConfirmation)
+# npm install: infra/scripts/install-lambda-deps.sh (via root null_resource)
 # ------------------------------------------------------------------------------
 
-resource "null_resource" "cognito_triggers_npm" {
-  triggers = {
-    pkg = filemd5("${path.module}/../../../backend/functions/cognito-triggers/package.json")
-    idx = filemd5("${path.module}/../../../backend/functions/cognito-triggers/index.js")
-  }
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev"
-    working_dir = "${path.module}/../../../backend/functions/cognito-triggers"
-  }
-}
-
 data "archive_file" "cognito_triggers_zip" {
-  depends_on  = [null_resource.cognito_triggers_npm]
+  depends_on  = [var.lambda_deps_trigger]
   type        = "zip"
   source_dir  = "${path.module}/../../../backend/functions/cognito-triggers"
   output_path = "${path.module}/cognito-triggers.zip"

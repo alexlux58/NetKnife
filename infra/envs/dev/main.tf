@@ -30,9 +30,13 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = ">= 5.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = ">= 3.0"
+    }
   }
 
-  # Uncomment and configure for remote state storage
+  # Remove commented backend block — see infra/envs/dev/backend.tf
   # backend "s3" {
   #   bucket         = "your-terraform-state-bucket"
   #   key            = "netknife/dev/terraform.tfstate"
@@ -347,6 +351,8 @@ locals {
 module "auth" {
   source = "../../modules/auth"
 
+  lambda_deps_trigger = null_resource.lambda_functions_npm
+
   project = var.project
   env     = var.env
 
@@ -364,6 +370,8 @@ module "auth" {
 
 module "api" {
   source = "../../modules/api"
+
+  lambda_deps_trigger = null_resource.lambda_functions_npm
 
   project = var.project
   env     = var.env

@@ -25,8 +25,10 @@
  * ==============================================================================
  */
 
+/* eslint-disable react-refresh/only-export-components -- router config exports non-component helpers alongside route tree */
+
 import { Suspense } from 'react'
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
+import { createBrowserRouter, Outlet } from 'react-router-dom'
 import Shell from './ui/Shell'
 import LoginPage from './views/LoginPage'
 import SignUpPage from './views/SignUpPage'
@@ -42,7 +44,9 @@ import PrivacyPage from './views/PrivacyPage'
 import GuidesOverviewPage from './views/GuidesOverviewPage'
 import GuideLayoutPage from './views/GuideLayoutPage'
 import CoverageMapPage from './views/CoverageMapPage'
+import HomePage from './views/HomePage'
 import CookieConsent from '../components/CookieConsent'
+import ToolPageHeader from '../components/ToolPageHeader'
 import { Link } from 'react-router-dom'
 import { tools } from '../tools/registry'
 import { useBilling } from '../lib/BillingContext'
@@ -96,12 +100,9 @@ function ToolLoader({ id }: { id: string }) {
   if (tool.kind === 'remote' && !canUseRemote) {
     return (
       <div>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">{tool.name}</h1>
-          {tool.description && <p className="text-gray-400 mt-1">{tool.description}</p>}
-        </div>
+        <ToolPageHeader tool={tool} />
         <div className="card p-8 text-center">
-          <p className="text-gray-400 mb-4">This tool uses AWS/remote APIs. Subscribe to API Access ($5/mo) to use it.</p>
+          <p className="text-[var(--color-text-secondary)] mb-4">This tool uses AWS/remote APIs. Subscribe to API Access ($5/mo) to use it.</p>
           <Link to="/pricing" className="btn-primary">
             View plans &amp; subscribe
           </Link>
@@ -115,20 +116,12 @@ function ToolLoader({ id }: { id: string }) {
   return (
     <Suspense fallback={<LoadingFallback />}>
       <div>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">{tool.name}</h1>
-          {tool.description && (
-            <p className="text-gray-400 mt-1">{tool.description}</p>
-          )}
-        </div>
+        <ToolPageHeader tool={tool} />
         <Component />
       </div>
     </Suspense>
   )
 }
-
-// Get default tool path (first tool in registry)
-const defaultToolPath = tools[0]?.path ?? '/tools/subnet'
 
 /**
  * Application router configuration
@@ -154,7 +147,7 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate to={defaultToolPath} replace />,
+            element: <HomePage />,
           },
           { path: 'pricing', element: <PricingPage /> },
           { path: 'settings', element: <SettingsPage /> },

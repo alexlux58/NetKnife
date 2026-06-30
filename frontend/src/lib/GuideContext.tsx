@@ -13,9 +13,9 @@ interface GuideContextType {
     stepId: string
     completed?: boolean
     notes?: string
-    findings?: any[]
-    scanResults?: any[]
-    toolResults?: Record<string, any>
+    findings?: unknown[]
+    scanResults?: unknown[]
+    toolResults?: Record<string, unknown>
     shared?: boolean
     collaborators?: string[]
   }) => Promise<void>
@@ -48,9 +48,9 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     stepId: string
     completed?: boolean
     notes?: string
-    findings?: any[]
-    scanResults?: any[]
-    toolResults?: Record<string, any>
+    findings?: unknown[]
+    scanResults?: unknown[]
+    toolResults?: Record<string, unknown>
     shared?: boolean
     collaborators?: string[]
   }) => {
@@ -73,6 +73,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   return <GuideContext.Provider value={value}>{children}</GuideContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useGuide() {
   const c = useContext(GuideContext)
   if (!c) {

@@ -86,7 +86,7 @@ export default function UuidTool() {
         case 'v1':
           uuid = uuidv1()
           break
-        case 'v5':
+        case 'v5': {
           const ns = namespace === 'custom' ? customNamespace : namespace
           if (!ns || !name) {
             uuid = 'Error: namespace and name required'
@@ -98,6 +98,7 @@ export default function UuidTool() {
             }
           }
           break
+        }
         case 'v4':
         default:
           uuid = uuidv4()

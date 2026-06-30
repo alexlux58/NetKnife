@@ -23,6 +23,28 @@ import AddToReportButton from '../../components/AddToReportButton'
 import { apiPost, ApiError } from '../../lib/api'
 import { useToolState } from '../../lib/useToolState'
 
+interface TlsApiCert {
+  subject?: string
+  issuer?: string
+  valid_from?: string
+  valid_to?: string
+  serial_number?: string
+  signature_algorithm?: string
+  public_key_type?: string
+  public_key_size?: number | string
+  fingerprint_sha256?: string
+  san?: string[]
+}
+
+interface TlsApiResponse {
+  host: string
+  port: number
+  protocol?: string
+  cipher?: string
+  days_remaining?: number
+  chain?: TlsApiCert[]
+}
+
 interface Certificate {
   subject: string
   issuer: string
@@ -57,11 +79,11 @@ export default function TlsTool() {
   async function handleInspect() {
     setState({ loading: true, error: '', result: null })
     try {
-      const res = await apiPost('/tls', {
+      const res = await apiPost<TlsApiResponse>('/tls', {
         host,
         port: Number(port),
         sni: sni || host,
-      }) as any
+      })
 
       // Transform backend response (snake_case) to frontend format (camelCase)
       const transformed: TlsResult = {
@@ -70,14 +92,14 @@ export default function TlsTool() {
         protocol: res.protocol || '',
         cipher: res.cipher || '',
         days_remaining: res.days_remaining,
-        chain: (res.chain || []).map((cert: any) => {
+        chain: (res.chain || []).map((cert: TlsApiCert) => {
           // Calculate days remaining for each certificate
-          const validTo = new Date(cert.valid_to).getTime()
+          const validTo = new Date(cert.valid_to ?? '').getTime()
           const now = Date.now()
           const daysRemaining = Math.floor((validTo - now) / (1000 * 60 * 60 * 24))
           
           // Handle key size - can be number or string (for EC curves)
-          let keySize: number | string = cert.public_key_size
+          let keySize: number | string = cert.public_key_size ?? 0
           if (typeof keySize === 'string' && keySize.includes('prime')) {
             // EC curve name like "prime256v1" - extract bit size if possible
             if (keySize.includes('256')) keySize = 256

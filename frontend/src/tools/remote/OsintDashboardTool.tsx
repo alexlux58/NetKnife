@@ -21,26 +21,49 @@ import OutputCard from '../../components/OutputCard'
 import RemoteDisclosure from '../../components/RemoteDisclosure'
 import AddToReportButton from '../../components/AddToReportButton'
 
+type OsintSourceResult = Record<string, unknown>
+
+function osintVal(obj: unknown, key: string): unknown {
+  if (obj && typeof obj === 'object') {
+    return (obj as OsintSourceResult)[key]
+  }
+  return undefined
+}
+
+function osintBool(obj: unknown, key: string): boolean {
+  return Boolean(osintVal(obj, key))
+}
+
+function osintNum(obj: unknown, key: string): number {
+  const value = osintVal(obj, key)
+  return typeof value === 'number' ? value : 0
+}
+
+function osintStr(obj: unknown, key: string): string | undefined {
+  const value = osintVal(obj, key)
+  return typeof value === 'string' ? value : undefined
+}
+
 interface DashboardResult {
   input: string
   type: 'email' | 'ip' | 'domain'
   emailResults?: {
-    emailrep?: any
-    breachdirectory?: any
-    hibp?: any
-    hunter?: any
-    ipqsEmail?: any
+    emailrep?: OsintSourceResult
+    breachdirectory?: OsintSourceResult
+    hibp?: OsintSourceResult
+    hunter?: OsintSourceResult
+    ipqsEmail?: OsintSourceResult
   }
   ipResults?: {
-    ipapi?: any
-    abuseipdb?: any
-    ipqualityscore?: any
-    greynoise?: any
+    ipapi?: OsintSourceResult
+    abuseipdb?: OsintSourceResult
+    ipqualityscore?: OsintSourceResult
+    greynoise?: OsintSourceResult
   }
   domainResults?: {
-    dns?: any
-    rdap?: any
-    securitytrails?: any
+    dns?: OsintSourceResult
+    rdap?: OsintSourceResult
+    securitytrails?: OsintSourceResult
   }
   riskScore: number
   riskLevel: 'low' | 'medium' | 'high' | 'critical'
@@ -83,7 +106,7 @@ export default function OsintDashboardTool() {
 
     try {
       // Run checks in parallel based on type
-      const promises: Promise<any>[] = []
+      const promises: Promise<unknown>[] = []
 
       if (type === 'email') {
         // Email checks - run in parallel, handle errors gracefully
@@ -105,7 +128,12 @@ export default function OsintDashboardTool() {
           hunterPromise,
           ipqsEmailPromise
         ])
-        results.emailResults = { emailrep, breachdirectory, hunter, ipqsEmail }
+        results.emailResults = {
+          emailrep: emailrep as OsintSourceResult,
+          breachdirectory: breachdirectory as OsintSourceResult,
+          hunter: hunter as OsintSourceResult,
+          ipqsEmail: ipqsEmail as OsintSourceResult,
+        }
       } else if (type === 'ip') {
         // IP checks
         promises.push(
@@ -114,7 +142,11 @@ export default function OsintDashboardTool() {
           apiClient.post('/ipqualityscore', { ip: input }).catch(e => ({ error: e.message })),
         )
         const [ipapi, abuseipdb, ipqualityscore] = await Promise.all(promises)
-        results.ipResults = { ipapi, abuseipdb, ipqualityscore }
+        results.ipResults = {
+          ipapi: ipapi as OsintSourceResult,
+          abuseipdb: abuseipdb as OsintSourceResult,
+          ipqualityscore: ipqualityscore as OsintSourceResult,
+        }
       } else {
         // Domain checks - run in parallel, handle errors gracefully
         const dnsPromise = apiClient.post('/dns', { name: input, type: 'A' })
@@ -124,7 +156,10 @@ export default function OsintDashboardTool() {
           .catch(e => ({ error: e.message, source: 'RDAP' }))
         
         const [dns, rdap] = await Promise.all([dnsPromise, rdapPromise])
-        results.domainResults = { dns, rdap }
+        results.domainResults = {
+          dns: dns as OsintSourceResult,
+          rdap: rdap as OsintSourceResult,
+        }
       }
 
       // Calculate risk score
@@ -132,54 +167,54 @@ export default function OsintDashboardTool() {
       const recommendations: string[] = []
 
       if (type === 'email') {
-        if (results.emailResults?.breachdirectory?.found) {
+        if (osintBool(results.emailResults?.breachdirectory, 'found')) {
           riskScore += 40
           recommendations.push('Email found in data breaches - change passwords immediately')
         }
-        if (results.emailResults?.emailrep?.suspicious) {
+        if (osintBool(results.emailResults?.emailrep, 'suspicious')) {
           riskScore += 30
           recommendations.push('Email flagged as suspicious - exercise caution')
         }
-        if (results.emailResults?.emailrep?.details?.credentials_leaked) {
+        if (osintBool(osintVal(results.emailResults?.emailrep, 'details'), 'credentials_leaked')) {
           riskScore += 25
           recommendations.push('Credentials leaked - change password and enable 2FA')
         }
-        if (results.emailResults?.emailrep?.reputation === 'low') {
+        if (osintStr(results.emailResults?.emailrep, 'reputation') === 'low') {
           riskScore += 20
         }
-        if (results.emailResults?.ipqsEmail?.disposable) {
+        if (osintBool(results.emailResults?.ipqsEmail, 'disposable')) {
           riskScore += 25
           recommendations.push('Disposable email detected - may indicate temporary account')
         }
-        if (results.emailResults?.ipqsEmail?.honeypot) {
+        if (osintBool(results.emailResults?.ipqsEmail, 'honeypot')) {
           riskScore += 30
           recommendations.push('Email flagged as honeypot/spamtrap - do not use')
         }
-        if (results.emailResults?.ipqsEmail?.recent_abuse) {
+        if (osintBool(results.emailResults?.ipqsEmail, 'recent_abuse')) {
           riskScore += 35
           recommendations.push('Recent abuse detected on email - investigate immediately')
         }
-        if (results.emailResults?.ipqsEmail?.overall_score > 75) {
+        if (osintNum(results.emailResults?.ipqsEmail, 'overall_score') > 75) {
           riskScore += 30
         }
       } else if (type === 'ip') {
-        if (results.ipResults?.abuseipdb?.abuseConfidenceScore > 75) {
+        if (osintNum(results.ipResults?.abuseipdb, 'abuseConfidenceScore') > 75) {
           riskScore += 50
           recommendations.push('High abuse confidence score - IP may be malicious')
         }
-        if (results.ipResults?.ipqualityscore?.fraud_score > 75) {
+        if (osintNum(results.ipResults?.ipqualityscore, 'fraud_score') > 75) {
           riskScore += 40
           recommendations.push('High fraud score - IP likely associated with fraud')
         }
-        if (results.ipResults?.ipqualityscore?.vpn || results.ipResults?.ipqualityscore?.proxy) {
+        if (osintBool(results.ipResults?.ipqualityscore, 'vpn') || osintBool(results.ipResults?.ipqualityscore, 'proxy')) {
           riskScore += 15
           recommendations.push('IP uses VPN/Proxy - may indicate anonymity attempts')
         }
-        if (results.ipResults?.ipqualityscore?.tor) {
+        if (osintBool(results.ipResults?.ipqualityscore, 'tor')) {
           riskScore += 20
           recommendations.push('IP uses Tor network - high anonymity')
         }
-        if (results.ipResults?.ipqualityscore?.recent_abuse) {
+        if (osintBool(results.ipResults?.ipqualityscore, 'recent_abuse')) {
           riskScore += 30
           recommendations.push('Recent abuse detected - monitor closely')
         }
@@ -382,15 +417,15 @@ export default function OsintDashboardTool() {
 
           {activeTab === 'email' && result.emailResults && (
             <div className="space-y-4">
-              {result.emailResults.emailrep && (
+              {result.emailResults.emailrep != null && (
                 <OutputCard 
                   title="EmailRep.io" 
-                  canCopy={!result.emailResults.emailrep.error}
+                  canCopy={!osintStr(result.emailResults.emailrep, 'error')}
                 >
-                  {result.emailResults.emailrep.error ? (
+                  {osintStr(result.emailResults.emailrep, 'error') ? (
                     <div className="text-red-400 text-sm">
-                      {result.emailResults.emailrep.error}
-                      {result.emailResults.emailrep.requiresKey && (
+                      {osintStr(result.emailResults.emailrep, 'error')}
+                      {osintBool(result.emailResults.emailrep, 'requiresKey') && (
                         <p className="text-xs text-gray-400 mt-1">API key may be required</p>
                       )}
                     </div>
@@ -401,14 +436,14 @@ export default function OsintDashboardTool() {
                   )}
                 </OutputCard>
               )}
-              {result.emailResults.breachdirectory && (
+              {result.emailResults.breachdirectory != null && (
                 <OutputCard 
                   title="BreachDirectory" 
-                  canCopy={!result.emailResults.breachdirectory.error}
+                  canCopy={!osintStr(result.emailResults.breachdirectory, 'error')}
                 >
-                  {result.emailResults.breachdirectory.error ? (
+                  {osintStr(result.emailResults.breachdirectory, 'error') ? (
                     <div className="text-red-400 text-sm">
-                      {result.emailResults.breachdirectory.error}
+                      {osintStr(result.emailResults.breachdirectory, 'error')}
                     </div>
                   ) : (
                     <pre className="text-xs overflow-auto">
@@ -417,15 +452,15 @@ export default function OsintDashboardTool() {
                   )}
                 </OutputCard>
               )}
-              {result.emailResults.hunter && (
+              {result.emailResults.hunter != null && (
                 <OutputCard 
                   title="Hunter.io" 
-                  canCopy={!result.emailResults.hunter.error}
+                  canCopy={!osintStr(result.emailResults.hunter, 'error')}
                 >
-                  {result.emailResults.hunter.error ? (
+                  {osintStr(result.emailResults.hunter, 'error') ? (
                     <div className="text-red-400 text-sm">
-                      {result.emailResults.hunter.error}
-                      {result.emailResults.hunter.requiresKey && (
+                      {osintStr(result.emailResults.hunter, 'error')}
+                      {osintBool(result.emailResults.hunter, 'requiresKey') && (
                         <p className="text-xs text-gray-400 mt-1">API key required - configure in terraform.tfvars</p>
                       )}
                     </div>
@@ -436,15 +471,15 @@ export default function OsintDashboardTool() {
                   )}
                 </OutputCard>
               )}
-              {result.emailResults.ipqsEmail && (
+              {result.emailResults.ipqsEmail != null && (
                 <OutputCard 
                   title="IPQualityScore Email" 
-                  canCopy={!result.emailResults.ipqsEmail.error}
+                  canCopy={!osintStr(result.emailResults.ipqsEmail, 'error')}
                 >
-                  {result.emailResults.ipqsEmail.error ? (
+                  {osintStr(result.emailResults.ipqsEmail, 'error') ? (
                     <div className="text-red-400 text-sm">
-                      {result.emailResults.ipqsEmail.error}
-                      {result.emailResults.ipqsEmail.requiresKey && (
+                      {osintStr(result.emailResults.ipqsEmail, 'error')}
+                      {osintBool(result.emailResults.ipqsEmail, 'requiresKey') && (
                         <p className="text-xs text-gray-400 mt-1">API key required - configure in terraform.tfvars</p>
                       )}
                     </div>
@@ -460,21 +495,21 @@ export default function OsintDashboardTool() {
 
           {activeTab === 'ip' && result.ipResults && (
             <div className="space-y-4">
-              {result.ipResults.ipapi && !result.ipResults.ipapi.error && (
+              {result.ipResults.ipapi != null && !osintStr(result.ipResults.ipapi, 'error') && (
                 <OutputCard title="IP-API.com" canCopy={true}>
                   <pre className="text-xs overflow-auto">
                     {JSON.stringify(result.ipResults.ipapi, null, 2)}
                   </pre>
                 </OutputCard>
               )}
-              {result.ipResults.abuseipdb && !result.ipResults.abuseipdb.error && (
+              {result.ipResults.abuseipdb != null && !osintStr(result.ipResults.abuseipdb, 'error') && (
                 <OutputCard title="AbuseIPDB" canCopy={true}>
                   <pre className="text-xs overflow-auto">
                     {JSON.stringify(result.ipResults.abuseipdb, null, 2)}
                   </pre>
                 </OutputCard>
               )}
-              {result.ipResults.ipqualityscore && !result.ipResults.ipqualityscore.error && (
+              {result.ipResults.ipqualityscore != null && !osintStr(result.ipResults.ipqualityscore, 'error') && (
                 <OutputCard title="IPQualityScore" canCopy={true}>
                   <pre className="text-xs overflow-auto">
                     {JSON.stringify(result.ipResults.ipqualityscore, null, 2)}
@@ -486,13 +521,13 @@ export default function OsintDashboardTool() {
 
           {activeTab === 'domain' && result.domainResults && (
             <div className="space-y-4">
-              {result.domainResults.dns && (
+              {result.domainResults.dns != null && (
                 <OutputCard 
                   title="DNS" 
-                  canCopy={!result.domainResults.dns.error}
+                  canCopy={!osintStr(result.domainResults.dns, 'error')}
                 >
-                  {result.domainResults.dns.error ? (
-                    <div className="text-red-400 text-sm">{result.domainResults.dns.error}</div>
+                  {osintStr(result.domainResults.dns, 'error') ? (
+                    <div className="text-red-400 text-sm">{osintStr(result.domainResults.dns, 'error')}</div>
                   ) : (
                     <pre className="text-xs overflow-auto">
                       {JSON.stringify(result.domainResults.dns, null, 2)}
@@ -500,13 +535,13 @@ export default function OsintDashboardTool() {
                   )}
                 </OutputCard>
               )}
-              {result.domainResults.rdap && (
+              {result.domainResults.rdap != null && (
                 <OutputCard 
                   title="RDAP" 
-                  canCopy={!result.domainResults.rdap.error}
+                  canCopy={!osintStr(result.domainResults.rdap, 'error')}
                 >
-                  {result.domainResults.rdap.error ? (
-                    <div className="text-red-400 text-sm">{result.domainResults.rdap.error}</div>
+                  {osintStr(result.domainResults.rdap, 'error') ? (
+                    <div className="text-red-400 text-sm">{osintStr(result.domainResults.rdap, 'error')}</div>
                   ) : (
                     <pre className="text-xs overflow-auto">
                       {JSON.stringify(result.domainResults.rdap, null, 2)}

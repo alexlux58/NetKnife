@@ -37,7 +37,7 @@ export default function SmtpTool() {
       return
     }
 
-    let commands: string[] = []
+    const commands: string[] = []
 
     if (useTLS || useSTARTTLS) {
       let cmd = `openssl s_client -connect ${host}:${port}`

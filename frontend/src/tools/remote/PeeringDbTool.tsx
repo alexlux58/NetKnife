@@ -29,13 +29,23 @@ import { formatJson } from '../../lib/utils'
 
 const RESOURCES = ['net', 'org', 'ix', 'fac'] as const
 
+interface PeeringDbResult {
+  status?: number
+  data?: {
+    meta?: { error?: string }
+    data?: unknown[]
+  }
+  message?: string
+  [key: string]: unknown
+}
+
 export default function PeeringDbTool() {
   const [resource, setResource] = useState<typeof RESOURCES[number]>('net')
   const [asn, setAsn] = useState('13335')
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [output, setOutput] = useState('')
-  const [resultData, setResultData] = useState<any>(null)
+  const [resultData, setResultData] = useState<unknown>(null)
   const [error, setError] = useState('')
 
   async function handleQuery() {
@@ -48,7 +58,7 @@ export default function PeeringDbTool() {
       if (asn) body.asn = asn
       if (name) body.name = name
       
-      const result = await apiPost('/peeringdb', body) as any
+      const result = await apiPost<PeeringDbResult>('/peeringdb', body)
       
       // Check if PeeringDB returned a non-OK status (like 404)
       if (result.status && result.status !== 200) {
@@ -199,7 +209,7 @@ export default function PeeringDbTool() {
         </div>
 
         {/* Output section */}
-        {output && resultData && (
+        {output && resultData != null && (
           <div className="space-y-4">
             <div className="flex items-center justify-end">
               <AddToReportButton

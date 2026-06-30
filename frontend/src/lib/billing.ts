@@ -10,6 +10,7 @@ export interface BillingUsage {
   usage: { remoteCalls: number; advisorMessages: number; reportSaves: number }
   limits: { remote: number; advisor: number; report_save: number }
   isGrandfathered?: boolean
+  hasSubscription?: boolean
 }
 
 export async function billingUsage(): Promise<BillingUsage> {

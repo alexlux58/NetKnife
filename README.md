@@ -8,6 +8,8 @@
 
 **Contents:** [Features](#features) · [Architecture](#architecture) · [Security](#security) · [Deployment](#deployment-guide) · [Custom Domain](#custom-domain-setup-optional) · [Cost](#cost-estimation) · [Development](#development) · [Project Structure](#project-structure) · [Report Builder](#report-builder--chat-storage) · [Adding Tools](#adding-new-tools) · [OSINT](#osint-features) · [Knowledge Base](#knowledge-base) · [API Keys](#api-keys-configuration) · [Production Readiness](#production-readiness) · [Monetization](#monetization) · [Infra / Dev](#infra--dev-environment) · [Improvements & Roadmap](#improvements--roadmap) · [Troubleshooting](#troubleshooting)
 
+**Architecture diagrams:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · **Improvement recommendations:** [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) · **CI/CD:** [docs/CICD.md](docs/CICD.md)
+
 ![NetKnife](https://github.com/user-attachments/assets/1aff1895-df19-4827-ba33-c56c5c275c3e)
 
 ---
@@ -101,6 +103,8 @@
 
 ## Architecture
 
+For **Mermaid diagrams** (system topology, auth, billing, tools, data model), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              CLOUDFRONT CDN                              │
@@ -143,7 +147,7 @@
 - **Headers**: HSTS, CSP, X-Frame-Options, X-Content-Type-Options
 - **SSRF Protection**: Private IPs blocked in headers scanner
 - **Secret Redaction**: Copy (redacted) button for sharing
-- **Automated checks**: [SECURITY.md](SECURITY.md) — GitGuardian (secrets), Snyk (deps + IaC), npm audit, Checkov, Trivy, pre-commit, Dependabot
+- **Automated checks**: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (PR lint/build/test), [SECURITY.md](SECURITY.md) — GitGuardian (secrets), Snyk (deps + IaC), npm audit, Checkov, Trivy, pre-commit, Dependabot
 
 ## Deployment Guide
 
@@ -228,20 +232,32 @@ cd ../../../frontend
 # Install dependencies
 npm install
 
-# Create environment file
-cat > .env.local << EOF
-VITE_API_URL=<api_url from terraform output>
-VITE_COGNITO_DOMAIN=<cognito_domain from terraform output>
-VITE_COGNITO_CLIENT_ID=<cognito_client_id from terraform output>
-VITE_COGNITO_ISSUER=<cognito_issuer from terraform output>
-VITE_OIDC_REDIRECT_URI=https://<cloudfront_domain>/callback
-VITE_OIDC_POST_LOGOUT_REDIRECT_URI=https://<cloudfront_domain>/login
-VITE_REGION=us-west-2
-EOF
+# Production environment (not committed — see frontend/.env.production.example)
+cp .env.production.example .env.production
+# Edit .env.production with Terraform output values, or auto-generate:
+./update-env.sh
 
-# Build for production
 npm run build
 ```
+
+#### Frontend environment variables
+
+Create `frontend/.env.production` from `frontend/.env.production.example`. This file is gitignored; never commit real values.
+
+| Variable | Description | Source |
+|----------|-------------|--------|
+| `VITE_API_URL` | API Gateway base URL | `terraform output -raw api_url` |
+| `VITE_COGNITO_DOMAIN` | Cognito hosted UI domain | `terraform output -raw cognito_domain_url` |
+| `VITE_COGNITO_CLIENT_ID` | Cognito app client ID | `terraform output -raw client_id` |
+| `VITE_COGNITO_ISSUER` | OIDC issuer URL for JWT validation | `terraform output -raw cognito_issuer` |
+| `VITE_OIDC_REDIRECT_URI` | OAuth callback URL (`{site_url}/callback`) | `terraform output -raw site_url` + `/callback` |
+| `VITE_OIDC_POST_LOGOUT_REDIRECT_URI` | Post-logout redirect (`{site_url}/login`) | `terraform output -raw site_url` + `/login` |
+| `VITE_REGION` | AWS region (e.g. `us-west-2`) | Same as Terraform `aws_region` |
+| `VITE_DEV_BYPASS_AUTH` | Skip auth in local dev only; keep `false` for production builds | `false` |
+
+After `terraform apply`, run `./update-env.sh` in `frontend/` to refresh `.env.production` from current outputs, then rebuild.
+
+For local development without Cognito, use `frontend/.env.local` with the same keys (also gitignored).
 
 ### Step 5: Deploy Frontend
 
@@ -349,12 +365,26 @@ This serverless architecture is extremely cost-efficient for personal/small team
 
 ## Development
 
+### NetKnife CLI (`nk`)
+
+Python helper for deploy, test, and ops — **stdlib only** (Python 3.10+):
+
+```bash
+python3 scripts/nk.py check      # prerequisites
+python3 scripts/nk.py quick      # env + build + S3 (fast frontend loop)
+python3 scripts/nk.py deploy -y    # full infra + frontend
+python3 scripts/nk.py dev          # Vite dev server
+python3 scripts/nk.py test         # lint + typecheck + unit tests
+```
+
+See **[scripts/README.md](scripts/README.md)** for the full command list.
+
 ### Local Frontend Development
 
 ```bash
-cd frontend
-npm run dev
-# Opens http://localhost:3000
+nk dev
+# or: cd frontend && npm run dev
+# Opens http://localhost:5173
 ```
 
 Note: Remote tools won't work locally unless you have a backend running.
@@ -949,6 +979,8 @@ Priorities before launch: **Favicon** (`public/favicon.svg`), **dev bypass** onl
 ---
 
 ## Improvements & Roadmap
+
+For **prioritized recommendations** with rationale (billing enforcement, WAF, CI/CD, observability, security), see **[docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)**.
 
 Suggested improvements and future work. **B** = quick win, **M** = medium, **L** = larger.
 

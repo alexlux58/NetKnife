@@ -106,7 +106,9 @@ export default function AbuseIpDbTool() {
     try {
       const raw = sessionStorage.getItem('netknife:tool:abuseipdb')
       if (raw) reset(JSON.parse(raw))
-    } catch (_) {}
+    } catch {
+      // ignore invalid session storage
+    }
   }, [reset])
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {

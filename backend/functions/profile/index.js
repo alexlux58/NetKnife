@@ -76,13 +76,23 @@ function isValidAvatarUrl(v) {
 }
 
 async function updateProfile(userId, patch) {
+  if (
+    patch.avatarUrl !== undefined
+    && patch.avatarUrl !== null
+    && patch.avatarUrl !== ''
+    && !isValidAvatarUrl(patch.avatarUrl)
+  ) {
+    const err = new Error('Avatar must be a valid image URL or PNG/JPEG/WebP under 200KB.');
+    err.code = 'AVATAR_INVALID';
+    throw err;
+  }
+
   const filtered = {};
   for (const k of ALLOWED_KEYS) {
     if (patch[k] !== undefined) {
       if (k === 'theme' && !['light', 'dark', 'system'].includes(patch[k])) continue;
       if (typeof patch[k] === 'string' && k === 'bio' && patch[k].length > 500) continue;
       if (k === 'displayName' && typeof patch[k] === 'string' && patch[k].length > 512) continue;
-      if (k === 'avatarUrl' && !isValidAvatarUrl(patch[k])) continue;
       filtered[k] = patch[k] === null || patch[k] === '' ? null : patch[k];
     }
   }
@@ -135,8 +145,15 @@ exports.handler = async (event) => {
   }
 
   if (action === 'update') {
-    const profile = await updateProfile(userId, body);
-    return json(200, profile);
+    try {
+      const profile = await updateProfile(userId, body);
+      return json(200, profile);
+    } catch (e) {
+      if (e.code === 'AVATAR_INVALID') {
+        return json(400, { error: e.message });
+      }
+      throw e;
+    }
   }
 
   return json(400, { error: `Unknown action: ${action}` });

@@ -211,7 +211,7 @@ export default function SnmpTool() {
             <label className="block text-sm font-medium mb-2">Security Level</label>
             <select
               value={securityLevel}
-              onChange={(e) => setSecurityLevel(e.target.value as any)}
+              onChange={(e) => setSecurityLevel(e.target.value as 'noAuthNoPriv' | 'authNoPriv' | 'authPriv')}
               className="input"
             >
               <option value="noAuthNoPriv">noAuthNoPriv</option>

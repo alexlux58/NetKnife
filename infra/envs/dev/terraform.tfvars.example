@@ -181,3 +181,19 @@ stripe_webhook_secret = ""
 # API Access $5/mo — must be a PRICE id (price_...), NOT a subscription or product id (si_/prod_).
 # In Stripe: Product "NetKnife API Access" → Add price $5/month recurring → copy the Price ID (price_...).
 stripe_pro_price_id = ""
+
+# ============================================================================
+# KALI LABS (Optional — requires Packer-built AMI)
+# ============================================================================
+# Build AMI: cd packer/kali-netknife && packer build -var "region=us-west-2"
+# See docs/KALI-LABS.md for full setup.
+
+# kali_ami_id = "ami-xxxxxxxx"  # From packer build output
+
+# Lab credit packs (Stripe one-time Prices). Create in Stripe Dashboard:
+#   Starter:  $2  / 120 min  → stripe_lab_starter_price_id
+#   Standard: $5  / 360 min  → stripe_lab_standard_price_id
+#   Power:    $12 / 960 min  → stripe_lab_power_price_id
+# stripe_lab_starter_price_id  = ""
+# stripe_lab_standard_price_id = ""
+# stripe_lab_power_price_id    = ""

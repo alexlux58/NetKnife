@@ -432,7 +432,25 @@ async function handleWebhook(rawBody, sig) {
     case 'checkout.session.completed': {
       const sess = ev.data.object;
       // One-time donations must not grant API Access / pro plan
-      if (sess.mode === 'payment' || sess.metadata?.type === 'donation') {
+      if (sess.mode === 'payment' && sess.metadata?.type === 'donation') {
+        break;
+      }
+      // Lab credit packs (one-time payment)
+      if (sess.mode === 'payment' && sess.metadata?.type === 'lab_credits') {
+        const uid = sess.metadata?.netknife_user_id;
+        const minutes = Number(sess.metadata?.minutes) || 0;
+        if (uid && minutes > 0 && BILLING_TABLE) {
+          await ddb.send(new UpdateCommand({
+            TableName: BILLING_TABLE,
+            Key: { pk: uid },
+            UpdateExpression: 'SET labCreditsMinutes = if_not_exists(labCreditsMinutes, :zero) + :m, updatedAt = :u',
+            ExpressionAttributeValues: {
+              ':zero': 0,
+              ':m': minutes,
+              ':u': new Date().toISOString(),
+            },
+          }));
+        }
         break;
       }
       const cid = sess.customer;

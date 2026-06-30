@@ -288,6 +288,30 @@ variable "billing_exempt_usernames" {
   description = "Comma-separated Cognito usernames exempt from billing (e.g. admin, test accounts)"
 }
 
+variable "kali_ami_id" {
+  type        = string
+  default     = ""
+  description = "Packer-built Kali AMI for Kali Labs. Leave empty to disable."
+}
+
+variable "stripe_lab_starter_price_id" {
+  type        = string
+  default     = ""
+  description = "Stripe Price ID for 2hr lab credit pack ($2)"
+}
+
+variable "stripe_lab_standard_price_id" {
+  type        = string
+  default     = ""
+  description = "Stripe Price ID for 6hr lab credit pack ($5)"
+}
+
+variable "stripe_lab_power_price_id" {
+  type        = string
+  default     = ""
+  description = "Stripe Price ID for 16hr lab credit pack ($12)"
+}
+
 variable "admin_usernames" {
   type        = string
   default     = "alex.lux, god of lux"
@@ -408,6 +432,33 @@ module "api" {
 }
 
 # ------------------------------------------------------------------------------
+# LABS MODULE (Kali VM — enabled when kali_ami_id is set)
+# ------------------------------------------------------------------------------
+
+module "labs" {
+  source = "../../modules/labs"
+
+  project  = var.project
+  env      = var.env
+  site_url = local.site_url
+
+  api_id          = module.api.api_id
+  authorizer_id   = module.api.authorizer_id
+  execution_arn   = module.api.api_execution_arn
+  billing_table_name = module.api.billing_table_name
+
+  kali_ami_id = var.kali_ami_id
+
+  stripe_secret_key              = var.stripe_secret_key
+  stripe_lab_starter_price_id    = var.stripe_lab_starter_price_id
+  stripe_lab_standard_price_id   = var.stripe_lab_standard_price_id
+  stripe_lab_power_price_id      = var.stripe_lab_power_price_id
+  billing_exempt_usernames       = var.billing_exempt_usernames
+
+  lambda_deps_trigger = null_resource.lambda_functions_npm
+}
+
+# ------------------------------------------------------------------------------
 # OPS MODULE (Monitoring & Alerting)
 # ------------------------------------------------------------------------------
 
@@ -463,6 +514,7 @@ module "ops" {
     module.api.lambda_reports_name,
     module.api.lambda_cve_lookup_name,
     module.api.lambda_board_name,
+    module.labs.labs_lambda_name,
   ]))
 
   # WAF logging
@@ -560,4 +612,9 @@ output "cache_table_name" {
 output "alerts_topic_arn" {
   value       = module.ops.alerts_topic_arn
   description = "SNS topic for alerts"
+}
+
+output "labs_enabled" {
+  value       = module.labs.enabled
+  description = "Whether Kali Labs module is active"
 }

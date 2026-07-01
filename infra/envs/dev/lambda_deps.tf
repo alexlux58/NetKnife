@@ -7,9 +7,9 @@
 
 locals {
   lambda_functions_root = abspath("${path.module}/../../../backend/functions")
-  lambda_shared_root      = abspath("${path.module}/../../../backend/shared/netknife-common")
-  lambda_package_jsons    = fileset(local.lambda_functions_root, "*/package.json")
-  lambda_shared_files     = fileset(local.lambda_shared_root, "**")
+  lambda_shared_root    = abspath("${path.module}/../../../backend/shared/netknife-common")
+  lambda_package_jsons  = fileset(local.lambda_functions_root, "*/package.json")
+  lambda_shared_files   = fileset(local.lambda_shared_root, "**")
   lambda_npm_trigger = sha256(join("", concat(
     [
       for pkg in sort(local.lambda_package_jsons) :

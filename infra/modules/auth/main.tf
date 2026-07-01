@@ -229,6 +229,18 @@ resource "aws_cognito_user_pool_client" "spa" {
 }
 
 # ------------------------------------------------------------------------------
+# HOSTED UI BRANDING — match NetKnife dark terminal theme
+# ------------------------------------------------------------------------------
+# Classic Cognito Hosted UI supports logo + predefined CSS classes only.
+# See cognito-hosted-ui.css and AWS hosted-ui-classic-branding docs.
+
+resource "aws_cognito_user_pool_ui_customization" "spa" {
+  client_id    = aws_cognito_user_pool_client.spa.id
+  user_pool_id = aws_cognito_user_pool.main.id
+  css          = file("${path.module}/cognito-hosted-ui.css")
+}
+
+# ------------------------------------------------------------------------------
 # AUTH CONFIG (DynamoDB) — failsafe and feature flags
 # ------------------------------------------------------------------------------
 # Item id=CONFIG, signups_enabled (bool). If signups_enabled=false, PreSignUp

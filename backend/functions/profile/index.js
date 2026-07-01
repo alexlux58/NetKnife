@@ -72,7 +72,7 @@ function isValidAvatarUrl(v) {
   if (typeof v !== 'string') return false;
   if (DATA_URL_AVATAR.test(v)) return v.length <= MAX_AVATAR_DATAURL;
   if (v.startsWith('http://') || v.startsWith('https://')) return v.length <= MAX_AVATAR_URL;
-  return v.length <= MAX_AVATAR_URL;
+  return false;
 }
 
 async function updateProfile(userId, patch) {

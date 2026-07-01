@@ -20,6 +20,16 @@
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const {
+  validateChannelCreate,
+  validateChannelId,
+  validateThreadCreate,
+  validateThreadId,
+  validateCommentCreate,
+  validateUserId,
+  validateDmSend,
+  trimText,
+} = require('./validation');
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -129,10 +139,11 @@ async function channelsList() {
 // --- channel-create (admin only)
 async function channelCreate(userId, username, body) {
   if (!CHANNELS) return json(503, { error: 'Board not configured.' });
-  const name = (body.name || '').trim();
-  if (!name) return json(400, { error: 'Channel name is required.' });
+  const validated = validateChannelCreate(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { name, description } = validated.value;
   const id = `ch-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const item = { pk: 'CHAN', sk: id, name, description: (body.description || '').trim().slice(0, 500), createdBy: userId, createdAt: new Date().toISOString() };
+  const item = { pk: 'CHAN', sk: id, name, description, createdBy: userId, createdAt: new Date().toISOString() };
   await ddb.send(new PutCommand({ TableName: CHANNELS, Item: item }));
   await logActivity(userId, username, 'channel-create', id, name);
   return json(200, { channel: { id: item.sk, name: item.name, description: item.description, createdAt: item.createdAt } });
@@ -141,8 +152,9 @@ async function channelCreate(userId, username, body) {
 // --- threads-list
 async function threadsList(body) {
   if (!THREADS) return json(200, { threads: [] });
-  const ch = (body.channelId || '').trim();
-  if (!ch) return json(400, { error: 'channelId is required.' });
+  const validated = validateChannelId(body?.channelId);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const ch = validated.value;
   const r = await ddb.send(new QueryCommand({
     TableName: THREADS,
     KeyConditionExpression: 'pk = :pk',
@@ -157,13 +169,13 @@ async function threadsList(body) {
 // --- thread-create
 async function threadCreate(userId, username, body) {
   if (!THREADS) return json(503, { error: 'Board not configured.' });
-  const ch = (body.channelId || '').trim();
-  const title = (body.title || '').trim();
-  const b = (body.body || '').trim();
-  if (!ch || !title) return json(400, { error: 'channelId and title are required.' });
+  const validated = validateThreadCreate(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { channelId: ch, title, body: b } = validated.value;
+  const authorName = trimText(username, 200) || '?';
   const id = `th-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const now = new Date().toISOString();
-  const item = { pk: ch, sk: id, title, body: b.slice(0, 10000), authorId: userId, authorName: (body.authorName || '').trim().slice(0, 200) || '?', createdAt: now };
+  const item = { pk: ch, sk: id, title, body: b, authorId: userId, authorName, createdAt: now };
   await ddb.send(new PutCommand({ TableName: THREADS, Item: item }));
   await logActivity(userId, username, 'thread-create', ch, title);
   return json(200, { thread: { id: item.sk, channelId: item.pk, title: item.title, body: item.body, authorId: item.authorId, authorName: item.authorName, createdAt: item.createdAt } });
@@ -171,11 +183,12 @@ async function threadCreate(userId, username, body) {
 
 // --- thread-get
 async function threadGet(userId, body) {
-  const threadId = (body.threadId || '').trim();
-  if (!threadId) return json(400, { error: 'threadId is required.' });
-  // Find thread: we need channelId. Store channelId in thread. We have pk=channelId, sk=threadId. So we need to know channelId to get. Alternative: use a GSI or store threadId as pk. For get by threadId we could use a GSI pk=threadId. For simplicity we'll ask for channelId in the request, or we could scan. I'll add channelId to the request for thread-get.
-  const ch = (body.channelId || '').trim();
-  if (!ch) return json(400, { error: 'channelId is required for thread-get.' });
+  const threadValidated = validateThreadId(body?.threadId);
+  if (!threadValidated.ok) return json(400, { error: threadValidated.error });
+  const threadId = threadValidated.value;
+  const channelValidated = validateChannelId(body?.channelId);
+  if (!channelValidated.ok) return json(400, { error: channelValidated.error });
+  const ch = channelValidated.value;
   const tr = await ddb.send(new GetCommand({ TableName: THREADS, Key: { pk: ch, sk: threadId } }));
   const t = tr.Item;
   if (!t) return json(404, { error: 'Thread not found.' });
@@ -200,12 +213,13 @@ async function threadGet(userId, body) {
 // --- comment-add
 async function commentAdd(userId, username, body) {
   if (!COMMENTS) return json(503, { error: 'Board not configured.' });
-  const threadId = (body.threadId || '').trim();
-  const b = (body.body || '').trim();
-  if (!threadId || !b) return json(400, { error: 'threadId and body are required.' });
+  const validated = validateCommentCreate(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { threadId, body: b } = validated.value;
+  const authorName = trimText(username, 200) || '?';
   const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const now = new Date().toISOString();
-  const item = { pk: threadId, sk: id, body: b.slice(0, 5000), authorId: userId, authorName: (body.authorName || '').trim().slice(0, 200) || '?', createdAt: now };
+  const item = { pk: threadId, sk: id, body: b, authorId: userId, authorName, createdAt: now };
   await ddb.send(new PutCommand({ TableName: COMMENTS, Item: item }));
   await logActivity(userId, username, 'comment-add', threadId, b.slice(0, 80));
   return json(200, { comment: { id: item.sk, threadId: item.pk, body: item.body, authorId: item.authorId, authorName: item.authorName, createdAt: item.createdAt } });
@@ -214,8 +228,9 @@ async function commentAdd(userId, username, body) {
 // --- like-toggle
 async function likeToggle(userId, body) {
   if (!LIKES) return json(503, { error: 'Board not configured.' });
-  const threadId = (body.threadId || '').trim();
-  if (!threadId) return json(400, { error: 'threadId is required.' });
+  const validated = validateThreadId(body?.threadId);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const threadId = validated.value;
   const key = { pk: threadId, sk: `LIKE#${userId}` };
   const r = await ddb.send(new GetCommand({ TableName: LIKES, Key: key }));
   let liked;
@@ -232,9 +247,15 @@ async function likeToggle(userId, body) {
 // --- bookmark-toggle (body.channelId stored for bookmarks-list)
 async function bookmarkToggle(userId, body) {
   if (!BOOKMARKS) return json(503, { error: 'Board not configured.' });
-  const threadId = (body.threadId || '').trim();
-  const channelId = (body.channelId || '').trim();
-  if (!threadId) return json(400, { error: 'threadId is required.' });
+  const validated = validateThreadId(body?.threadId);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const threadId = validated.value;
+  let channelId = null;
+  if (body?.channelId) {
+    const channelValidated = validateChannelId(body.channelId);
+    if (!channelValidated.ok) return json(400, { error: channelValidated.error });
+    channelId = channelValidated.value;
+  }
   const key = { pk: userId, sk: threadId };
   const r = await ddb.send(new GetCommand({ TableName: BOOKMARKS, Key: key }));
   let bookmarked;
@@ -288,8 +309,9 @@ async function dmConvos(userId) {
 // --- dm-messages
 async function dmMessages(userId, body) {
   if (!DM_MESSAGES) return json(200, { messages: [] });
-  const other = (body.otherUserId || '').trim();
-  if (!other) return json(400, { error: 'otherUserId is required.' });
+  const validated = validateUserId(body?.otherUserId);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const other = validated.value;
   const cid = convId(userId, other);
   const r = await ddb.send(new QueryCommand({
     TableName: DM_MESSAGES,
@@ -305,10 +327,10 @@ async function dmMessages(userId, body) {
 // --- dm-send
 async function dmSend(userId, username, body) {
   if (!DM_MESSAGES || !DM_CONVOS) return json(503, { error: 'DMs not configured.' });
-  const other = (body.otherUserId || '').trim();
-  const b = (body.body || '').trim();
-  if (!other || !b) return json(400, { error: 'otherUserId and body are required.' });
-  const fromName = (body.fromName || '').trim().slice(0, 200) || '?';
+  const validated = validateDmSend(body, userId);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { otherUserId: other, body: b } = validated.value;
+  const fromName = trimText(username, 200) || '?';
   const cid = convId(userId, other);
   const now = new Date().toISOString();
   const msgId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -374,6 +396,9 @@ exports.handler = async (event) => {
         return json(400, { error: 'Invalid JSON' });
       }
     }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json(400, { error: 'Request body must be a JSON object' });
+    }
 
     const action = (body.action || '').trim();
 
@@ -407,7 +432,3 @@ exports.handler = async (event) => {
     return json(500, { error: 'Internal server error' });
   }
 };
-</think>
-
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-Read

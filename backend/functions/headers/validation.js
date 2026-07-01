@@ -1,5 +1,9 @@
-const net = require('net')
 const { createResponse } = require('netknife-common')
+const {
+  isPrivateIPv4,
+  isPrivateIPv6,
+  isBlockedIP,
+} = require('netknife-common/ssrf')
 
 const SECURITY_HEADERS = [
   'strict-transport-security',
@@ -12,44 +16,6 @@ const SECURITY_HEADERS = [
   'cross-origin-embedder-policy',
   'cross-origin-resource-policy',
 ]
-
-function isPrivateIPv4(ip) {
-  const parts = ip.split('.').map((x) => Number(x))
-  if (parts.length !== 4) return true
-  if (parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true
-
-  const [a, b] = parts
-
-  if (a === 127) return true
-  if (a === 0) return true
-  if (a === 10) return true
-  if (a === 172 && b >= 16 && b <= 31) return true
-  if (a === 192 && b === 168) return true
-  if (a === 169 && b === 254) return true
-  if (a === 100 && b >= 64 && b <= 127) return true
-  if (a === 198 && (b === 18 || b === 19)) return true
-  if (a >= 224) return true
-
-  return false
-}
-
-function isPrivateIPv6(ip) {
-  const normalized = ip.toLowerCase()
-
-  if (normalized === '::1' || normalized === '::') return true
-  if (normalized.startsWith('fe80:')) return true
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true
-  if (normalized.startsWith('ff')) return true
-
-  return false
-}
-
-function isBlockedIP(ip) {
-  const version = net.isIP(ip)
-  if (version === 4) return isPrivateIPv4(ip)
-  if (version === 6) return isPrivateIPv6(ip)
-  return true
-}
 
 function analyzeSecurityHeaders(headers) {
   const present = {}

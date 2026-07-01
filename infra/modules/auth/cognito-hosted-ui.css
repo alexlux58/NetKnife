@@ -1,0 +1,124 @@
+/* NetKnife dark terminal theme for Cognito Hosted UI (classic) */
+.background-customizable {
+  background-color: #0d1117;
+}
+
+.banner-customizable {
+  padding: 25px 0;
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+}
+
+.logo-customizable {
+  max-width: 64px;
+  max-height: 64px;
+}
+
+.label-customizable {
+  font-weight: 500;
+  color: #c9d1d9;
+}
+
+.textDescription-customizable {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  display: block;
+  font-size: 16px;
+  color: #8b949e;
+}
+
+.idpDescription-customizable {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  display: block;
+  font-size: 16px;
+  color: #8b949e;
+}
+
+.legalText-customizable {
+  color: #6e7681;
+  font-size: 11px;
+}
+
+.submitButton-customizable {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 20px 0 10px;
+  height: 44px;
+  width: 100%;
+  color: #ffffff;
+  background-color: #238636;
+  border: 1px solid #2ea043;
+  border-radius: 8px;
+}
+
+.submitButton-customizable:hover {
+  color: #ffffff;
+  background-color: #2ea043;
+  border-color: #3fb950;
+}
+
+.errorMessage-customizable {
+  padding: 8px;
+  font-size: 14px;
+  width: 100%;
+  background: #1a0000;
+  border: 1px solid #da3633;
+  color: #f85149;
+  border-radius: 6px;
+}
+
+.inputField-customizable {
+  width: 100%;
+  height: 40px;
+  color: #c9d1d9;
+  background-color: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+}
+
+.inputField-customizable:focus {
+  border-color: #58a6ff;
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.25);
+}
+
+.idpButton-customizable {
+  height: 40px;
+  width: 100%;
+  text-align: center;
+  margin-bottom: 15px;
+  color: #c9d1d9;
+  background-color: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.idpButton-customizable:hover {
+  color: #ffffff;
+  background-color: #30363d;
+  border-color: #58a6ff;
+}
+
+.socialButton-customizable {
+  border-radius: 8px;
+  height: 40px;
+  margin-bottom: 15px;
+  padding: 1px;
+  text-align: left;
+  width: 100%;
+}
+
+.redirect-customizable {
+  text-align: center;
+  color: #58a6ff;
+}
+
+.passwordCheck-valid-customizable {
+  color: #3fb950;
+}
+
+.passwordCheck-notValid-customizable {
+  color: #f85149;
+}

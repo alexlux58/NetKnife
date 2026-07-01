@@ -160,8 +160,9 @@ resource "aws_acm_certificate_validation" "cert" {
 # ------------------------------------------------------------------------------
 
 output "certificate_arn" {
-  value       = aws_acm_certificate.cert.arn
-  description = "ACM certificate ARN (for CloudFront viewer_certificate)"
+  # Reference validation so dependents (CloudFront) wait until the cert is ISSUED.
+  value       = aws_acm_certificate_validation.cert.certificate_arn
+  description = "Validated ACM certificate ARN (for CloudFront viewer_certificate)"
 }
 
 output "certificate_status" {

@@ -15,6 +15,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const Stripe = require('stripe');
+const { parseWebhookRequest, handleWebhook } = require('./webhook');
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -410,116 +411,6 @@ async function handleCreateDonation(userId, amountCents, email, exempt) {
 }
 
 // ------------------------------------------------------------------------------
-// WEBHOOK (Stripe)
-// ------------------------------------------------------------------------------
-
-async function handleWebhook(rawBody, sig) {
-  if (!STRIPE_WEBHOOK_SECRET || !stripe) {
-    return json(503, { error: 'Webhook not configured.' });
-  }
-  let ev;
-  try {
-    ev = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
-  } catch (e) {
-    console.warn('Stripe webhook signature verification failed:', e.message);
-    return json(400, { error: 'Invalid signature' });
-  }
-
-  const sub = ev.data?.object;
-  const userId = sub?.metadata?.netknife_user_id || ev.data?.object?.metadata?.netknife_user_id;
-
-  switch (ev.type) {
-    case 'checkout.session.completed': {
-      const sess = ev.data.object;
-      // One-time donations must not grant API Access / pro plan
-      if (sess.mode === 'payment' && sess.metadata?.type === 'donation') {
-        break;
-      }
-      // Lab credit packs (one-time payment)
-      if (sess.mode === 'payment' && sess.metadata?.type === 'lab_credits') {
-        const uid = sess.metadata?.netknife_user_id;
-        const minutes = Number(sess.metadata?.minutes) || 0;
-        if (uid && minutes > 0 && BILLING_TABLE) {
-          await ddb.send(new UpdateCommand({
-            TableName: BILLING_TABLE,
-            Key: { pk: uid },
-            UpdateExpression: 'SET labCreditsMinutes = if_not_exists(labCreditsMinutes, :zero) + :m, updatedAt = :u',
-            ExpressionAttributeValues: {
-              ':zero': 0,
-              ':m': minutes,
-              ':u': new Date().toISOString(),
-            },
-          }));
-        }
-        break;
-      }
-      const cid = sess.customer;
-      const subId = sess.subscription;
-      const uid = sess.metadata?.netknife_user_id || userId;
-      if (!uid || !subId) break;
-      const subObj = subId ? await stripe.subscriptions.retrieve(subId) : null;
-      const periodEnd = subObj?.current_period_end
-        ? new Date(subObj.current_period_end * 1000).toISOString().slice(0, 10)
-        : null;
-      await ddb.send(new PutCommand({
-        TableName: BILLING_TABLE,
-        Item: {
-          pk: uid,
-          planId: 'pro',
-          stripeCustomerId: cid,
-          stripeSubscriptionId: subId || null,
-          periodEnd: periodEnd || null,
-          updatedAt: new Date().toISOString(),
-        },
-      }));
-      break;
-    }
-    case 'customer.subscription.updated': {
-      const uid = sub.metadata?.netknife_user_id;
-      if (!uid) break;
-      const periodEnd = sub.current_period_end
-        ? new Date(sub.current_period_end * 1000).toISOString().slice(0, 10)
-        : null;
-      const status = sub.status;
-      const planId = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
-      await ddb.send(new UpdateCommand({
-        TableName: BILLING_TABLE,
-        Key: { pk: uid },
-        UpdateExpression: 'SET planId = :p, periodEnd = :e, stripeSubscriptionId = :s, updatedAt = :u',
-        ExpressionAttributeValues: {
-          ':p': planId,
-          ':e': periodEnd,
-          ':s': sub.id,
-          ':u': new Date().toISOString(),
-        },
-      }));
-      break;
-    }
-    case 'customer.subscription.deleted': {
-      const uid = sub.metadata?.netknife_user_id;
-      if (!uid) break;
-      await ddb.send(new UpdateCommand({
-        TableName: BILLING_TABLE,
-        Key: { pk: uid },
-        UpdateExpression: 'SET planId = :p, stripeSubscriptionId = :s, periodEnd = :e, updatedAt = :u',
-        ExpressionAttributeValues: {
-          ':p': 'free',
-          ':s': null,
-          ':e': null,
-          ':u': new Date().toISOString(),
-        },
-      }));
-      break;
-    }
-    default:
-      // acknowledge other events
-      break;
-  }
-
-  return json(200, { received: true });
-}
-
-// ------------------------------------------------------------------------------
 // ROUTING
 // ------------------------------------------------------------------------------
 
@@ -532,12 +423,16 @@ exports.handler = async (event) => {
 
   // Webhook: no JWT, raw body for signature
   if (path === '/billing/webhook' || path.endsWith('/billing/webhook')) {
-    let rawBody = typeof event.body === 'string' ? event.body : (event.body ? JSON.stringify(event.body) : '');
-    if (event.isBase64Encoded && rawBody) {
-      rawBody = Buffer.from(rawBody, 'base64').toString('utf8');
-    }
-    const sig = event.headers?.['stripe-signature'] || event.headers?.['Stripe-Signature'] || '';
-    return handleWebhook(rawBody, sig);
+    const { rawBody, sig } = parseWebhookRequest(event);
+    const result = await handleWebhook(rawBody, sig, {
+      stripe,
+      webhookSecret: STRIPE_WEBHOOK_SECRET,
+      ddb,
+      billingTable: BILLING_TABLE,
+      PutCommand,
+      UpdateCommand,
+    });
+    return json(result.status, result.body);
   }
 
   // Authenticated actions

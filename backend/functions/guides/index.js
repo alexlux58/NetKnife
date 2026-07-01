@@ -27,6 +27,14 @@ const {
   QueryCommand,
 } = require("@aws-sdk/lib-dynamodb");
 
+const {
+  validateSaveProgress,
+  validateGetProgress,
+  validateContentRequest,
+  validateRating,
+  validateAIContent,
+} = require("./validation");
+
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
@@ -93,8 +101,9 @@ function contentKey(guideId, stepId, version = "1") {
 }
 
 async function handleSaveProgress(userId, body) {
-  const { guideId, stepId } = body;
-  if (!guideId || !stepId) return json(400, { error: "Missing guideId or stepId" });
+  const validated = validateSaveProgress(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { guideId, stepId, completed, notes, findings, scanResults, toolResults, shared, collaborators } = validated.value;
 
   const now = Math.floor(Date.now() / 1000);
   const item = {
@@ -102,15 +111,14 @@ async function handleSaveProgress(userId, body) {
     userId,
     guideId,
     stepId,
-    completed: !!body.completed,
-    completedAt: body.completed ? now : null,
-    notes: typeof body.notes === "string" ? body.notes : "",
-    findings: Array.isArray(body.findings) ? body.findings : [],
-    scanResults: Array.isArray(body.scanResults) ? body.scanResults : [],
-    toolResults: body.toolResults && typeof body.toolResults === "object" ? body.toolResults : {},
-    // Collaboration fields
-    shared: !!body.shared,
-    collaborators: Array.isArray(body.collaborators) ? body.collaborators : [],
+    completed,
+    completedAt: completed ? now : null,
+    notes,
+    findings,
+    scanResults,
+    toolResults,
+    shared,
+    collaborators,
     lastViewedAt: now,
     updatedAt: now,
     ttl: now + 365 * 24 * 60 * 60,
@@ -127,8 +135,9 @@ async function handleSaveProgress(userId, body) {
 }
 
 async function handleGetProgress(userId, body) {
-  const { guideId, stepId } = body;
-  if (!guideId) return json(400, { error: "Missing guideId" });
+  const validated = validateGetProgress(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { guideId, stepId } = validated.value;
 
   if (stepId) {
     const result = await ddb.send(
@@ -167,43 +176,24 @@ async function handleListProgress(userId) {
 }
 
 async function handleGetContent(body) {
-  const { guideId, stepId, version = "1" } = body;
-  if (!guideId || !stepId) return json(400, { error: "Missing guideId or stepId" });
+  const validated = validateContentRequest(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { guideId, stepId, version } = validated.value;
   const result = await ddb.send(
     new GetCommand({
       TableName: GUIDE_CONTENT_TABLE,
-      Key: contentKey(guideId, stepId, String(version)),
+      Key: contentKey(guideId, stepId, version),
     })
   );
   return json(200, { content: result.Item?.content || null, cached: !!result.Item });
 }
 
-// Validate AI-generated content before caching
-function validateAIContent(content) {
-  if (!content || typeof content !== "object") {
-    return { valid: false, error: "Content must be an object" };
-  }
-
-  // Check for banned words/phrases (basic example)
-  const bannedWords = ["hack", "exploit", "breach"]; // Expand as needed
-  const contentStr = JSON.stringify(content).toLowerCase();
-  for (const word of bannedWords) {
-    if (contentStr.includes(word)) {
-      return { valid: false, error: `Content contains inappropriate term: ${word}` };
-    }
-  }
-
-  // Ensure content has required structure
-  if (!content.overview && !content.description) {
-    return { valid: false, error: "Content must have overview or description" };
-  }
-
-  return { valid: true };
-}
-
+// Validate AI-generated content before caching (see validation.js)
 async function handleGenerateContent(userId, body) {
-  const { guideId, stepId, version = "1", userContext = "" } = body;
-  if (!guideId || !stepId) return json(400, { error: "Missing guideId or stepId" });
+  const validated = validateContentRequest(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { guideId, stepId, version } = validated.value;
+  const userContext = typeof body.userContext === "string" ? body.userContext.slice(0, 4000) : "";
 
   // If Security Advisor is not configured, return a helpful stub.
   if (!SECURITY_ADVISOR_LAMBDA_URL) {
@@ -251,7 +241,7 @@ async function handleGenerateContent(userId, body) {
   }
 
   const item = {
-    ...contentKey(guideId, stepId, String(version)),
+    ...contentKey(guideId, stepId, version),
     guideId,
     stepId,
     version: String(version),
@@ -276,11 +266,11 @@ async function handleGenerateContent(userId, body) {
 }
 
 async function handleRateContent(userId, body) {
-  const { guideId, stepId, version = "1", rating, feedback } = body;
-  if (!guideId || !stepId) return json(400, { error: "Missing guideId or stepId" });
-  if (!rating || rating < 1 || rating > 5) return json(400, { error: "Rating must be 1-5" });
+  const validated = validateRating(body);
+  if (!validated.ok) return json(400, { error: validated.error });
+  const { guideId, stepId, version, rating, feedback } = validated.value;
 
-  const key = contentKey(guideId, stepId, String(version));
+  const key = contentKey(guideId, stepId, version);
   const result = await ddb.send(new GetCommand({
     TableName: GUIDE_CONTENT_TABLE,
     Key: key,
@@ -296,8 +286,8 @@ async function handleRateContent(userId, body) {
 
   const newRating = {
     userId,
-    rating: Number(rating),
-    feedback: typeof feedback === "string" ? feedback : "",
+    rating,
+    feedback,
     createdAt: now,
   };
 
@@ -338,6 +328,9 @@ exports.handler = async (event) => {
       } catch {
         return json(400, { error: "Invalid JSON body" });
       }
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return json(400, { error: "Request body must be a JSON object" });
     }
 
     const action = String(body.action || "").trim();

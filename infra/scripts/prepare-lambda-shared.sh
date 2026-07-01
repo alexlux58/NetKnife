@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SHARED_SRC="$PROJECT_ROOT/backend/shared/netknife-common"
 LAYER_DEST="$PROJECT_ROOT/backend/layer/nodejs/node_modules/netknife-common"
-POC_FUNCTIONS=(dns headers reverse-dns)
+POC_FUNCTIONS=(dns headers reverse-dns tls rdap traceroute)
 
 if [ ! -f "$SHARED_SRC/package.json" ]; then
   echo "Error: shared module not found at $SHARED_SRC" >&2

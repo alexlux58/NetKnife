@@ -720,6 +720,30 @@ resource "aws_iam_role_policy" "profiles_access" {
   })
 }
 
+# DynamoDB guides access (guides Lambda)
+resource "aws_iam_role_policy" "guides_access" {
+  name = "${local.name}-guides-access"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query"
+      ]
+      Resource = [
+        aws_dynamodb_table.guide_progress.arn,
+        aws_dynamodb_table.guide_content.arn
+      ]
+    }]
+  })
+}
+
 # DynamoDB board access (board Lambda)
 resource "aws_iam_role_policy" "board_access" {
   name = "${local.name}-board-access"
@@ -950,6 +974,7 @@ resource "aws_lambda_function" "rdap" {
 
   filename         = data.archive_file.rdap_zip.output_path
   source_code_hash = data.archive_file.rdap_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.common.arn]
 
   timeout     = 15
   memory_size = 128
@@ -1010,6 +1035,7 @@ resource "aws_lambda_function" "tls" {
 
   filename         = data.archive_file.tls_zip.output_path
   source_code_hash = data.archive_file.tls_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.common.arn]
 
   timeout     = 15
   memory_size = 128
@@ -1669,6 +1695,7 @@ resource "aws_lambda_function" "traceroute" {
 
   filename         = data.archive_file.traceroute_zip.output_path
   source_code_hash = data.archive_file.traceroute_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.common.arn]
 
   timeout     = 60 # Increased for multiple API calls (DNS + RIPEstat + BGPView)
   memory_size = 256

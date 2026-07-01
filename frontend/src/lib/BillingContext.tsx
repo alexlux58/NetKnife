@@ -8,7 +8,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { getUsername } from './auth'
 import { billingUsage, type BillingUsage } from './billing'
 
-const SUPERUSER_USERNAMES = ['alex.lux']
+const SUPERUSER_USERNAMES = ['alex.lux', 'alexlux']
 
 interface BillingContextValue {
   usage: BillingUsage | null

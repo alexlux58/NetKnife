@@ -4,6 +4,8 @@
 # Runs on push/PR to main: secrets, dependency vulns, IaC misconfigs.
 #
 # Optional secrets: GITGUARDIAN_API_KEY, SNYK_TOKEN
+# - npm audit, Checkov, and Trivy always fail the workflow on findings.
+# - GitGuardian and Snyk fail only when their secrets are configured.
 # ==============================================================================
 
 name: Security
@@ -32,7 +34,7 @@ jobs:
           GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
           GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        continue-on-error: true
+        continue-on-error: ${{ secrets.GITGUARDIAN_API_KEY == '' }}
 
   npm-audit:
     name: npm audit
@@ -49,7 +51,6 @@ jobs:
       - name: Audit frontend
         run: npm ci && npm audit --audit-level=high
         working-directory: frontend
-        continue-on-error: true
 
       - uses: actions/setup-node@v4
         with:
@@ -60,7 +61,6 @@ jobs:
       - name: Audit backend (billing)
         run: npm ci && npm audit --audit-level=high
         working-directory: backend/functions/billing
-        continue-on-error: true
 
       - uses: actions/setup-node@v4
         with:
@@ -71,7 +71,6 @@ jobs:
       - name: Audit backend (cognito-triggers)
         run: npm ci && npm audit --audit-level=high
         working-directory: backend/functions/cognito-triggers
-        continue-on-error: true
 
   snyk-deps:
     name: Snyk (dependencies)
@@ -86,11 +85,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Snyk – frontend
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         run: npm ci && npx snyk@latest test --severity-threshold=high
         working-directory: frontend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        continue-on-error: true
 
       - uses: actions/setup-node@v4
         with:
@@ -99,11 +98,11 @@ jobs:
           cache-dependency-path: backend/functions/billing/package-lock.json
 
       - name: Snyk – backend billing
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         run: npm ci && npx snyk@latest test --severity-threshold=high
         working-directory: backend/functions/billing
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        continue-on-error: true
 
       - uses: actions/setup-node@v4
         with:
@@ -112,11 +111,15 @@ jobs:
           cache-dependency-path: backend/functions/cognito-triggers/package-lock.json
 
       - name: Snyk – backend cognito-triggers
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         run: npm ci && npx snyk@latest test --severity-threshold=high
         working-directory: backend/functions/cognito-triggers
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        continue-on-error: true
+
+      - name: Skip Snyk dependency scan (SNYK_TOKEN not configured)
+        if: ${{ secrets.SNYK_TOKEN == '' }}
+        run: echo "SNYK_TOKEN not set; skipping Snyk dependency scans."
 
   snyk-iac:
     name: Snyk (Terraform)
@@ -124,12 +127,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Snyk IaC scan
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         uses: snyk/actions/iac@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --severity-threshold=high infra/
-        continue-on-error: true
+      - name: Skip Snyk IaC scan (SNYK_TOKEN not configured)
+        if: ${{ secrets.SNYK_TOKEN == '' }}
+        run: echo "SNYK_TOKEN not set; skipping Snyk IaC scan."
 
   checkov:
     name: Checkov (IaC)
@@ -141,7 +147,7 @@ jobs:
         with:
           directory: infra/
           output_format: cli
-          soft_fail: true
+          soft_fail: false
           framework: terraform
           skip_check: CKV_AWS_119,CKV_AWS_28
 
@@ -156,6 +162,5 @@ jobs:
           scan-type: fs
           scan-ref: .
           severity: CRITICAL,HIGH
-          exit-code: "0"
+          exit-code: "1"
           ignore-unfixed: true
-        continue-on-error: true

@@ -357,7 +357,7 @@ module "static_site" {
 
   # Custom domain configuration (optional)
   custom_domain        = var.custom_domain
-  acm_certificate_arn = var.custom_domain != "" ? module.acm[0].certificate_arn : ""
+  acm_certificate_arn  = var.custom_domain != "" ? module.acm[0].certificate_arn : ""
   cloudflare_zone_id   = var.cloudflare_zone_id
   cloudflare_zone_name = var.cloudflare_zone_name
   cloudflare_subdomain = var.cloudflare_subdomain
@@ -408,12 +408,12 @@ module "api" {
   allowed_origins = [local.site_url]
 
   # Stripe (billing Lambda). SITE_URL for redirects.
-  site_url                = local.site_url
-  stripe_secret_key       = var.stripe_secret_key
-  stripe_webhook_secret   = var.stripe_webhook_secret
-  stripe_pro_price_id     = var.stripe_pro_price_id
+  site_url                 = local.site_url
+  stripe_secret_key        = var.stripe_secret_key
+  stripe_webhook_secret    = var.stripe_webhook_secret
+  stripe_pro_price_id      = var.stripe_pro_price_id
   billing_exempt_usernames = var.billing_exempt_usernames
-  admin_usernames         = var.admin_usernames
+  admin_usernames          = var.admin_usernames
 
   # Optional API key integrations (leave empty to disable)
   abuseipdb_api_key      = var.abuseipdb_api_key
@@ -442,18 +442,18 @@ module "labs" {
   env      = var.env
   site_url = local.site_url
 
-  api_id          = module.api.api_id
-  authorizer_id   = module.api.authorizer_id
-  execution_arn   = module.api.api_execution_arn
+  api_id             = module.api.api_id
+  authorizer_id      = module.api.authorizer_id
+  execution_arn      = module.api.api_execution_arn
   billing_table_name = module.api.billing_table_name
 
   kali_ami_id = var.kali_ami_id
 
-  stripe_secret_key              = var.stripe_secret_key
-  stripe_lab_starter_price_id    = var.stripe_lab_starter_price_id
-  stripe_lab_standard_price_id   = var.stripe_lab_standard_price_id
-  stripe_lab_power_price_id      = var.stripe_lab_power_price_id
-  billing_exempt_usernames       = var.billing_exempt_usernames
+  stripe_secret_key            = var.stripe_secret_key
+  stripe_lab_starter_price_id  = var.stripe_lab_starter_price_id
+  stripe_lab_standard_price_id = var.stripe_lab_standard_price_id
+  stripe_lab_power_price_id    = var.stripe_lab_power_price_id
+  billing_exempt_usernames     = var.billing_exempt_usernames
 
   lambda_deps_trigger = null_resource.lambda_functions_npm
 }
@@ -537,7 +537,7 @@ module "cost" {
   name_prefix              = "${var.project}-${var.env}"
   alerts_topic_arn         = module.ops.alerts_topic_arn
   monthly_budget_usd       = var.monthly_budget_usd
-  enable_anomaly_detection = false  # Disabled: AWS account limit exceeded
+  enable_anomaly_detection = false # Disabled: AWS account limit exceeded
 }
 
 # ------------------------------------------------------------------------------

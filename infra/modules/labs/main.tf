@@ -112,7 +112,7 @@ resource "aws_subnet" "labs_private" {
   count                   = local.enabled ? 1 : 0
   vpc_id                  = aws_vpc.labs[0].id
   cidr_block              = cidrsubnet(local.vpc_cidr, 8, 1)
-  availability_zone       = data.aws_availability_zones.available[0].names[0]
+  availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = false
   tags                    = { Name = "${local.name}-labs-private" }
 }
@@ -121,7 +121,7 @@ resource "aws_subnet" "labs_public" {
   count                   = local.enabled ? 1 : 0
   vpc_id                  = aws_vpc.labs[0].id
   cidr_block              = cidrsubnet(local.vpc_cidr, 8, 0)
-  availability_zone       = data.aws_availability_zones.available[0].names[0]
+  availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
   tags                    = { Name = "${local.name}-labs-public" }
 }
@@ -177,32 +177,32 @@ resource "aws_route_table_association" "labs_private" {
 
 # SSM VPC endpoints (avoid NAT for Session Manager)
 resource "aws_vpc_endpoint" "ssm" {
-  count             = local.enabled ? 1 : 0
-  vpc_id            = aws_vpc.labs[0].id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.ssm"
-  vpc_endpoint_type = "Interface"
-  subnet_ids        = [aws_subnet.labs_private[0].id]
-  security_group_ids = [aws_security_group.labs_endpoint[0].id]
+  count               = local.enabled ? 1 : 0
+  vpc_id              = aws_vpc.labs[0].id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ssm"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.labs_private[0].id]
+  security_group_ids  = [aws_security_group.labs_endpoint[0].id]
   private_dns_enabled = true
 }
 
 resource "aws_vpc_endpoint" "ssmmessages" {
-  count             = local.enabled ? 1 : 0
-  vpc_id            = aws_vpc.labs[0].id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.ssmmessages"
-  vpc_endpoint_type = "Interface"
-  subnet_ids        = [aws_subnet.labs_private[0].id]
-  security_group_ids = [aws_security_group.labs_endpoint[0].id]
+  count               = local.enabled ? 1 : 0
+  vpc_id              = aws_vpc.labs[0].id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ssmmessages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.labs_private[0].id]
+  security_group_ids  = [aws_security_group.labs_endpoint[0].id]
   private_dns_enabled = true
 }
 
 resource "aws_vpc_endpoint" "ec2messages" {
-  count             = local.enabled ? 1 : 0
-  vpc_id            = aws_vpc.labs[0].id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.ec2messages"
-  vpc_endpoint_type = "Interface"
-  subnet_ids        = [aws_subnet.labs_private[0].id]
-  security_group_ids = [aws_security_group.labs_endpoint[0].id]
+  count               = local.enabled ? 1 : 0
+  vpc_id              = aws_vpc.labs[0].id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ec2messages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.labs_private[0].id]
+  security_group_ids  = [aws_security_group.labs_endpoint[0].id]
   private_dns_enabled = true
 }
 
@@ -296,7 +296,7 @@ resource "aws_dynamodb_table" "labs" {
 
   ttl {
     attribute_name = "ttl"
-    enabled      = true
+    enabled        = true
   }
 
   tags = { Name = "${local.name}-labs" }
@@ -399,20 +399,20 @@ resource "aws_lambda_function" "labs" {
       LAB_INSTANCE_PROFILE         = aws_iam_instance_profile.lab_instance[0].name
       SITE_URL                     = var.site_url
       STRIPE_SECRET_KEY            = var.stripe_secret_key
-      STRIPE_LAB_STARTER_PRICE_ID    = var.stripe_lab_starter_price_id
-      STRIPE_LAB_STANDARD_PRICE_ID   = var.stripe_lab_standard_price_id
-      STRIPE_LAB_POWER_PRICE_ID      = var.stripe_lab_power_price_id
+      STRIPE_LAB_STARTER_PRICE_ID  = var.stripe_lab_starter_price_id
+      STRIPE_LAB_STANDARD_PRICE_ID = var.stripe_lab_standard_price_id
+      STRIPE_LAB_POWER_PRICE_ID    = var.stripe_lab_power_price_id
       BILLING_EXEMPT_USERNAMES     = var.billing_exempt_usernames
     }
   }
 }
 
 resource "aws_apigatewayv2_integration" "labs" {
-  count              = local.enabled ? 1 : 0
-  api_id             = var.api_id
-  integration_type   = "AWS_PROXY"
-  integration_uri    = aws_lambda_function.labs[0].arn
-  integration_method = "POST"
+  count                  = local.enabled ? 1 : 0
+  api_id                 = var.api_id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.labs[0].arn
+  integration_method     = "POST"
   payload_format_version = "2.0"
 }
 

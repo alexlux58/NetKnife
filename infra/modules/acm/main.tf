@@ -83,7 +83,7 @@ resource "aws_acm_certificate" "cert" {
 
 resource "cloudflare_dns_record" "caa_amazon" {
   zone_id = var.cloudflare_zone_id
-  name    = "@"  # Root domain (alexflux.com)
+  name    = "@" # Root domain (alexflux.com)
   type    = "CAA"
   ttl     = 300
   data = {
@@ -96,7 +96,7 @@ resource "cloudflare_dns_record" "caa_amazon" {
 
 resource "cloudflare_dns_record" "caa_amazontrust" {
   zone_id = var.cloudflare_zone_id
-  name    = "@"  # Root domain
+  name    = "@" # Root domain
   type    = "CAA"
   ttl     = 300
   data = {
@@ -126,7 +126,7 @@ resource "cloudflare_dns_record" "validation" {
   content = each.value.record
   type    = each.value.type
   ttl     = 60
-  proxied = false  # Validation records cannot be proxied
+  proxied = false # Validation records cannot be proxied
 
   comment = "ACM DNS validation for ${var.domain}"
 }
@@ -139,7 +139,7 @@ resource "cloudflare_dns_record" "validation" {
 resource "aws_acm_certificate_validation" "cert" {
   provider = aws.acm
 
-  certificate_arn         = aws_acm_certificate.cert.arn
+  certificate_arn = aws_acm_certificate.cert.arn
   # Use the domain validation options directly - no need to reference Cloudflare
   validation_record_fqdns = [for dvo in aws_acm_certificate.cert.domain_validation_options : dvo.resource_record_name]
 

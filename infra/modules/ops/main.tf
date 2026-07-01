@@ -128,7 +128,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   evaluation_periods  = 1
   metric_name         = "Errors"
   namespace           = "AWS/Lambda"
-  period              = 300  # 5 minutes
+  period              = 300 # 5 minutes
   statistic           = "Sum"
   threshold           = 1
   treat_missing_data  = "notBreaching"
@@ -187,7 +187,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration_p95" {
   namespace           = "AWS/Lambda"
   period              = 300
   extended_statistic  = "p95"
-  threshold           = 2000  # 2 seconds
+  threshold           = 2000 # 2 seconds
   treat_missing_data  = "notBreaching"
 
   dimensions = {

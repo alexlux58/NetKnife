@@ -137,8 +137,8 @@ resource "aws_cloudfront_origin_access_control" "oac" {
   name                              = "${var.project}-${var.env}-oac"
   description                       = "OAC for ${var.project} ${var.env} static site"
   origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"  # Always sign requests to S3
-  signing_protocol                  = "sigv4"   # Use AWS Signature Version 4
+  signing_behavior                  = "always" # Always sign requests to S3
+  signing_protocol                  = "sigv4"  # Use AWS Signature Version 4
 }
 
 # ------------------------------------------------------------------------------
@@ -176,7 +176,7 @@ resource "aws_cloudfront_response_headers_policy" "security" {
     # Forces browsers to use HTTPS for this domain
     # max-age=31536000 (1 year), includeSubdomains, preload
     strict_transport_security {
-      access_control_max_age_sec = 31536000  # 1 year
+      access_control_max_age_sec = 31536000 # 1 year
       include_subdomains         = true
       preload                    = true
       override                   = true
@@ -200,7 +200,7 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 
 resource "aws_cloudfront_distribution" "cdn" {
   enabled             = true
-  default_root_object = "index.html"  # Serve index.html at /
+  default_root_object = "index.html" # Serve index.html at /
   comment             = "${var.project} ${var.env} static site"
 
   # Custom domain alias (if configured)
@@ -216,7 +216,7 @@ resource "aws_cloudfront_distribution" "cdn" {
   # Default cache behavior for all requests
   default_cache_behavior {
     target_origin_id       = "s3-origin"
-    viewer_protocol_policy = "redirect-to-https"  # Force HTTPS
+    viewer_protocol_policy = "redirect-to-https" # Force HTTPS
 
     # Allowed HTTP methods (static site only needs GET/HEAD)
     allowed_methods = ["GET", "HEAD", "OPTIONS"]
@@ -230,16 +230,16 @@ resource "aws_cloudfront_distribution" "cdn" {
 
     # Forwarding configuration
     forwarded_values {
-      query_string = true  # Forward query strings (useful for cache busting)
+      query_string = true # Forward query strings (useful for cache busting)
       cookies {
-        forward = "none"  # Don't forward cookies (static site doesn't need them)
+        forward = "none" # Don't forward cookies (static site doesn't need them)
       }
     }
 
     # Cache settings
     min_ttl     = 0
-    default_ttl = 86400   # 1 day default cache
-    max_ttl     = 31536000  # 1 year max cache
+    default_ttl = 86400    # 1 day default cache
+    max_ttl     = 31536000 # 1 year max cache
   }
 
   # No geographic restrictions
@@ -334,11 +334,11 @@ resource "cloudflare_dns_record" "site" {
   count = local.cloudflare_enabled ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
-  name    = var.cloudflare_subdomain  # e.g., "tools" (not "tools.alexflux.com")
+  name    = var.cloudflare_subdomain # e.g., "tools" (not "tools.alexflux.com")
   content = aws_cloudfront_distribution.cdn.domain_name
   type    = "CNAME"
   proxied = var.enable_cloudflare_proxy
-  ttl     = var.enable_cloudflare_proxy ? 1 : 300  # Auto if proxied
+  ttl     = var.enable_cloudflare_proxy ? 1 : 300 # Auto if proxied
 
   comment = "NetKnife static site - managed by Terraform"
 }

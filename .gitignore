@@ -7,6 +7,9 @@ __pycache__/
 
 .pnpm-store/
 
+# Dependencies (never commit installed packages)
+node_modules/
+
 # Build outputs
 frontend/dist/
 *.zip

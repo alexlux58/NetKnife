@@ -51,6 +51,48 @@ jobs:
               - 'infra/**'
               - '.github/workflows/cd.yml'
 
+  deploy-readiness:
+    name: Check deploy configuration
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          NETKNIFE_TFVARS: ${{ secrets.NETKNIFE_TFVARS }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+        run: |
+          aws_ready=false
+          tfvars_ready=false
+          state_ready=false
+
+          if [ -n "${AWS_ROLE_TO_ASSUME}" ] || { [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; }; then
+            aws_ready=true
+          fi
+
+          if [ -n "${NETKNIFE_TFVARS}" ]; then
+            tfvars_ready=true
+          fi
+
+          if [ -n "${TF_STATE_BUCKET}" ] && [ -n "${TF_STATE_LOCK_TABLE}" ]; then
+            state_ready=true
+          fi
+
+          ready=false
+          if [ "${aws_ready}" = true ] && [ "${tfvars_ready}" = true ] && [ "${state_ready}" = true ]; then
+            ready=true
+          fi
+
+          echo "ready=${ready}" >> "$GITHUB_OUTPUT"
+
+          if [ "${ready}" != true ]; then
+            echo "::notice::Skipping deploy jobs because AWS auth, NETKNIFE_TFVARS, or remote state secrets are not fully configured. See docs/CICD.md."
+          fi
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -94,8 +136,8 @@ jobs:
   deploy-infra:
     name: Deploy infrastructure
     runs-on: ubuntu-latest
-    needs: [test, changes]
-    if: needs.changes.outputs.infra == 'true'
+    needs: [test, changes, deploy-readiness]
+    if: needs.changes.outputs.infra == 'true' && needs.deploy-readiness.outputs.ready == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -149,10 +191,11 @@ jobs:
   deploy-frontend:
     name: Deploy frontend
     runs-on: ubuntu-latest
-    needs: [test, changes, deploy-infra]
+    needs: [test, changes, deploy-infra, deploy-readiness]
     if: |
       always() &&
       needs.test.result == 'success' &&
+      needs.deploy-readiness.outputs.ready == 'true' &&
       (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true') &&
       (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
     steps:

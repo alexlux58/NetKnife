@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "image": "netknife-kali",
+  "tools": [
+    { "id": "trivy", "name": "Trivy", "command": "trivy", "category": "vulnerability", "description": "Container, K8s, IaC, SBOM, secrets scanning" },
+    { "id": "openscap", "name": "OpenSCAP", "command": "oscap", "category": "compliance", "description": "CIS, DISA STIG, security baselines" },
+    { "id": "prowler", "name": "Prowler", "command": "prowler", "category": "cloud-audit", "description": "AWS, Azure, GCP security audits" },
+    { "id": "scout-suite", "name": "Scout Suite", "command": "scout-suite", "category": "cloud-audit", "description": "Multi-cloud security posture assessment" },
+    { "id": "cloudsplaining", "name": "CloudSplaining", "command": "cloudsplaining", "category": "iam", "description": "Excessive AWS IAM permissions" },
+    { "id": "steampipe", "name": "Steampipe", "command": "steampipe", "category": "cloud-query", "description": "SQL queries over cloud APIs" },
+    { "id": "custodian", "name": "Cloud Custodian", "command": "custodian", "category": "governance", "description": "Policy-as-code for cloud governance" },
+    { "id": "checkov", "name": "Checkov", "command": "checkov", "category": "iac", "description": "Terraform, CloudFormation, K8s, Dockerfile scanning" },
+    { "id": "terrascan", "name": "Terrascan", "command": "terrascan", "category": "iac", "description": "IaC misconfiguration detection" },
+    { "id": "osquery", "name": "osquery", "command": "osqueryi", "category": "endpoint", "description": "SQL-based endpoint visibility" },
+    { "id": "kube-bench", "name": "kube-bench", "command": "kube-bench", "category": "kubernetes", "description": "CIS Benchmark for Kubernetes" },
+    { "id": "kube-hunter", "name": "kube-hunter", "command": "kube-hunter", "category": "kubernetes", "description": "Kubernetes weakness discovery" },
+    { "id": "kubescape", "name": "Kubescape", "command": "kubescape", "category": "kubernetes", "description": "K8s posture and runtime security" }
+  ],
+  "wrappers": {
+    "prowler-aws": "prowler aws",
+    "scout-aws": "scout-suite aws",
+    "trivy-fs": "trivy fs --severity HIGH,CRITICAL",
+    "checkov-dir": "checkov -d"
+  }
+}

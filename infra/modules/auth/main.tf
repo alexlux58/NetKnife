@@ -100,17 +100,17 @@ resource "aws_cognito_user_pool" "main" {
 
   # Strong password policy
   password_policy {
-    minimum_length                   = 14      # 14+ characters
-    require_lowercase                = true    # At least one lowercase letter
-    require_uppercase                = true    # At least one uppercase letter
-    require_numbers                  = true    # At least one number
-    require_symbols                  = true    # At least one special character
-    temporary_password_validity_days = 7       # Temp passwords expire in 7 days
+    minimum_length                   = 14   # 14+ characters
+    require_lowercase                = true # At least one lowercase letter
+    require_uppercase                = true # At least one uppercase letter
+    require_numbers                  = true # At least one number
+    require_symbols                  = true # At least one special character
+    temporary_password_validity_days = 7    # Temp passwords expire in 7 days
   }
 
   # Username configuration
   username_configuration {
-    case_sensitive = false  # Usernames are case-insensitive
+    case_sensitive = false # Usernames are case-insensitive
   }
 
   # Account recovery (disabled - admin manages accounts)
@@ -132,20 +132,20 @@ resource "aws_cognito_user_pool" "main" {
   # sign-up. Use the in-app /signup page to collect email and phone; it calls SignUp
   # with UserAttributes so they are stored and included in signup notifications.
   schema {
-    name                     = "email"
-    attribute_data_type      = "String"
-    mutable                  = true
-    required                 = false
+    name                = "email"
+    attribute_data_type = "String"
+    mutable             = true
+    required            = false
     string_attribute_constraints {
       min_length = 0
       max_length = 256
     }
   }
   schema {
-    name                     = "phone_number"
-    attribute_data_type      = "String"
-    mutable                  = true
-    required                 = false
+    name                = "phone_number"
+    attribute_data_type = "String"
+    mutable             = true
+    required            = false
     string_attribute_constraints {
       min_length = 0
       max_length = 256
@@ -192,7 +192,7 @@ resource "aws_cognito_user_pool_client" "spa" {
 
   # OAuth 2.0 configuration
   allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_flows                  = ["code"]  # Authorization code flow
+  allowed_oauth_flows                  = ["code"] # Authorization code flow
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
 
   # Callback/redirect URLs
@@ -204,15 +204,15 @@ resource "aws_cognito_user_pool_client" "spa" {
 
   # Allowed authentication flows
   explicit_auth_flows = [
-    "ALLOW_USER_SRP_AUTH",        # Secure Remote Password (recommended)
-    "ALLOW_REFRESH_TOKEN_AUTH",   # Allow token refresh
-    "ALLOW_USER_PASSWORD_AUTH"    # Direct username/password (for testing)
+    "ALLOW_USER_SRP_AUTH",      # Secure Remote Password (recommended)
+    "ALLOW_REFRESH_TOKEN_AUTH", # Allow token refresh
+    "ALLOW_USER_PASSWORD_AUTH"  # Direct username/password (for testing)
   ]
 
   # Token validity periods
-  access_token_validity  = 60   # 60 minutes
-  id_token_validity      = 60   # 60 minutes
-  refresh_token_validity = 30   # 30 days
+  access_token_validity  = 60 # 60 minutes
+  id_token_validity      = 60 # 60 minutes
+  refresh_token_validity = 30 # 30 days
 
   token_validity_units {
     access_token  = "minutes"
@@ -280,8 +280,8 @@ resource "aws_dynamodb_table" "signups" {
 # PostConfirmation publishes to this topic. Email subscription must be confirmed.
 
 resource "aws_sns_topic" "signup_notifications" {
-  count  = var.signup_notification_email != "" ? 1 : 0
-  name   = "${var.project}-${var.env}-signup-notifications"
+  count = var.signup_notification_email != "" ? 1 : 0
+  name  = "${var.project}-${var.env}-signup-notifications"
   tags = {
     Project     = var.project
     Environment = var.env
@@ -330,8 +330,8 @@ resource "aws_iam_role_policy_attachment" "cognito_triggers_logs" {
 }
 
 resource "aws_iam_role_policy" "cognito_triggers_ddb_sns" {
-  name   = "${var.project}-${var.env}-cognito-triggers-ddb-sns"
-  role   = aws_iam_role.cognito_triggers.id
+  name = "${var.project}-${var.env}-cognito-triggers-ddb-sns"
+  role = aws_iam_role.cognito_triggers.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat(
@@ -357,11 +357,11 @@ resource "aws_iam_role_policy" "cognito_triggers_ddb_sns" {
 }
 
 resource "aws_lambda_function" "cognito_triggers" {
-  function_name = "${var.project}-${var.env}-cognito-triggers"
-  role          = aws_iam_role.cognito_triggers.arn
-  runtime       = "nodejs20.x"
-  handler       = "index.handler"
-  filename      = data.archive_file.cognito_triggers_zip.output_path
+  function_name    = "${var.project}-${var.env}-cognito-triggers"
+  role             = aws_iam_role.cognito_triggers.arn
+  runtime          = "nodejs20.x"
+  handler          = "index.handler"
+  filename         = data.archive_file.cognito_triggers_zip.output_path
   source_code_hash = data.archive_file.cognito_triggers_zip.output_base64sha256
 
   timeout     = 10
@@ -369,9 +369,9 @@ resource "aws_lambda_function" "cognito_triggers" {
 
   environment {
     variables = {
-      CONFIG_TABLE_NAME   = aws_dynamodb_table.auth_config.name
-      SIGNUPS_TABLE_NAME  = aws_dynamodb_table.signups.name
-      SNS_TOPIC_ARN       = var.signup_notification_email != "" ? aws_sns_topic.signup_notifications[0].arn : ""
+      CONFIG_TABLE_NAME  = aws_dynamodb_table.auth_config.name
+      SIGNUPS_TABLE_NAME = aws_dynamodb_table.signups.name
+      SNS_TOPIC_ARN      = var.signup_notification_email != "" ? aws_sns_topic.signup_notifications[0].arn : ""
     }
   }
   tags = {

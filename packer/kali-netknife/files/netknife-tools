@@ -1,0 +1,57 @@
+#!/bin/bash
+# NetKnife tools CLI — list and run pre-installed cloud security tools
+set -euo pipefail
+
+MANIFEST="/opt/netknife/tools-manifest.json"
+
+usage() {
+  cat <<EOF
+NetKnife Kali Lab — cloud security tools
+
+Usage:
+  netknife-tools list              List installed tools
+  netknife-tools info <id>         Show tool details
+  netknife-tools run <id> [args]   Run a tool (passes args through)
+  netknife-tools manifest          Print full manifest JSON
+
+Examples:
+  netknife-tools run trivy image nginx:latest
+  netknife-tools run prowler aws -- -M csv
+  netknife-tools run checkov-dir /path/to/terraform
+EOF
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  list)
+    jq -r '.tools[] | "\(.id)\t\(.name)\t\(.category)"' "$MANIFEST" | column -t -s $'\t'
+    ;;
+  info)
+    id="${1:-}"
+    jq --arg id "$id" '.tools[] | select(.id == $id)' "$MANIFEST"
+    ;;
+  manifest)
+    cat "$MANIFEST"
+    ;;
+  run)
+    id="${1:-}"
+    shift || true
+    entry=$(jq -r --arg id "$id" '.tools[] | select(.id == $id) | .command' "$MANIFEST")
+    wrapper=$(jq -r --arg id "$id" '.wrappers[$id] // empty' "$MANIFEST")
+    if [ -n "$wrapper" ]; then
+      exec bash -c "$wrapper $*"
+    elif [ -n "$entry" ]; then
+      exec "$entry" "$@"
+    else
+      echo "Unknown tool: $id" >&2
+      usage
+      exit 1
+    fi
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

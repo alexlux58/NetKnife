@@ -209,8 +209,8 @@ locals {
 
 resource "aws_dynamodb_table" "cache" {
   name         = "${local.name}-cache"
-  billing_mode = "PAY_PER_REQUEST"  # On-demand pricing (no capacity planning)
-  hash_key     = "cache_key"         # Primary key: query identifier
+  billing_mode = "PAY_PER_REQUEST" # On-demand pricing (no capacity planning)
+  hash_key     = "cache_key"       # Primary key: query identifier
 
   attribute {
     name = "cache_key"
@@ -219,7 +219,7 @@ resource "aws_dynamodb_table" "cache" {
 
   # TTL configuration - automatically deletes expired items
   ttl {
-    attribute_name = "expires_at"  # Unix timestamp for expiration
+    attribute_name = "expires_at" # Unix timestamp for expiration
     enabled        = true
   }
 
@@ -241,8 +241,8 @@ resource "aws_dynamodb_table" "cache" {
 resource "aws_dynamodb_table" "reports" {
   name         = "${local.name}-reports"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "pk"  # Partition key: userId#type
-  range_key    = "sk"  # Sort key: report/chat ID
+  hash_key     = "pk" # Partition key: userId#type
+  range_key    = "sk" # Sort key: report/chat ID
 
   attribute {
     name = "pk"
@@ -722,8 +722,8 @@ resource "aws_iam_role_policy" "profiles_access" {
 
 # DynamoDB board access (board Lambda)
 resource "aws_iam_role_policy" "board_access" {
-  name   = "${local.name}-board-access"
-  role   = aws_iam_role.lambda_role.id
+  name = "${local.name}-board-access"
+  role = aws_iam_role.lambda_role.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -745,8 +745,8 @@ resource "aws_iam_role_policy" "board_access" {
 
 # DynamoDB billing and usage (billing Lambda)
 resource "aws_iam_role_policy" "billing_access" {
-  name   = "${local.name}-billing-access"
-  role   = aws_iam_role.lambda_role.id
+  name = "${local.name}-billing-access"
+  role = aws_iam_role.lambda_role.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -759,8 +759,8 @@ resource "aws_iam_role_policy" "billing_access" {
 
 # CloudWatch read (alarms dashboard Lambda)
 resource "aws_iam_role_policy" "cloudwatch_alarms_read" {
-  name   = "${local.name}-cloudwatch-alarms-read"
-  role   = aws_iam_role.lambda_role.id
+  name = "${local.name}-cloudwatch-alarms-read"
+  role = aws_iam_role.lambda_role.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -773,8 +773,8 @@ resource "aws_iam_role_policy" "cloudwatch_alarms_read" {
 
 # Secrets Manager access (scanners Lambda - for storing scanner credentials)
 resource "aws_iam_role_policy" "secrets_manager_access" {
-  name   = "${local.name}-secrets-manager-access"
-  role   = aws_iam_role.lambda_role.id
+  name = "${local.name}-secrets-manager-access"
+  role = aws_iam_role.lambda_role.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -897,7 +897,7 @@ resource "aws_lambda_function" "dns" {
   environment {
     variables = {
       CACHE_TABLE       = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS = "300"  # 5 minutes
+      CACHE_TTL_SECONDS = "300" # 5 minutes
     }
   }
 
@@ -957,7 +957,7 @@ resource "aws_lambda_function" "rdap" {
   environment {
     variables = {
       CACHE_TABLE       = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS = "86400"  # 24 hours
+      CACHE_TTL_SECONDS = "86400" # 24 hours
     }
   }
 
@@ -1124,7 +1124,7 @@ resource "aws_lambda_function" "peeringdb" {
   environment {
     variables = {
       CACHE_TABLE       = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS = "3600"  # 1 hour
+      CACHE_TTL_SECONDS = "3600" # 1 hour
     }
   }
 
@@ -1185,7 +1185,7 @@ resource "aws_lambda_function" "reverse_dns" {
   environment {
     variables = {
       CACHE_TABLE       = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS = "3600"  # 1 hour
+      CACHE_TTL_SECONDS = "3600" # 1 hour
     }
   }
 
@@ -1245,7 +1245,7 @@ resource "aws_lambda_function" "email_auth" {
   environment {
     variables = {
       CACHE_TABLE       = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS = "3600"  # 1 hour
+      CACHE_TTL_SECONDS = "3600" # 1 hour
     }
   }
 
@@ -1305,7 +1305,7 @@ resource "aws_lambda_function" "hibp" {
   environment {
     variables = {
       CACHE_TABLE       = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS = "86400"  # 24 hours
+      CACHE_TTL_SECONDS = "86400" # 24 hours
     }
   }
 
@@ -1369,7 +1369,7 @@ resource "aws_lambda_function" "abuseipdb" {
   environment {
     variables = {
       CACHE_TABLE       = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS = "3600"  # 1 hour (conserve API quota)
+      CACHE_TTL_SECONDS = "3600" # 1 hour (conserve API quota)
       ABUSEIPDB_API_KEY = var.abuseipdb_api_key
     }
   }
@@ -1490,7 +1490,7 @@ resource "aws_lambda_function" "asn_details" {
   filename         = data.archive_file.asn_details_zip.output_path
   source_code_hash = data.archive_file.asn_details_zip.output_base64sha256
 
-  timeout     = 30  # Increased for multiple API calls to BGPView
+  timeout     = 30 # Increased for multiple API calls to BGPView
   memory_size = 128
 
   environment {
@@ -1670,7 +1670,7 @@ resource "aws_lambda_function" "traceroute" {
   filename         = data.archive_file.traceroute_zip.output_path
   source_code_hash = data.archive_file.traceroute_zip.output_base64sha256
 
-  timeout     = 60  # Increased for multiple API calls (DNS + RIPEstat + BGPView)
+  timeout     = 60 # Increased for multiple API calls (DNS + RIPEstat + BGPView)
   memory_size = 256
 
   environment {
@@ -1875,8 +1875,8 @@ resource "aws_lambda_function" "securitytrails" {
 
   environment {
     variables = {
-      CACHE_TABLE           = aws_dynamodb_table.cache.name
-      CACHE_TTL_SECONDS     = "3600"
+      CACHE_TABLE            = aws_dynamodb_table.cache.name
+      CACHE_TTL_SECONDS      = "3600"
       SECURITYTRAILS_API_KEY = var.securitytrails_api_key
     }
   }
@@ -2518,7 +2518,7 @@ resource "aws_lambda_function" "ipqs_url" {
   filename         = data.archive_file.ipqs_url_zip.output_path
   source_code_hash = data.archive_file.ipqs_url_zip.output_base64sha256
 
-  timeout     = 20  # URL scans can take longer
+  timeout     = 20 # URL scans can take longer
   memory_size = 128
 
   environment {
@@ -2656,14 +2656,14 @@ resource "aws_lambda_function" "security_advisor" {
   filename         = data.archive_file.security_advisor_zip.output_path
   source_code_hash = data.archive_file.security_advisor_zip.output_base64sha256
 
-  timeout     = 30  # Increased for AI API calls
+  timeout     = 30 # Increased for AI API calls
   memory_size = 256
 
   environment {
     variables = {
-      CACHE_TABLE       = aws_dynamodb_table.cache.name
-      OPENAI_API_KEY    = var.openai_api_key
-      OPENAI_MODEL      = var.openai_model
+      CACHE_TABLE    = aws_dynamodb_table.cache.name
+      OPENAI_API_KEY = var.openai_api_key
+      OPENAI_MODEL   = var.openai_model
     }
   }
 
@@ -2787,8 +2787,8 @@ resource "aws_lambda_function" "guides" {
 
   environment {
     variables = {
-      GUIDE_PROGRESS_TABLE       = aws_dynamodb_table.guide_progress.name
-      GUIDE_CONTENT_TABLE        = aws_dynamodb_table.guide_content.name
+      GUIDE_PROGRESS_TABLE = aws_dynamodb_table.guide_progress.name
+      GUIDE_CONTENT_TABLE  = aws_dynamodb_table.guide_content.name
       # Optional: internal call to Security Advisor for content generation.
       # You can set this to the API URL + /security-advisor (or leave blank).
       SECURITY_ADVISOR_LAMBDA_URL = ""
@@ -2898,21 +2898,21 @@ data "archive_file" "cve_lookup_zip" {
 }
 
 resource "aws_lambda_function" "cve_lookup" {
-  function_name   = "${local.name}-cve-lookup"
-  role            = aws_iam_role.lambda_role.arn
-  runtime         = "nodejs20.x"
-  handler         = "index.handler"
-  description     = "CVE lookup (NVD, OSV) and top vulns by period/category/severity"
-  filename        = data.archive_file.cve_lookup_zip.output_path
+  function_name    = "${local.name}-cve-lookup"
+  role             = aws_iam_role.lambda_role.arn
+  runtime          = "nodejs20.x"
+  handler          = "index.handler"
+  description      = "CVE lookup (NVD, OSV) and top vulns by period/category/severity"
+  filename         = data.archive_file.cve_lookup_zip.output_path
   source_code_hash = data.archive_file.cve_lookup_zip.output_base64sha256
-  timeout         = 30
-  memory_size     = 256
+  timeout          = 30
+  memory_size      = 256
   environment {
     variables = {
-      CACHE_TABLE     = aws_dynamodb_table.cache.name
-      NVD_API_KEY     = var.nvd_api_key
-      OPENAI_API_KEY  = var.openai_api_key
-      OPENAI_MODEL    = var.openai_model
+      CACHE_TABLE    = aws_dynamodb_table.cache.name
+      NVD_API_KEY    = var.nvd_api_key
+      OPENAI_API_KEY = var.openai_api_key
+      OPENAI_MODEL   = var.openai_model
     }
   }
   tags = {
@@ -2929,9 +2929,9 @@ resource "aws_apigatewayv2_integration" "cve_lookup" {
 }
 
 resource "aws_apigatewayv2_route" "cve_lookup" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "POST /cve-lookup"
-  target    = "integrations/${aws_apigatewayv2_integration.cve_lookup.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /cve-lookup"
+  target             = "integrations/${aws_apigatewayv2_integration.cve_lookup.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
 }
@@ -3016,26 +3016,26 @@ data "archive_file" "board_zip" {
 }
 
 resource "aws_lambda_function" "board" {
-  function_name = "${local.name}-board"
-  role          = aws_iam_role.lambda_role.arn
-  runtime       = "nodejs20.x"
-  handler       = "index.handler"
-  description   = "Message board: channels, threads, comments, likes, bookmarks, DMs"
-  filename      = data.archive_file.board_zip.output_path
+  function_name    = "${local.name}-board"
+  role             = aws_iam_role.lambda_role.arn
+  runtime          = "nodejs20.x"
+  handler          = "index.handler"
+  description      = "Message board: channels, threads, comments, likes, bookmarks, DMs"
+  filename         = data.archive_file.board_zip.output_path
   source_code_hash = data.archive_file.board_zip.output_base64sha256
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment {
     variables = {
-      BOARD_CHANNELS_TABLE   = aws_dynamodb_table.board_channels.name
-      BOARD_THREADS_TABLE    = aws_dynamodb_table.board_threads.name
-      BOARD_COMMENTS_TABLE   = aws_dynamodb_table.board_comments.name
-      BOARD_LIKES_TABLE      = aws_dynamodb_table.board_likes.name
-      BOARD_BOOKMARKS_TABLE  = aws_dynamodb_table.board_bookmarks.name
-      BOARD_DM_CONVOS_TABLE  = aws_dynamodb_table.board_dm_convos.name
+      BOARD_CHANNELS_TABLE    = aws_dynamodb_table.board_channels.name
+      BOARD_THREADS_TABLE     = aws_dynamodb_table.board_threads.name
+      BOARD_COMMENTS_TABLE    = aws_dynamodb_table.board_comments.name
+      BOARD_LIKES_TABLE       = aws_dynamodb_table.board_likes.name
+      BOARD_BOOKMARKS_TABLE   = aws_dynamodb_table.board_bookmarks.name
+      BOARD_DM_CONVOS_TABLE   = aws_dynamodb_table.board_dm_convos.name
       BOARD_DM_MESSAGES_TABLE = aws_dynamodb_table.board_dm_messages.name
-      BOARD_ACTIVITY_TABLE   = aws_dynamodb_table.board_activity.name
-      ADMIN_USERNAMES        = var.admin_usernames
+      BOARD_ACTIVITY_TABLE    = aws_dynamodb_table.board_activity.name
+      ADMIN_USERNAMES         = var.admin_usernames
     }
   }
   tags = {
@@ -3052,9 +3052,9 @@ resource "aws_apigatewayv2_integration" "board" {
 }
 
 resource "aws_apigatewayv2_route" "board" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "POST /board"
-  target    = "integrations/${aws_apigatewayv2_integration.board.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /board"
+  target             = "integrations/${aws_apigatewayv2_integration.board.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
 }
@@ -3080,18 +3080,18 @@ data "archive_file" "alarms_zip" {
 }
 
 resource "aws_lambda_function" "alarms" {
-  function_name   = "${local.name}-alarms"
-  role            = aws_iam_role.lambda_role.arn
-  runtime         = "nodejs20.x"
-  handler         = "index.handler"
-  description     = "CloudWatch alarms dashboard (admin-only)"
-  filename        = data.archive_file.alarms_zip.output_path
+  function_name    = "${local.name}-alarms"
+  role             = aws_iam_role.lambda_role.arn
+  runtime          = "nodejs20.x"
+  handler          = "index.handler"
+  description      = "CloudWatch alarms dashboard (admin-only)"
+  filename         = data.archive_file.alarms_zip.output_path
   source_code_hash = data.archive_file.alarms_zip.output_base64sha256
-  timeout         = 15
-  memory_size     = 128
+  timeout          = 15
+  memory_size      = 128
   environment {
     variables = {
-      ALARM_PREFIX              = local.name
+      ALARM_PREFIX               = local.name
       ALARMS_DASHBOARD_USERNAMES = var.admin_usernames
     }
   }
@@ -3109,9 +3109,9 @@ resource "aws_apigatewayv2_integration" "alarms" {
 }
 
 resource "aws_apigatewayv2_route" "alarms" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "POST /alarms"
-  target    = "integrations/${aws_apigatewayv2_integration.alarms.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /alarms"
+  target             = "integrations/${aws_apigatewayv2_integration.alarms.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
 }
@@ -3137,15 +3137,15 @@ data "archive_file" "billing_zip" {
 }
 
 resource "aws_lambda_function" "billing" {
-  function_name   = "${local.name}-billing"
-  role            = aws_iam_role.lambda_role.arn
-  runtime         = "nodejs20.x"
-  handler         = "index.handler"
-  description     = "Stripe: usage, checkout, portal, donations, webhook"
-  filename        = data.archive_file.billing_zip.output_path
+  function_name    = "${local.name}-billing"
+  role             = aws_iam_role.lambda_role.arn
+  runtime          = "nodejs20.x"
+  handler          = "index.handler"
+  description      = "Stripe: usage, checkout, portal, donations, webhook"
+  filename         = data.archive_file.billing_zip.output_path
   source_code_hash = data.archive_file.billing_zip.output_base64sha256
-  timeout         = 30
-  memory_size     = 256
+  timeout          = 30
+  memory_size      = 256
   environment {
     variables = {
       BILLING_TABLE            = aws_dynamodb_table.billing.name
@@ -3218,7 +3218,7 @@ resource "aws_wafv2_web_acl" "api" {
 
     statement {
       rate_based_statement {
-        limit              = 1000  # Requests per 5-minute window
+        limit              = 1000 # Requests per 5-minute window
         aggregate_key_type = "IP"
       }
     }
@@ -3442,5 +3442,20 @@ output "lambda_board_name" {
 output "reports_table_name" {
   value       = aws_dynamodb_table.reports.name
   description = "Reports DynamoDB table name"
+}
+
+output "authorizer_id" {
+  value       = aws_apigatewayv2_authorizer.jwt.id
+  description = "JWT authorizer ID for additional API routes"
+}
+
+output "api_execution_arn" {
+  value       = aws_apigatewayv2_api.http.execution_arn
+  description = "API Gateway execution ARN"
+}
+
+output "billing_table_name" {
+  value       = aws_dynamodb_table.billing.name
+  description = "Billing DynamoDB table name"
 }
 

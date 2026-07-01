@@ -120,7 +120,7 @@ resource "aws_ce_anomaly_monitor" "services" {
 resource "aws_ce_anomaly_subscription" "alerts" {
   count     = var.enable_anomaly_detection ? 1 : 0
   name      = "${var.name_prefix}-anomaly-subscription"
-  frequency = "DAILY"  # Check for anomalies daily
+  frequency = "DAILY" # Check for anomalies daily
 
   monitor_arn_list = [aws_ce_anomaly_monitor.services[0].arn]
 

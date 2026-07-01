@@ -403,6 +403,16 @@ export const tools: Tool[] = [
     description: 'Run vulnerability scanners (cloud + agent)',
   },
   {
+    id: 'kali-lab',
+    name: 'Kali Lab',
+    kind: 'remote',
+    category: 'Utilities',
+    path: '/tools/kali-lab',
+    component: React.lazy(() => import('./remote/KaliLabTool')),
+    description: 'One-click Kali Linux VM with cloud security tools',
+    icon: 'Desktop',
+  },
+  {
     id: 'virustotal',
     name: 'VirusTotal',
     kind: 'remote',

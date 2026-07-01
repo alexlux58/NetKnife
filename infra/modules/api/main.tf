@@ -3444,3 +3444,18 @@ output "reports_table_name" {
   description = "Reports DynamoDB table name"
 }
 
+output "authorizer_id" {
+  value       = aws_apigatewayv2_authorizer.jwt.id
+  description = "JWT authorizer ID for additional API routes"
+}
+
+output "api_execution_arn" {
+  value       = aws_apigatewayv2_api.http.execution_arn
+  description = "API Gateway execution ARN"
+}
+
+output "billing_table_name" {
+  value       = aws_dynamodb_table.billing.name
+  description = "Billing DynamoDB table name"
+}
+

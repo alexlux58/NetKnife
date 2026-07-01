@@ -24,6 +24,8 @@ flowchart LR
 
 ## One-time setup (required for CD)
 
+Until the deploy secrets/variables below are configured, the CD workflow still runs its test job but skips the deploy jobs instead of failing immediately.
+
 ### 1. Remote Terraform state
 
 CI needs shared state. Run once locally:

@@ -49,8 +49,15 @@ export default function KaliLabTool() {
       setActiveLab(running || null)
       if (running?.status === 'running') setTab('terminal')
     } catch (e) {
-      if (e instanceof ApiError) setError(`Error ${e.status}: ${JSON.stringify(e.body)}`)
-      else setError(String(e))
+      if (e instanceof ApiError && e.status === 404) {
+        setError('Kali Labs API is not deployed. Run deploy with kali_ami_id set in Terraform.')
+      } else if (e instanceof ApiError) {
+        setError(`Error ${e.status}: ${JSON.stringify(e.body)}`)
+      } else if (String(e).includes('Failed to fetch')) {
+        setError('Cannot reach the Labs API — it may not be deployed yet.')
+      } else {
+        setError(String(e))
+      }
     }
   }, [])
 

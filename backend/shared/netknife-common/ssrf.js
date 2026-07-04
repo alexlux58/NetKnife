@@ -129,7 +129,26 @@ const ALLOWED_RDAP_HOSTS = new Set([
   'rdap.verisign.com',
   'rdap.markmonitor.com',
   'rdap.godaddy.com',
+  'rdap.hostinger.com',
+  'rdap.cloudflare.com',
+  'rdap.publicinterestregistry.org',
+  'rdap.identitydigital.services',
+  'rdap.nic.google',
 ])
+
+function buildRdapUrl(query, kind) {
+  const q = encodeURIComponent(query)
+  if (kind === 'domain') {
+    const tld = query.split('.').pop()?.toLowerCase()
+    if (tld === 'com') return `https://rdap.verisign.com/com/v1/domain/${q}`
+    if (tld === 'net') return `https://rdap.verisign.com/net/v1/domain/${q}`
+    if (tld === 'org') return `https://rdap.publicinterestregistry.org/rdap/domain/${q}`
+    return `https://rdap.org/domain/${q}`
+  }
+  if (net.isIP(query) === 4) return `https://rdap.arin.net/registry/ip/${q}`
+  if (net.isIP(query) === 6) return `https://rdap.org/ip/${q}`
+  return `https://rdap.org/ip/${q}`
+}
 
 function isAllowedRdapHost(hostname) {
   return ALLOWED_RDAP_HOSTS.has(String(hostname || '').toLowerCase())
@@ -168,5 +187,6 @@ module.exports = {
   validateRdapQuery,
   ALLOWED_RDAP_HOSTS,
   isAllowedRdapHost,
+  buildRdapUrl,
   validateTracerouteTarget,
 }

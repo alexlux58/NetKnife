@@ -28,6 +28,7 @@ class ProjectPaths:
         self.tfvars = self.infra_env / "terraform.tfvars"
         self.tfvars_example = self.infra_env / "terraform.tfvars.example"
         self.env_production = self.frontend / ".env.production"
+        self.env_development_local = self.frontend / ".env.development.local"
         self.install_lambda_deps = self.root / "infra" / "scripts" / "install-lambda-deps.sh"
         self.prepare_lambda_shared = self.root / "infra" / "scripts" / "prepare-lambda-shared.sh"
         self.sync_cloudflare = self.infra_env / "sync-cloudflare-token.sh"

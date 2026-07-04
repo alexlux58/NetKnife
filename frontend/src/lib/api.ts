@@ -32,8 +32,8 @@
 
 import { getAccessToken } from './auth'
 
-// API base URL from environment
-const API_URL = import.meta.env.VITE_API_URL || ''
+// API base URL from environment (dev: .env.development.local + .env.production fallback)
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/__api' : '')
 
 /**
  * Custom error class for API errors
@@ -76,6 +76,10 @@ export class ApiError extends Error {
  * ```
  */
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  if (!API_URL) {
+    throw new ApiError(0, { error: 'API URL not configured. Run `nk dev` or set VITE_API_URL in .env.development.local' })
+  }
+
   // Get access token for authentication
   const token = await getAccessToken()
   

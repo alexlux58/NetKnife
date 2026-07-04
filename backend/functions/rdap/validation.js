@@ -3,16 +3,11 @@ const {
   validateRdapQuery,
   isAllowedRdapHost,
   ALLOWED_RDAP_HOSTS,
+  buildRdapUrl,
 } = require('netknife-common/ssrf')
 
 const MAX_REDIRECTS = 5
-
-function buildRdapUrl(query, kind) {
-  if (kind === 'domain') {
-    return `https://rdap.org/domain/${encodeURIComponent(query)}`
-  }
-  return `https://rdap.org/ip/${encodeURIComponent(query)}`
-}
+const FETCH_TIMEOUT_MS = 8000
 
 module.exports = {
   createResponse,

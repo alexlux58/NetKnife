@@ -292,6 +292,17 @@ async function handleLaunch(userId, body, exempt) {
         ],
       }],
       UserData: Buffer.from(`#!/bin/bash
+set -e
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v amazon-ssm-agent &>/dev/null; then
+  REGION=$(curl -sf http://169.254.169.254/latest/meta-data/placement/region)
+  mkdir -p /tmp/ssm && cd /tmp/ssm
+  wget -q "https://s3.\${REGION}.amazonaws.com/amazon-ssm-\${REGION}/latest/debian_amd64/amazon-ssm-agent.deb"
+  dpkg -i amazon-ssm-agent.deb || apt-get install -f -y
+  systemctl enable amazon-ssm-agent
+  systemctl start amazon-ssm-agent
+fi
+mkdir -p /opt/netknife
 echo "NetKnife Lab ${labId}" > /opt/netknife/lab-id
 `).toString('base64'),
     }));

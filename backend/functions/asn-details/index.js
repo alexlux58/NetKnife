@@ -29,102 +29,54 @@
  * ==============================================================================
  */
 
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, GetCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
-const ddbClient = new DynamoDBClient({});
-const ddb = DynamoDBDocumentClient.from(ddbClient);
-
-const CACHE_TABLE = process.env.CACHE_TABLE;
-const TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS || "3600"); // 1 hour
+const { createResponse, createCacheClient } = require("netknife-common");
+const { parseAsn, buildCacheKey, validateAsn } = require("./validation");
 
 /**
- * Standard JSON response helper
+ * Response helper preserving the original Title-case Content-Type header.
+ * CORS headers are supplied by API Gateway's cors_configuration.
  */
 function json(statusCode, body) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-    body: JSON.stringify(body),
-  };
+  return createResponse(statusCode, body, { headerStyle: "title" });
 }
 
-/**
- * Cache helpers
- */
-async function cacheGet(key) {
-  if (!CACHE_TABLE) return null;
-  try {
-    const result = await ddb.send(new GetCommand({
-      TableName: CACHE_TABLE,
-      Key: { cache_key: key },
-    }));
-    if (result.Item && result.Item.expires_at > Math.floor(Date.now() / 1000)) {
-      return result.Item.data;
-    }
-  } catch (e) {
-    console.error("Cache get error:", e);
-  }
-  return null;
-}
+function createHandler(deps = {}) {
+  const fetchImpl = deps.fetch || fetch;
+  const cacheTtlSeconds = deps.cacheTtlSeconds ?? Number(process.env.CACHE_TTL_SECONDS || "3600"); // 1 hour
+  const cache = deps.cache || createCacheClient({
+    dynamodb: deps.dynamodb,
+    cacheTable: deps.cacheTable ?? process.env.CACHE_TABLE,
+    payloadField: "data",
+  });
 
-async function cachePut(key, data, ttlSeconds) {
-  if (!CACHE_TABLE) return;
-  try {
-    await ddb.send(new PutCommand({
-      TableName: CACHE_TABLE,
-      Item: {
-        cache_key: key,
-        data,
-        expires_at: Math.floor(Date.now() / 1000) + ttlSeconds,
-      },
-    }));
-  } catch (e) {
-    console.error("Cache put error:", e);
-  }
-}
+  /**
+   * Fetch data with timeout
+   */
+  async function fetchWithTimeout(url, timeout = 10000, options = {}) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-/**
- * Parse ASN from input (handles "AS13335", "13335", etc.)
- */
-function parseAsn(input) {
-  const match = String(input).match(/^(?:AS)?(\d+)$/i);
-  return match ? parseInt(match[1], 10) : null;
-}
-
-/**
- * Fetch data with timeout
- */
-async function fetchWithTimeout(url, timeout = 10000, options = {}) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
-  try {
-    const response = await fetch(url, { 
-      ...options,
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "NetKnife/1.0",
-        ...(options.headers || {}),
+    try {
+      const response = await fetchImpl(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "NetKnife/1.0",
+          ...(options.headers || {}),
+        }
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        throw new Error('Request timeout');
       }
-    });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (e) {
-    clearTimeout(timeoutId);
-    if (e.name === 'AbortError') {
-      throw new Error('Request timeout');
+      throw e;
     }
-    throw e;
   }
-}
 
-/**
- * Lambda handler
- */
-exports.handler = async (event) => {
+  return async function handler(event) {
   let body;
   try {
     body = JSON.parse(event.body);
@@ -135,13 +87,14 @@ exports.handler = async (event) => {
   const { asn: asnInput } = body;
   const asn = parseAsn(asnInput);
 
-  if (!asn || asn < 1 || asn > 4294967295) {
-    return json(400, { error: "Invalid ASN. Must be a number between 1 and 4294967295." });
+  const validationError = validateAsn(asn);
+  if (validationError) {
+    return validationError;
   }
 
   // Check cache
-  const cacheKey = `asn-${asn}`;
-  const cached = await cacheGet(cacheKey);
+  const cacheKey = buildCacheKey(asn);
+  const cached = await cache.get(cacheKey);
   if (cached) {
     return json(200, { ...cached, cached: true });
   }
@@ -229,7 +182,7 @@ exports.handler = async (event) => {
     };
 
     // Cache results
-    await cachePut(cacheKey, result, TTL_SECONDS);
+    await cache.put(cacheKey, result, cacheTtlSeconds);
 
     return json(200, { ...result, cached: false });
   } catch (e) {
@@ -249,5 +202,9 @@ exports.handler = async (event) => {
       hint: "This tool uses the BGPView API. If the error persists, the API may be temporarily unavailable."
     });
   }
-};
+  };
+}
+
+exports.createHandler = createHandler;
+exports.handler = createHandler();
 

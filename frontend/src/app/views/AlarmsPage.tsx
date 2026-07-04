@@ -56,6 +56,10 @@ export default function AlarmsPage() {
         if (cancelled) return
         if (e instanceof ApiError && e.status === 403) {
           setError('Only allowed users can view the alarms dashboard.')
+        } else if (e instanceof ApiError && e.status === 0) {
+          setError((e.body as { error?: string })?.error || 'API not configured for local dev.')
+        } else if (e instanceof ApiError) {
+          setError(`API error: ${e.status}`)
         } else {
           setError(e instanceof Error ? e.message : 'Failed to load alarms')
         }

@@ -18,9 +18,10 @@ describe('rdap validation', () => {
     assert.equal(isAllowedRdapHost('evil.example'), false)
   })
 
-  it('builds bootstrap URLs', () => {
-    assert.match(buildRdapUrl('8.8.8.8', 'ip'), /\/ip\/8\.8\.8\.8$/)
-    assert.match(buildRdapUrl('example.com', 'domain'), /\/domain\/example\.com$/)
+  it('builds direct RDAP URLs for common queries', () => {
+    assert.match(buildRdapUrl('8.8.8.8', 'ip'), /rdap\.arin\.net\/registry\/ip\/8\.8\.8\.8$/)
+    assert.match(buildRdapUrl('example.com', 'domain'), /rdap\.verisign\.com\/com\/v1\/domain\/example\.com$/)
+    assert.match(buildRdapUrl('example.org', 'domain'), /publicinterestregistry\.org/)
   })
 })
 

@@ -32,6 +32,29 @@ def npm_install(paths: ProjectPaths) -> None:
         raise CommandError("npm install failed", code, ["npm", "install"])
 
 
+def _env_content(
+    *,
+    api_url: str,
+    cognito_domain: str,
+    client_id: str,
+    issuer: str,
+    redirect_uri: str,
+    logout_uri: str,
+    region: str,
+    dev_bypass: bool = False,
+) -> str:
+    bypass = "true" if dev_bypass else "false"
+    return f"""VITE_API_URL={api_url}
+VITE_COGNITO_DOMAIN={cognito_domain}
+VITE_COGNITO_CLIENT_ID={client_id}
+VITE_COGNITO_ISSUER={issuer}
+VITE_OIDC_REDIRECT_URI={redirect_uri}
+VITE_OIDC_POST_LOGOUT_REDIRECT_URI={logout_uri}
+VITE_REGION={region}
+VITE_DEV_BYPASS_AUTH={bypass}
+"""
+
+
 def update_env(paths: ProjectPaths) -> None:
     """Write frontend/.env.production from terraform outputs."""
     api_url = tf.output_raw(paths, "api_url")
@@ -41,20 +64,62 @@ def update_env(paths: ProjectPaths) -> None:
     site_url = tf.output_raw(paths, "site_url")
     region = paths.aws_region
 
-    content = f"""VITE_API_URL={api_url}
-VITE_COGNITO_DOMAIN={cognito_domain}
-VITE_COGNITO_CLIENT_ID={client_id}
-VITE_COGNITO_ISSUER={issuer}
-VITE_OIDC_REDIRECT_URI={site_url}/callback
-VITE_OIDC_POST_LOGOUT_REDIRECT_URI={site_url}/login
-VITE_REGION={region}
-VITE_DEV_BYPASS_AUTH=false
-"""
+    content = _env_content(
+        api_url=api_url,
+        cognito_domain=cognito_domain,
+        client_id=client_id,
+        issuer=issuer,
+        redirect_uri=f"{site_url}/callback",
+        logout_uri=f"{site_url}/login",
+        region=region,
+    )
     paths.env_production.write_text(content, encoding="utf-8")
     ui.ok(f"Wrote {paths.env_production}")
     ui.kv("API URL", api_url)
     ui.kv("Site URL", site_url)
     ui.kv("Cognito", cognito_domain)
+
+
+def update_dev_env(paths: ProjectPaths, *, port: int = 3000) -> None:
+    """Write frontend/.env.development.local for Vite dev server."""
+    try:
+        api_url = tf.output_raw(paths, "api_url")
+        cognito_domain = tf.output_raw(paths, "cognito_domain_url")
+        client_id = tf.output_raw(paths, "client_id")
+        issuer = tf.output_raw(paths, "cognito_issuer")
+        region = paths.aws_region
+    except CommandError:
+        if not paths.env_production.is_file():
+            raise
+        ui.warn("Terraform outputs unavailable — copying from .env.production")
+        prod = paths.env_production.read_text(encoding="utf-8")
+        paths.env_development_local.write_text(
+            prod.replace(
+                "VITE_OIDC_REDIRECT_URI=https://netknife.alexflux.com/callback",
+                f"VITE_OIDC_REDIRECT_URI=http://127.0.0.1:{port}/callback",
+            ).replace(
+                "VITE_OIDC_POST_LOGOUT_REDIRECT_URI=https://netknife.alexflux.com/login",
+                f"VITE_OIDC_POST_LOGOUT_REDIRECT_URI=http://127.0.0.1:{port}/login",
+            ),
+            encoding="utf-8",
+        )
+        ui.ok(f"Wrote {paths.env_development_local} (from production env)")
+        return
+
+    local_url = f"http://127.0.0.1:{port}"
+    content = _env_content(
+        api_url=api_url,
+        cognito_domain=cognito_domain,
+        client_id=client_id,
+        issuer=issuer,
+        redirect_uri=f"{local_url}/callback",
+        logout_uri=f"{local_url}/login",
+        region=region,
+    )
+    paths.env_development_local.write_text(content, encoding="utf-8")
+    ui.ok(f"Wrote {paths.env_development_local}")
+    ui.kv("Local URL", local_url)
+    ui.kv("API URL", api_url)
 
 
 def build(paths: ProjectPaths, *, skip_install: bool = False) -> None:
@@ -70,10 +135,11 @@ def build(paths: ProjectPaths, *, skip_install: bool = False) -> None:
 def dev_server(paths: ProjectPaths) -> None:
     """Start Vite dev server (local UI; remote tools need deployed API)."""
     ensure_node_modules(paths)
-    # Use .env.local if present; otherwise warn
-    if not paths.env_production.is_file():
-        ui.warn("No .env.production — run `nk env` after terraform apply for Cognito values")
-    ui.info("Starting Vite at http://localhost:5173 (Ctrl+C to stop)")
+    try:
+        update_dev_env(paths)
+    except CommandError as e:
+        ui.warn(f"Could not write dev env: {e}. Run `nk env` after terraform apply.")
+    ui.info("Starting Vite at http://127.0.0.1:3000 (Ctrl+C to stop)")
     code = run_stream([_npm(), "run", "dev"], cwd=str(paths.frontend))
     raise SystemExit(code)
 

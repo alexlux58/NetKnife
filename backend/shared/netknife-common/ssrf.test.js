@@ -39,12 +39,15 @@ describe('shared ssrf validation', () => {
   })
 
   it('validates RDAP queries and hosts', () => {
+    const { buildRdapUrl } = require('./ssrf')
     assert.equal(validateRdapQuery('8.8.8.8').ok, true)
     assert.equal(validateRdapQuery('example.com').ok, true)
     assert.equal(validateRdapQuery('127.0.0.1').ok, false)
     assert.equal(validateRdapQuery('not valid').ok, false)
     assert.equal(isAllowedRdapHost('rdap.org'), true)
+    assert.equal(isAllowedRdapHost('rdap.hostinger.com'), true)
     assert.equal(isAllowedRdapHost('evil.example'), false)
+    assert.match(buildRdapUrl('alexflux.com', 'domain'), /rdap\.verisign\.com/)
   })
 
   it('validates traceroute targets', () => {

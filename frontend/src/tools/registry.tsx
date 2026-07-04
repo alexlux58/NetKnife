@@ -180,6 +180,15 @@ export const tools: Tool[] = [
     description: 'PTR record lookup for IPs',
   },
   {
+    id: 'quien',
+    name: 'Quien',
+    kind: 'remote',
+    category: 'DNS & Domain',
+    path: '/tools/quien',
+    component: React.lazy(() => import('./remote/QuienTool')),
+    description: 'Domain & IP registration lookup (quien-style)',
+  },
+  {
     id: 'rdap',
     name: 'RDAP / WHOIS',
     kind: 'remote',

@@ -20,16 +20,117 @@
 import { useState, useMemo } from 'react'
 import OutputCard from '../../components/OutputCard'
 import AddToReportButton from '../../components/AddToReportButton'
-import { calculateSubnet } from './subnetLogic'
+import { calculateSubnet, type SubnetResult } from './subnetLogic'
+
+function formatCount(value: string | number): string {
+  const raw = String(value)
+  if (!/^\d+$/.test(raw)) return raw
+  try {
+    return BigInt(raw).toLocaleString()
+  } catch {
+    return raw
+  }
+}
+
+function ResultRow({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 border-b border-[#21262d] last:border-0">
+      <span className="text-gray-400 text-sm">{label}</span>
+      <span className="font-mono text-white text-sm text-right">{value}</span>
+    </div>
+  )
+}
+
+function formatSubnetForCopy(result: Record<string, string | number>): string {
+  const labels: Record<string, string> = {
+    input: 'Input',
+    network: 'Network',
+    broadcast: 'Broadcast',
+    netmask: 'Netmask',
+    netmask_binary: 'Netmask (binary)',
+    wildcard: 'Wildcard',
+    host_range: 'Host range',
+    first_host: 'First host',
+    last_host: 'Last host',
+    usable_hosts: 'Usable hosts',
+    total_addresses: 'Total addresses',
+  }
+  return Object.entries(labels)
+    .filter(([key]) => key in result)
+    .map(([key, label]) => `${label}: ${result[key]}`)
+    .join('\n')
+}
+
+function SubnetResultDisplay({ result }: { result: Record<string, string | number> }) {
+  const isV4 = result.version === 'ipv4'
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-lg text-white">{String(result.input)}</span>
+        <span className="badge-offline text-xs uppercase">{String(result.version)}</span>
+      </div>
+
+      <div className="rounded-lg border border-[#30363d] overflow-hidden">
+        <div className="px-4 py-2 border-b border-[#30363d] bg-[#161b22] text-xs font-medium text-gray-500 uppercase tracking-wide">
+          Network
+        </div>
+        <div className="px-4 bg-[#0d1117]">
+          <ResultRow label="Network" value={String(result.network)} />
+          {isV4 && result.broadcast != null && (
+            <ResultRow label="Broadcast" value={String(result.broadcast)} />
+          )}
+        </div>
+      </div>
+
+      {isV4 && (
+        <div className="rounded-lg border border-[#30363d] overflow-hidden">
+          <div className="px-4 py-2 border-b border-[#30363d] bg-[#161b22] text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Masks
+          </div>
+          <div className="px-4 bg-[#0d1117]">
+            <ResultRow label="Netmask" value={String(result.netmask)} />
+            <ResultRow label="Wildcard" value={String(result.wildcard)} />
+            {result.netmask_binary != null && (
+              <details className="py-2 border-b border-[#21262d] last:border-0">
+                <summary className="text-gray-400 text-sm cursor-pointer hover:text-gray-300">
+                  Netmask (binary)
+                </summary>
+                <p className="font-mono text-xs text-gray-500 mt-2 break-all">{String(result.netmask_binary)}</p>
+              </details>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-[#30363d] overflow-hidden">
+        <div className="px-4 py-2 border-b border-[#30363d] bg-[#161b22] text-xs font-medium text-gray-500 uppercase tracking-wide">
+          Hosts
+        </div>
+        <div className="px-4 bg-[#0d1117]">
+          <ResultRow label="Host range" value={String(result.host_range)} />
+          <ResultRow label="First host" value={String(result.first_host)} />
+          <ResultRow label="Last host" value={String(result.last_host)} />
+          <ResultRow label="Usable hosts" value={formatCount(result.usable_hosts)} />
+          <ResultRow label="Total addresses" value={formatCount(result.total_addresses)} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function isSubnetError(result: SubnetResult): result is { error: string } {
+  return 'error' in result
+}
 
 export default function SubnetTool() {
   const [input, setInput] = useState('192.168.1.0/24')
-  const [output, setOutput] = useState('')
+  const [showResult, setShowResult] = useState(false)
 
   const result = useMemo(() => calculateSubnet(input), [input])
 
   function handleCalculate() {
-    setOutput(JSON.stringify(result, null, 2))
+    setShowResult(true)
   }
 
   function loadExample(type: 'ipv4' | 'ipv6' = 'ipv4') {
@@ -86,17 +187,26 @@ export default function SubnetTool() {
         </div>
 
         {/* Output section */}
-        {output && result && (
+        {showResult && (
           <div className="space-y-4">
-            <div className="flex items-center justify-end">
-              <AddToReportButton
-                toolId="subnet"
-                input={input}
-                data={result}
-                category="Network Intelligence"
-              />
-            </div>
-            <OutputCard title="Calculation Result" value={output} />
+            {!isSubnetError(result) && (
+              <div className="flex items-center justify-end">
+                <AddToReportButton
+                  toolId="subnet"
+                  input={input}
+                  data={result}
+                  category="Network Intelligence"
+                />
+              </div>
+            )}
+            <OutputCard
+              title="Calculation Result"
+              value={isSubnetError(result) ? undefined : formatSubnetForCopy(result)}
+              canCopy={!isSubnetError(result)}
+              error={isSubnetError(result) ? result.error : undefined}
+            >
+              {!isSubnetError(result) && <SubnetResultDisplay result={result} />}
+            </OutputCard>
           </div>
         )}
       </div>

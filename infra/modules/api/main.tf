@@ -976,7 +976,7 @@ resource "aws_lambda_function" "rdap" {
   source_code_hash = data.archive_file.rdap_zip.output_base64sha256
   layers           = [aws_lambda_layer_version.common.arn]
 
-  timeout     = 15
+  timeout     = 25
   memory_size = 128
 
   environment {
@@ -1143,6 +1143,8 @@ resource "aws_lambda_function" "peeringdb" {
 
   filename         = data.archive_file.peeringdb_zip.output_path
   source_code_hash = data.archive_file.peeringdb_zip.output_base64sha256
+
+  layers = [aws_lambda_layer_version.common.arn]
 
   timeout     = 15
   memory_size = 128
@@ -1389,6 +1391,8 @@ resource "aws_lambda_function" "abuseipdb" {
   filename         = data.archive_file.abuseipdb_zip.output_path
   source_code_hash = data.archive_file.abuseipdb_zip.output_base64sha256
 
+  layers = [aws_lambda_layer_version.common.arn]
+
   timeout     = 15
   memory_size = 128
 
@@ -1456,6 +1460,8 @@ resource "aws_lambda_function" "dns_propagation" {
   filename         = data.archive_file.dns_propagation_zip.output_path
   source_code_hash = data.archive_file.dns_propagation_zip.output_base64sha256
 
+  layers = [aws_lambda_layer_version.common.arn]
+
   timeout     = 20
   memory_size = 256
 
@@ -1516,6 +1522,8 @@ resource "aws_lambda_function" "asn_details" {
   filename         = data.archive_file.asn_details_zip.output_path
   source_code_hash = data.archive_file.asn_details_zip.output_base64sha256
 
+  layers = [aws_lambda_layer_version.common.arn]
+
   timeout     = 30 # Increased for multiple API calls to BGPView
   memory_size = 128
 
@@ -1575,6 +1583,8 @@ resource "aws_lambda_function" "bgp_looking_glass" {
 
   filename         = data.archive_file.bgp_looking_glass_zip.output_path
   source_code_hash = data.archive_file.bgp_looking_glass_zip.output_base64sha256
+
+  layers = [aws_lambda_layer_version.common.arn]
 
   timeout     = 20
   memory_size = 256
@@ -1759,6 +1769,8 @@ resource "aws_lambda_function" "shodan" {
   filename         = data.archive_file.shodan_zip.output_path
   source_code_hash = data.archive_file.shodan_zip.output_base64sha256
 
+  layers = [aws_lambda_layer_version.common.arn]
+
   timeout     = 15
   memory_size = 128
 
@@ -1827,6 +1839,8 @@ resource "aws_lambda_function" "virustotal" {
 
   filename         = data.archive_file.virustotal_zip.output_path
   source_code_hash = data.archive_file.virustotal_zip.output_base64sha256
+
+  layers = [aws_lambda_layer_version.common.arn]
 
   timeout     = 15
   memory_size = 128
@@ -2033,6 +2047,8 @@ resource "aws_lambda_function" "greynoise" {
   filename         = data.archive_file.greynoise_zip.output_path
   source_code_hash = data.archive_file.greynoise_zip.output_base64sha256
 
+  layers = [aws_lambda_layer_version.common.arn]
+
   timeout     = 15
   memory_size = 128
 
@@ -2154,6 +2170,8 @@ resource "aws_lambda_function" "ip_api" {
 
   filename         = data.archive_file.ip_api_zip.output_path
   source_code_hash = data.archive_file.ip_api_zip.output_base64sha256
+
+  layers = [aws_lambda_layer_version.common.arn]
 
   timeout     = 15
   memory_size = 128

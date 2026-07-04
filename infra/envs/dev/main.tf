@@ -380,9 +380,20 @@ module "auth" {
   project = var.project
   env     = var.env
 
-  # OAuth callback/redirect URLs
-  callback_urls = ["${local.site_url}/callback"]
-  logout_urls   = ["${local.site_url}/", "${local.site_url}/login"]
+  # OAuth callback/redirect URLs (include localhost for Vite dev server)
+  callback_urls = [
+    "${local.site_url}/callback",
+    "http://localhost:3000/callback",
+    "http://127.0.0.1:3000/callback",
+  ]
+  logout_urls = [
+    "${local.site_url}/",
+    "${local.site_url}/login",
+    "http://localhost:3000/",
+    "http://localhost:3000/login",
+    "http://127.0.0.1:3000/",
+    "http://127.0.0.1:3000/login",
+  ]
 
   # Notify this email on each new sign-up. Defaults to alert_email. Set to "none" to disable.
   signup_notification_email = (var.signup_notification_email == "none" || var.signup_notification_email == "disabled") ? "" : (var.signup_notification_email != "" ? var.signup_notification_email : var.alert_email)
@@ -404,8 +415,12 @@ module "api" {
   cognito_issuer   = module.auth.issuer
   cognito_audience = module.auth.client_id
 
-  # CORS: only allow requests from our site
-  allowed_origins = [local.site_url]
+  # CORS: production site + local Vite dev server
+  allowed_origins = [
+    local.site_url,
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+  ]
 
   # Stripe (billing Lambda). SITE_URL for redirects.
   site_url                 = local.site_url

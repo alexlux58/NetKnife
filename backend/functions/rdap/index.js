@@ -10,6 +10,7 @@ const {
 
 const CACHE_TABLE = process.env.CACHE_TABLE
 const CACHE_TTL_SECONDS = Number(process.env.CACHE_TTL_SECONDS || '86400')
+const FETCH_TIMEOUT_MS = 8000
 
 function createHandler(deps = {}) {
   const ddb = deps.ddb || DynamoDBDocumentClient.from(deps.ddbClient || new DynamoDBClient({}))
@@ -61,6 +62,7 @@ function createHandler(deps = {}) {
       const response = await fetchFn(currentUrl, {
         method: 'GET',
         redirect: 'manual',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: {
           accept: 'application/rdap+json, application/json',
           'user-agent': 'NetKnife/1.0',
@@ -126,8 +128,9 @@ function createHandler(deps = {}) {
       return createResponse(200, { ...result, cached: false })
     } catch (error) {
       console.error('RDAP lookup error:', error)
-      return createResponse(500, {
-        error: 'RDAP lookup failed',
+      const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+      return createResponse(timedOut ? 504 : 500, {
+        error: timedOut ? 'RDAP lookup timed out' : 'RDAP lookup failed',
         details: error.message || 'Unknown error',
       })
     }

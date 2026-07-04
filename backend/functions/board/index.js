@@ -30,6 +30,7 @@ const {
   validateDmSend,
   trimText,
 } = require('./validation');
+const { getUserId, getUsername } = require('netknife-common');
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -41,37 +42,7 @@ const BOOKMARKS = process.env.BOARD_BOOKMARKS_TABLE;
 const DM_CONVOS = process.env.BOARD_DM_CONVOS_TABLE;
 const DM_MESSAGES = process.env.BOARD_DM_MESSAGES_TABLE;
 const ACTIVITY = process.env.BOARD_ACTIVITY_TABLE;
-const ADMIN = (process.env.ADMIN_USERNAMES || 'alex.lux, god of lux').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-
-function getUserId(event) {
-  const c = event.requestContext?.authorizer?.jwt?.claims || event.requestContext?.authorizer?.claims || {};
-  let sub = c.sub || c['cognito:username'];
-  if (!sub) {
-    const h = event.headers?.authorization || event.headers?.Authorization;
-    if (h && h.startsWith('Bearer ')) {
-      try {
-        const p = JSON.parse(Buffer.from(h.split('.')[1], 'base64').toString());
-        sub = p.sub || p['cognito:username'];
-      } catch (_) {}
-    }
-  }
-  return sub || null;
-}
-
-function getUsername(event) {
-  const c = event.requestContext?.authorizer?.jwt?.claims || event.requestContext?.authorizer?.claims || {};
-  let u = c['cognito:username'] || c['preferred_username'];
-  if (!u) {
-    const h = event.headers?.authorization || event.headers?.Authorization;
-    if (h && h.startsWith('Bearer ')) {
-      try {
-        const p = JSON.parse(Buffer.from(h.split('.')[1], 'base64').toString());
-        u = p['cognito:username'] || p['preferred_username'];
-      } catch (_) {}
-    }
-  }
-  return (u || '').trim();
-}
+const ADMIN = (process.env.ADMIN_USERNAMES || 'alex.lux, alexlux, alexlux58, god of lux').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 function isAdmin(event) {
   const u = getUsername(event).toLowerCase();

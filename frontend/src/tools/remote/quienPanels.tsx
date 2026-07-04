@@ -1,5 +1,5 @@
 import { formatDate, relativeTime, type QuienDomainResult, type QuienIpResult, type QuienResult } from './quienLogic'
-import type { DnsResult, EmailAuthResult, HeadersResult, QuienBundle, QuienTab, TlsApiResponse } from './quienFetch'
+import type { EmailAuthResult, HeadersResult, QuienBundle, QuienTab, TlsApiResponse } from './quienFetch'
 
 function QuienRow({ label, value, mono = false, link = false }: {
   label: string
@@ -243,7 +243,8 @@ export function QuienTabPanel({ tab, bundle }: { tab: QuienTab; bundle: QuienBun
     case 'seo':
       return <ComingSoonPanel feature="SEO" />
     case 'stack': {
-      const hdrs = bundle.http?.chain.at(-1)?.headers ?? {}
+      const lastHop = bundle.http?.chain[bundle.http.chain.length - 1]
+      const hdrs = lastHop?.headers ?? {}
       const server = hdrs.server ?? hdrs.Server
       const powered = hdrs['x-powered-by'] ?? hdrs['X-Powered-By']
       if (server || powered) {

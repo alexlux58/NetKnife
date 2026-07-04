@@ -4,6 +4,7 @@
   "description": "CloudWatch alarms dashboard API for NetKnife",
   "main": "index.js",
   "dependencies": {
-    "@aws-sdk/client-cloudwatch": "^3.700.0"
+    "@aws-sdk/client-cloudwatch": "^3.700.0",
+    "netknife-common": "file:../../shared/netknife-common"
   }
 }

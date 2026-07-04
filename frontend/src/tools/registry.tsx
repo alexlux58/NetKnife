@@ -394,6 +394,24 @@ export const tools: Tool[] = [
     requiresApiKey: true,
   },
   {
+    id: 'netknife-pricing',
+    name: 'NetKnife Pricing',
+    kind: 'offline',
+    category: 'Utilities',
+    path: '/tools/netknife-pricing',
+    component: React.lazy(() => import('./offline/NetKnifePricingTool')),
+    description: 'Estimate Pro subscription and Kali Lab credit costs from usage',
+  },
+  {
+    id: 'aws-pricing',
+    name: 'AWS Cost Estimator',
+    kind: 'offline',
+    category: 'Utilities',
+    path: '/tools/aws-pricing',
+    component: React.lazy(() => import('./offline/AwsPricingTool')),
+    description: 'Template-based AWS monthly cost planner (us-west-2 estimates)',
+  },
+  {
     id: 'report-builder',
     name: 'Report Builder',
     kind: 'remote',
@@ -599,6 +617,15 @@ export const tools: Tool[] = [
   // ============================================================================
   // DATA & TEXT (Offline)
   // ============================================================================
+  {
+    id: 'mermaid',
+    name: 'Mermaid Diagrams',
+    kind: 'offline',
+    category: 'Data & Text',
+    path: '/tools/mermaid',
+    component: React.lazy(() => import('./offline/MermaidTool')),
+    description: 'Render Mermaid code as architecture and flow diagrams',
+  },
   {
     id: 'yaml-json',
     name: 'YAML ↔ JSON',

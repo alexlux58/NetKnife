@@ -72,12 +72,12 @@ function getUserId(event) {
 
 function getUsername(event) {
   const claims = getClaims(event);
-  return claims['cognito:username'] || claims['preferred_username'] || '';
+  return String(claims['cognito:username'] || claims.username || claims.preferred_username || '').trim();
 }
 
 function isBillingExempt(event) {
-  const u = getUsername(event);
-  return BILLING_EXEMPT_USERNAMES.includes(u);
+  const u = getUsername(event).toLowerCase();
+  return BILLING_EXEMPT_USERNAMES.map((s) => s.toLowerCase()).includes(u);
 }
 
 // ------------------------------------------------------------------------------

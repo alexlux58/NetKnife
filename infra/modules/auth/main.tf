@@ -69,6 +69,65 @@ variable "lambda_deps_trigger" {
   description = "null_resource from root that runs npm install for Lambdas with package.json before zipping"
 }
 
+# OAuth client credentials — leave empty to disable that provider
+variable "google_client_id" {
+  type        = string
+  default     = ""
+  description = "Google OAuth client ID for Cognito federated sign-in"
+}
+
+variable "google_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Google OAuth client secret"
+}
+
+variable "facebook_client_id" {
+  type        = string
+  default     = ""
+  description = "Facebook app ID for Cognito federated sign-in"
+}
+
+variable "facebook_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Facebook app secret"
+}
+
+variable "github_client_id" {
+  type        = string
+  default     = ""
+  description = "GitHub OAuth app client ID for Cognito federated sign-in"
+}
+
+variable "github_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "GitHub OAuth app client secret"
+}
+
+variable "microsoft_client_id" {
+  type        = string
+  default     = ""
+  description = "Microsoft Entra (Azure AD) application client ID"
+}
+
+variable "microsoft_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Microsoft Entra client secret"
+}
+
+variable "microsoft_tenant_id" {
+  type        = string
+  default     = "common"
+  description = "Microsoft tenant ID, or 'common' for personal + work accounts"
+}
+
 # Get current AWS region
 data "aws_region" "current" {}
 
@@ -199,8 +258,15 @@ resource "aws_cognito_user_pool_client" "spa" {
   callback_urls = var.callback_urls
   logout_urls   = var.logout_urls
 
-  # Identity providers (just Cognito for now)
-  supported_identity_providers = ["COGNITO"]
+  # Identity providers: COGNITO + optional Google/Facebook/GitHub/Microsoft
+  supported_identity_providers = local.supported_identity_providers
+
+  depends_on = [
+    aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.facebook,
+    aws_cognito_identity_provider.github,
+    aws_cognito_identity_provider.microsoft,
+  ]
 
   # Allowed authentication flows
   explicit_auth_flows = [

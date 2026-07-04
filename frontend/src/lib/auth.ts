@@ -104,16 +104,11 @@ const userManager = new UserManager({
   },
 })
 
-/**
- * Initiates login by redirecting to Cognito Hosted UI
- * 
- * This will redirect the browser to Cognito's login page.
- * After successful authentication, Cognito redirects back to /callback
- * 
- * In dev bypass mode, redirects directly to callback to simulate login
- */
-export async function login(): Promise<void> {
-  // Dev bypass: simulate login by redirecting to callback
+/** Federated IdP names must match Cognito provider_name in Terraform */
+export const SOCIAL_IDENTITY_PROVIDERS = ['Google', 'Facebook', 'GitHub', 'Microsoft'] as const
+export type SocialIdentityProvider = (typeof SOCIAL_IDENTITY_PROVIDERS)[number]
+
+async function redirectToCognito(extraQueryParams?: Record<string, string>): Promise<void> {
   if (DEV_BYPASS_AUTH) {
     console.warn('🔓 DEV MODE: Auth bypassed, simulating login')
     sessionStorage.setItem('dev_authenticated', 'true')
@@ -122,11 +117,27 @@ export async function login(): Promise<void> {
   }
 
   try {
-    await userManager.signinRedirect()
+    await userManager.signinRedirect(extraQueryParams ? { extraQueryParams } : undefined)
   } catch (error) {
-    console.error('Login redirect failed:', error)
+    console.error('Auth redirect failed:', error)
     throw error
   }
+}
+
+/**
+ * Initiates login by redirecting to Cognito Hosted UI.
+ * After authentication, Cognito redirects back to /callback.
+ */
+export async function login(): Promise<void> {
+  await redirectToCognito()
+}
+
+/**
+ * Sign in (or sign up) via Google, Facebook, GitHub, or Microsoft.
+ * Skips the Hosted UI provider picker when the IdP is configured in Cognito.
+ */
+export async function loginWithProvider(provider: SocialIdentityProvider): Promise<void> {
+  await redirectToCognito({ identity_provider: provider })
 }
 
 /**
@@ -138,19 +149,7 @@ export async function login(): Promise<void> {
  * In dev bypass mode, behaves like login (simulates auth).
  */
 export async function signup(): Promise<void> {
-  if (DEV_BYPASS_AUTH) {
-    console.warn('🔓 DEV MODE: Auth bypassed, simulating signup as login')
-    sessionStorage.setItem('dev_authenticated', 'true')
-    window.location.href = '/callback'
-    return
-  }
-
-  try {
-    await userManager.signinRedirect()
-  } catch (error) {
-    console.error('Signup redirect failed:', error)
-    throw error
-  }
+  await redirectToCognito()
 }
 
 /**
@@ -275,7 +274,7 @@ export async function getUser(): Promise<User | null> {
 export async function getUsername(): Promise<string> {
   const user = await getUser()
   const p = (user?.profile || {}) as Record<string, unknown>
-  return String(p['cognito:username'] || p['preferred_username'] || '')
+  return String(p['cognito:username'] || p.username || p['preferred_username'] || '').toLowerCase()
 }
 
 /**

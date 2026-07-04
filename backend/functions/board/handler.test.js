@@ -68,6 +68,17 @@ describe('board handler auth', () => {
     assert.equal(response.statusCode, 400);
   });
 
+  it('allows activity-list for access-token username claim', async () => {
+    process.env.ADMIN_USERNAMES = 'alexlux';
+    delete require.cache[require.resolve('./index')];
+    const { handler } = require('./index');
+    const response = await handler({
+      requestContext: { authorizer: { jwt: { claims: { sub: 'user-1', username: 'alexlux' } } } },
+      body: JSON.stringify({ action: 'activity-list' }),
+    });
+    assert.notEqual(response.statusCode, 403);
+  });
+
   it('rejects unknown actions', async () => {
     const { handler } = require('./index');
     const response = await handler({

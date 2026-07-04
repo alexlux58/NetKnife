@@ -314,8 +314,66 @@ variable "stripe_lab_power_price_id" {
 
 variable "admin_usernames" {
   type        = string
-  default     = "alex.lux, god of lux"
+  default     = "alex.lux, alexlux, alexlux58, god of lux"
   description = "Comma-separated usernames (or display names) who can access Alarms, Activity, and create board channels. Include both Cognito username and display name if they differ."
+}
+
+variable "google_client_id" {
+  type        = string
+  default     = ""
+  description = "Google OAuth client ID (optional social login)"
+}
+
+variable "google_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Google OAuth client secret"
+}
+
+variable "facebook_client_id" {
+  type        = string
+  default     = ""
+  description = "Facebook app ID (optional social login)"
+}
+
+variable "facebook_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Facebook app secret"
+}
+
+variable "github_client_id" {
+  type        = string
+  default     = ""
+  description = "GitHub OAuth app client ID (optional social login)"
+}
+
+variable "github_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "GitHub OAuth app client secret"
+}
+
+variable "microsoft_client_id" {
+  type        = string
+  default     = ""
+  description = "Microsoft Entra app client ID (optional social login)"
+}
+
+variable "microsoft_client_secret" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "Microsoft Entra client secret"
+}
+
+variable "microsoft_tenant_id" {
+  type        = string
+  default     = "common"
+  description = "Microsoft tenant ID or 'common' for any Microsoft account"
 }
 
 # ------------------------------------------------------------------------------
@@ -397,6 +455,16 @@ module "auth" {
 
   # Notify this email on each new sign-up. Defaults to alert_email. Set to "none" to disable.
   signup_notification_email = (var.signup_notification_email == "none" || var.signup_notification_email == "disabled") ? "" : (var.signup_notification_email != "" ? var.signup_notification_email : var.alert_email)
+
+  google_client_id         = var.google_client_id
+  google_client_secret     = var.google_client_secret
+  facebook_client_id       = var.facebook_client_id
+  facebook_client_secret   = var.facebook_client_secret
+  github_client_id         = var.github_client_id
+  github_client_secret     = var.github_client_secret
+  microsoft_client_id      = var.microsoft_client_id
+  microsoft_client_secret  = var.microsoft_client_secret
+  microsoft_tenant_id      = var.microsoft_tenant_id
 }
 
 # ------------------------------------------------------------------------------
@@ -607,6 +675,16 @@ output "cognito_domain_url" {
 output "cognito_issuer" {
   value       = module.auth.issuer
   description = "Cognito OIDC issuer URL"
+}
+
+output "cognito_oauth_idp_redirect_uri" {
+  value       = module.auth.oauth_idp_redirect_uri
+  description = "OAuth redirect URI to register in Google/Facebook/GitHub/Microsoft apps"
+}
+
+output "enabled_social_providers" {
+  value       = module.auth.enabled_social_providers
+  description = "Social login providers enabled (configure client IDs in terraform.tfvars)"
 }
 
 output "auth_config_table_name" {

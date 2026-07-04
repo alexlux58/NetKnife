@@ -14,6 +14,7 @@
  */
 
 import { Link } from 'react-router-dom'
+import SocialLoginButtons from '../../components/SocialLoginButtons'
 import { login, isDevMode } from '../../lib/auth'
 
 export default function LoginPage() {
@@ -93,8 +94,10 @@ export default function LoginPage() {
             onClick={() => login()}
             className="w-full btn-primary py-3 text-base font-semibold"
           >
-            Sign in
+            Sign in with email
           </button>
+
+          <SocialLoginButtons mode="signin" />
 
           {/* Create account - use /signup so we collect email and phone (Hosted UI often omits them) */}
           <p className="text-center mt-4 text-gray-400">

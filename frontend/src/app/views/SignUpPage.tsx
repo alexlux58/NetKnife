@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import SocialLoginButtons from '../../components/SocialLoginButtons'
 import { signUpWithAttributes } from '../../lib/auth'
 
 export default function SignUpPage() {
@@ -171,6 +172,8 @@ export default function SignUpPage() {
             {loading ? 'Creating…' : 'Create account'}
           </button>
         </form>
+
+        <SocialLoginButtons mode="signup" />
 
         <p className="text-center mt-6 text-gray-400 text-sm">
           Already have an account?{' '}

@@ -49,6 +49,28 @@ exports.handler = async (event) => {
     return event;
   }
 
+  if (trigger === 'PreSignUp_ExternalProvider') {
+    if (CONFIG_TABLE) {
+      try {
+        const r = await ddb.send(new GetCommand({
+          TableName: CONFIG_TABLE,
+          Key: { id: 'CONFIG' },
+        }));
+        if (r.Item && r.Item.signups_enabled === false) {
+          throw new Error('Sign-up is currently disabled. Contact the administrator.');
+        }
+      } catch (e) {
+        if (e.message && e.message.includes('Sign-up is currently disabled')) throw e;
+        console.error('Config read error:', e);
+        throw new Error('Sign-up is temporarily unavailable. Please try again later.');
+      }
+    }
+    event.response.autoConfirmUser = true;
+    event.response.autoVerifyEmail = !!hasEmail;
+    event.response.autoVerifyPhone = !!hasPhone;
+    return event;
+  }
+
   if (trigger === 'PreSignUp_SignUp') {
     if (CONFIG_TABLE) {
       try {

@@ -106,6 +106,11 @@ output "oauth_idp_redirect_uri" {
 }
 
 output "enabled_social_providers" {
-  value       = local.social_idps
-  description = "Social IdPs enabled in this deployment (empty = username/password only)"
+  value = compact([
+    var.google_client_id != "" ? "Google" : "",
+    var.facebook_client_id != "" ? "Facebook" : "",
+    var.github_client_id != "" ? "GitHub" : "",
+    var.microsoft_client_id != "" ? "Microsoft" : "",
+  ])
+  description = "Social IdPs with client IDs configured in tfvars (apply creates IdP when secret is also set)"
 }

@@ -19,13 +19,11 @@ const PROVIDER_META: Record<SocialIdentityProvider, { label: string; className: 
   },
 }
 
-/** Shown when VITE_SOCIAL_IDPS is unset; after terraform apply, match enabled providers. */
-const DEFAULT_PROVIDERS: SocialIdentityProvider[] = ['Google', 'Facebook', 'GitHub', 'Microsoft']
-
+/** Only shown when VITE_SOCIAL_IDPS is set (from terraform output after OAuth is configured). */
 function parseEnabledProviders(): SocialIdentityProvider[] {
   const raw = import.meta.env.VITE_SOCIAL_IDPS as string | undefined
-  if (!raw?.trim()) return DEFAULT_PROVIDERS
-  const allowed = new Set<SocialIdentityProvider>(DEFAULT_PROVIDERS)
+  if (!raw?.trim()) return []
+  const allowed = new Set<SocialIdentityProvider>(['Google', 'Facebook', 'GitHub', 'Microsoft'])
   return raw
     .split(',')
     .map((s) => s.trim())
@@ -68,7 +66,7 @@ export default function SocialLoginButtons({ mode = 'signin' }: { mode?: 'signin
       </div>
 
       <p className="text-xs text-gray-600 text-center mt-3">
-        Social login requires OAuth apps in terraform.tfvars. See docs/SOCIAL-LOGIN-SETUP.md.
+        Uses your {ENABLED.join(', ')} account via Cognito.
       </p>
     </div>
   )

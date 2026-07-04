@@ -41,9 +41,11 @@ def _env_content(
     redirect_uri: str,
     logout_uri: str,
     region: str,
+    social_idps: str = "",
     dev_bypass: bool = False,
 ) -> str:
     bypass = "true" if dev_bypass else "false"
+    social_line = f"VITE_SOCIAL_IDPS={social_idps}\n" if social_idps else "VITE_SOCIAL_IDPS=\n"
     return f"""VITE_API_URL={api_url}
 VITE_COGNITO_DOMAIN={cognito_domain}
 VITE_COGNITO_CLIENT_ID={client_id}
@@ -51,8 +53,27 @@ VITE_COGNITO_ISSUER={issuer}
 VITE_OIDC_REDIRECT_URI={redirect_uri}
 VITE_OIDC_POST_LOGOUT_REDIRECT_URI={logout_uri}
 VITE_REGION={region}
-VITE_DEV_BYPASS_AUTH={bypass}
+{social_line}VITE_DEV_BYPASS_AUTH={bypass}
 """
+
+
+def _social_idps_from_tf(paths: ProjectPaths) -> str:
+    try:
+        import json
+        proc = run(
+            [tf._terraform_bin(), "output", "-json", "enabled_social_providers"],
+            cwd=str(paths.infra_env),
+            capture=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return ""
+        providers = json.loads(proc.stdout or "[]")
+        if isinstance(providers, list) and providers:
+            return ",".join(str(p) for p in providers)
+    except Exception:
+        pass
+    return ""
 
 
 def update_env(paths: ProjectPaths) -> None:
@@ -72,6 +93,7 @@ def update_env(paths: ProjectPaths) -> None:
         redirect_uri=f"{site_url}/callback",
         logout_uri=f"{site_url}/login",
         region=region,
+        social_idps=_social_idps_from_tf(paths),
     )
     paths.env_production.write_text(content, encoding="utf-8")
     ui.ok(f"Wrote {paths.env_production}")
@@ -115,6 +137,7 @@ def update_dev_env(paths: ProjectPaths, *, port: int = 3000) -> None:
         redirect_uri=f"{local_url}/callback",
         logout_uri=f"{local_url}/login",
         region=region,
+        social_idps=_social_idps_from_tf(paths),
     )
     paths.env_development_local.write_text(content, encoding="utf-8")
     ui.ok(f"Wrote {paths.env_development_local}")
